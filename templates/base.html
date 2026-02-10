@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Place _Guide Academy</title>
+
+    <!-- Bootstrap 5 & Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+    <!-- Turbo Drive for SPA Speed -->
+    <script type="module">
+        import hotwiredTurbo from 'https://cdn.skypack.dev/@hotwired/turbo';
+    </script>
+
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --sidebar-collapsed-width: 70px;
+            --top-bar-height: 60px;
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+        }
+
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            opacity: 1;
+            transition: opacity 0.1s ease-in;
+        }
+
+        /* --- Sidebar Styling --- */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background: var(--primary-color);
+            color: #fff;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+
+        /* Sidebar Header */
+        .sidebar-header {
+            height: var(--top-bar-height);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            background: rgba(0, 0, 0, 0.1);
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .logo-text {
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            opacity: 1;
+            transition: opacity 0.2s;
+        }
+
+        .sidebar.collapsed .logo-text {
+            opacity: 0;
+            width: 0;
+        }
+
+        /* Navigation Links */
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px 0;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255, 255, 255, 0.75);
+            text-decoration: none;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-link.active {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent-color);
+        }
+
+        .nav-link i {
+            min-width: 30px;
+            font-size: 1.1rem;
+            text-align: center;
+            margin-right: 10px;
+        }
+
+        .link-text {
+            transition: opacity 0.3s;
+        }
+
+        .sidebar.collapsed .link-text,
+        .sidebar.collapsed .sidebar-section-label {
+            display: none;
+        }
+
+        .sidebar.collapsed .nav-link {
+            padding: 12px 18px;
+            justify-content: center;
+        }
+
+        .sidebar.collapsed .nav-link i {
+            margin-right: 0;
+        }
+
+        /* Section Headers */
+        .sidebar-section-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.4);
+            padding: 20px 25px 5px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* Arabic Subtitles */
+        .arabic-sub {
+            font-size: 0.75em;
+            opacity: 0.6;
+            margin-left: 8px;
+            font-weight: normal;
+        }
+
+        .sidebar.collapsed .arabic-sub {
+            display: none;
+        }
+
+        /* --- Main Content Area --- */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .sidebar.collapsed+.main-content {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+
+        /* Top Navbar */
+        .top-navbar {
+            background: #fff;
+            height: var(--top-bar-height);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+                width: var(--sidebar-width) !important;
+            }
+
+            .main-content {
+                margin-left: 0 !important;
+            }
+
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+            }
+
+            .sidebar-overlay.show {
+                display: block;
+            }
+        }
+
+        /* Select2 Fixes */
+        .select2-container .select2-selection--single {
+            height: 38px !important;
+            padding: 5px;
+            border: 1px solid #dee2e6;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Mobile Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-text">Place Guide <span class="text-info">Sys</span></div>
+        </div>
+
+        <div class="sidebar-nav">
+            <a href="{{ url_for('dashboard') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'dashboard' else '' }}">
+                <i class="fas fa-home"></i>
+                <span class="link-text">Dashboard <span class="arabic-sub">الرئيسية</span></span>
+            </a>
+
+            <!-- ============================================= -->
+            <!-- RECRUITMENT HIERARCHY -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'AccountManager', 'RecruitmentManager']) %}
+            <div class="sidebar-section-label">Account Management</div>
+            <a href="{{ url_for('manage_clients') }}" class="nav-link">
+                <i class="fas fa-building"></i>
+                <span class="link-text">Define Client <span class="arabic-sub">تعريف عميل</span></span>
+            </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'AccountManager']) %}
+            <a href="{{ url_for('manage_requests') }}" class="nav-link">
+                <i class="fas fa-file-signature"></i>
+                <span class="link-text">Job Orders <span class="arabic-sub">الطلبات</span></span>
+            </a>
+            <a href="{{ url_for('account_manager_dashboard') }}" class="nav-link">
+                <i class="fas fa-chart-pie"></i>
+                <span class="link-text">AM Dashboard</span>
+            </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'AccountManager', 'AllocationManager']) %}
+            <div class="sidebar-section-label">Allocation</div>
+            <a href="{{ url_for('finance_index') }}" class="nav-link">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="link-text">Invoices <span class="arabic-sub">فواتير</span></span>
+            </a>
+            <a href="{{ url_for('add_campaign') }}" class="nav-link">
+                <i class="fas fa-bullhorn"></i>
+                <span class="link-text">Campaigns <span class="arabic-sub">حملات</span></span>
+            </a>
+            <a href="{{ url_for('allocator_dashboard') }}" class="nav-link">
+                <i class="fas fa-chart-line"></i>
+                <span class="link-text">Manager Dash</span>
+            </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'AccountManager', 'AllocationManager', 'AllocationSpecialist']) %}
+            <div class="sidebar-section-label">Specialist</div>
+            <a href="{{ url_for('match_candidates') }}" class="nav-link">
+                <i class="fas fa-people-arrows"></i>
+                <span class="link-text">Matching <span class="arabic-sub">مطابقة</span></span>
+            </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'Recruiter']) %}
+            <div class="sidebar-section-label">Recruiter</div>
+            <a href="{{ url_for('recruiter_dashboard') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruiter_dashboard' else '' }}">
+                <i class="fas fa-tachometer-alt"></i>
+                <span class="link-text">My Dashboard</span>
+            </a>
+            <a href="{{ url_for('recruiter_workbench') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruiter_workbench' else '' }}">
+                <i class="fas fa-user-plus"></i>
+                <span class="link-text">Workbench <span class="arabic-sub">تسجيل</span></span>
+            </a>
+            <a href="{{ url_for('recruiter_scheduling') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruiter_scheduling' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text">Scheduling <span class="arabic-sub">حجز</span></span>
+            </a>
+            <a href="{{ url_for('recruiter_interviews_notify') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruiter_interviews_notify' else '' }}">
+                <i class="fas fa-envelope"></i>
+                <span class="link-text">Interviews <span class="arabic-sub">مقابلات</span></span>
+            </a>
+            <a href="{{ url_for('recruiter_hiring_onboarding') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruiter_hiring_onboarding' else '' }}">
+                <i class="fas fa-user-check"></i>
+                <span class="link-text">Onboarding <span class="arabic-sub">تعيين</span></span>
+            </a>
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- TRAINING DEPARTMENT -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'Trainer']) %}
+            <div class="sidebar-section-label">Training</div>
+            <a href="{{ url_for('training_index') }}"
+                class="nav-link {{ 'active' if request.endpoint.startswith('training_') else '' }}">
+                <i class="fas fa-chalkboard-teacher"></i>
+                <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
+            </a>
+            {% endif %}
+
+            <!-- TA - Training -->
+            {% if check_role_access(['Manager', 'TA-Training']) %}
+            <a href="{{ url_for('talent_conduct_test') }}" class="nav-link">
+                <i class="fas fa-vial"></i>
+                <span class="link-text">Placement Tests</span>
+            </a>
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- TALENT CENTER -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment']) %}
+            <div class="sidebar-section-label">Talent Center</div>
+            <a href="{{ url_for('talent_conduct_test') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_conduct_test' else '' }}">
+                <i class="fas fa-vial"></i>
+                <span class="link-text">Conduct Tests <span class="arabic-sub">اختبارات</span></span>
+            </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'Admin']) %}
+            <div class="sidebar-section-label">Admin</div>
+            <a href="{{ url_for('admin_users') }}" class="nav-link">
+                <i class="fas fa-user-shield"></i>
+                <span class="link-text">Users</span>
+            </a>
+            {% endif %}
+
+            <div class="mt-auto">
+                <hr class="border-secondary mx-3">
+                <a href="{{ url_for('global_search') }}" class="nav-link">
+                    <i class="fas fa-search"></i>
+                    <span class="link-text">Global Search</span>
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span class="link-text">Logout</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-content">
+        <!-- Top Navbar with Toggle -->
+        <header class="top-navbar">
+            <button class="btn btn-link text-dark p-0 me-3" id="sidebarToggle">
+                <i class="fas fa-bars fa-lg"></i>
+            </button>
+
+            <h5 class="m-0 text-muted">{{ request.endpoint.replace('_', ' ').title() }}</h5>
+
+            <div class="ms-auto d-flex align-items-center">
+                <!-- User Profile or Quick Actions can go here -->
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle me-1"></i> User
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#">Profile</a></li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}" data-turbo="false">Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- Page Content -->
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        // Sidebar Toggle Logic with LocalStorage Memory
+        document.addEventListener("DOMContentLoaded", function () {
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.getElementById('sidebarToggle');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            // Check stored preference
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed && window.innerWidth > 768) {
+                sidebar.classList.add('collapsed');
+            }
+
+            toggleBtn.addEventListener('click', function () {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.toggle('mobile-open');
+                    overlay.classList.toggle('show');
+                } else {
+                    sidebar.classList.toggle('collapsed');
+                    // Save preference
+                    localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+                }
+            });
+
+            // Close mobile sidebar when clicking overlay
+            overlay.addEventListener('click', function () {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('show');
+            });
+        });
+
+        // Turbo Events for Plugins
+        document.addEventListener("turbo:load", function () {
+            // Re-initialize Select2
+            $('.select2').select2({ width: '100%' });
+
+            // Re-initialize any other dynamic UI elements if needed
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,120 @@
+import os
+
+# Define target path
+target_dir = r"E:\Place _trae"
+template_path = os.path.join(target_dir, "templates", "corporate", "dashboard.html")
+
+# Update dashboard to include Matching Link
+html_content = r"""{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-chart-line text-primary"></i> لوحة مؤشرات الشركات</h2>
+    <div>
+        <a href="{{ url_for('corporate_manage') }}" class="btn btn-primary">
+            <i class="fas fa-tasks"></i> إدارة العملاء والطلبات
+        </a>
+        <a href="{{ url_for('corporate_matching') }}" class="btn btn-warning text-dark fw-bold">
+            <i class="fas fa-handshake"></i> نافذة المطابقة (Matching)
+        </a>
+    </div>
+</div>
+
+<!-- Key Metrics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary shadow-sm h-100">
+            <div class="card-body text-center">
+                <h1 class="display-4 fw-bold">{{ stats.client_count }}</h1>
+                <p class="card-text">إجمالي العملاء</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success shadow-sm h-100">
+            <div class="card-body text-center">
+                <h1 class="display-4 fw-bold">{{ stats.open_requests }}</h1>
+                <p class="card-text">طلبات مفتوحة</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info shadow-sm h-100">
+            <div class="card-body text-center">
+                <h1 class="display-4 fw-bold">{{ stats.active_campaigns }}</h1>
+                <p class="card-text">حملات نشطة (مرتبطة)</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning text-dark shadow-sm h-100">
+            <div class="card-body text-center">
+                <h1 class="display-4 fw-bold">{{ stats.total_candidates }}</h1>
+                <p class="card-text">مرشحين جاهزين (Passed)</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Clients -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-bold">
+                <i class="fas fa-history"></i> أحدث العملاء المضافين
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for client in stats.recent_clients %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ client.CompanyName }}</strong>
+                        <br>
+                        <small class="text-muted">{{ client.ContactPerson }}</small>
+                    </div>
+                    <span class="badge bg-light text-dark">{{ client.Industry }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Recent Open Requests -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-bold">
+                <i class="fas fa-briefcase"></i> أحدث الطلبات المفتوحة
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>الشركة</th>
+                            <th>الوظيفة</th>
+                            <th>العدد</th>
+                            <th>الموقع</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in stats.recent_requests %}
+                        <tr>
+                            <td>{{ req.CompanyName }}</td>
+                            <td>{{ req.JobTitle }}</td>
+                            <td>{{ req.NeededCount }}</td>
+                            <td>{{ req.Location }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+"""
+
+try:
+    with open(template_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    print(f"Updated: {template_path}")
+except Exception as e:
+    print(f"Error: {e}")

@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2><i class="fas fa-handshake text-primary"></i> Recruitment Dashboard</h2>
+        <p class="text-muted">إدارة طلبات التوظيف والمطابقة مع الشركات.</p>
+    </div>
+</div>
+
+<!-- Quick Stats Row -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <h6><i class="fas fa-bullhorn"></i> My Active Ads</h6>
+                <h2>{{ metrics.my_ads }}</h2>
+                <small class="text-white-50">إعلاناتي النشطة</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <h6><i class="fas fa-users"></i> My Candidates</h6>
+                <h2>{{ metrics.my_candidates }}</h2>
+                <small class="text-white-50">إجمالي المرشحين</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark h-100">
+            <div class="card-body">
+                <h6><i class="fas fa-calendar-check"></i> Test Interviews Today</h6>
+                <h2>{{ metrics.my_tests_today }}</h2>
+                <small>مقابلات الاختبار اليوم</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <h6><i class="fas fa-handshake"></i> Job Interviews Today</h6>
+                <h2>{{ metrics.my_interviews_today }}</h2>
+                <small class="text-white-50">مقابلات التوظيف اليوم</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Shortcuts -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-project-diagram"></i> Workflow Shortcuts</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between flex-wrap gap-2">
+                    <a href="{{ url_for('recruiter_workbench') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
+                        <i class="fas fa-user-plus"></i> 1. Registration
+                        {% if metrics.count_new_leads > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {{ metrics.count_new_leads }}
+                        </span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('recruiter_scheduling') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
+                        <i class="fas fa-calendar-check"></i> 2. Talent Test
+                        {% if metrics.count_tests_pending > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {{ metrics.count_tests_pending }}
+                        </span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('recruiter_interviews_notify') }}" class="btn btn-outline-warning flex-grow-1">
+                        <i class="fas fa-envelope"></i> 3. Notify Client
+                    </a>
+                    <a href="{{ url_for('recruiter_interviews_followup') }}" class="btn btn-outline-info flex-grow-1">
+                        <i class="fas fa-calendar-day"></i> 4. Daily Follow-up
+                    </a>
+                    <a href="{{ url_for('recruiter_interviews_results') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
+                        <i class="fas fa-poll"></i> 5. Interview Results
+                        {% if metrics.count_feedback_needed > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {{ metrics.count_feedback_needed }}
+                        </span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('recruiter_hiring_onboarding') }}" class="btn btn-success flex-grow-1 text-white fw-bold">
+                        <i class="fas fa-file-contract"></i> 6. Hiring & Onboarding
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- My Assigned Candidates -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0 text-primary">My Assigned Candidates (قيد المعالجة)</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Date Assigned</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if my_candidates %}
+                    {% for c in my_candidates %}
+                    <tr>
+                        <td class="fw-bold">{{ c.FullName }}</td>
+                        <td>{{ c.Phone }}</td>
+                        <td><span class="badge bg-info text-dark">{{ c.Status }}</span></td>
+                        <td>{{ c.CreatedAt.strftime('%Y-%m-%d') if c.CreatedAt else '-' }}</td>
+                        <td>
+                            <!-- Placeholder for processing action -->
+                            <button class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-phone"></i> Call
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-3">No new assigned candidates.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Recent Matches & Feedback -->
+<div class="card shadow-sm">
+    <div class="card-header bg-white">
+        <h5 class="mb-0">Recent Matches & Client Feedback (سجل المقابلات)</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Candidate</th>
+                    <th>Client / Job</th>
+                    <th>Match Date</th>
+                    <th>Status</th>
+                    <th>Feedback</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in recent_matches %}
+                <tr>
+                    <td class="fw-bold">{{ m.CandidateName }}</td>
+                    <td>
+                        <div class="text-dark">{{ m.CompanyName }}</div>
+                        <small class="text-muted">{{ m.JobTitle }}</small>
+                    </td>
+                    <td>{{ m.MatchDate.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        {% if m.InterviewStatus == 'Accepted' %}
+                            <span class="badge bg-success">Accepted</span>
+                        {% elif m.InterviewStatus == 'Rejected' %}
+                            <span class="badge bg-danger">Rejected</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if m.Feedback %}
+                            <span class="d-block text-truncate" style="max-width: 200px;" title="{{ m.Feedback }}">
+                                {{ m.Feedback }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#feedbackModal{{ m.MatchID }}">
+                            <i class="fas fa-edit"></i> Feedback
+                        </button>
+                    </td>
+                </tr>
+                
+                <!-- Feedback Modal -->
+                <div class="modal fade" id="feedbackModal{{ m.MatchID }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <form action="{{ url_for('add_interview_feedback') }}" method="POST">
+                                <input type="hidden" name="match_id" value="{{ m.MatchID }}">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Record Client Feedback</h5>
+                                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p><strong>Candidate:</strong> {{ m.CandidateName }}</p>
+                                    <p><strong>Company:</strong> {{ m.CompanyName }}</p>
+                                    <hr>
+                                    
+                                    <label class="form-label">Interview Outcome</label>
+                                    <select name="status" class="form-select mb-3" required onchange="toggleRejection(this.value, '{{ m.MatchID }}')">
+                                        <option value="Pending" {% if not m.InterviewStatus %}selected{% endif %}>Pending</option>
+                                        <option value="Accepted" {% if m.InterviewStatus=='Accepted' %}selected{% endif %}>Accepted (Hired)</option>
+                                        <option value="Rejected" {% if m.InterviewStatus=='Rejected' %}selected{% endif %}>Rejected</option>
+                                    </select>
+                                    
+                                    <div id="rejectionDiv{{ m.MatchID }}" style="display: {{ 'block' if m.InterviewStatus=='Rejected' else 'none' }};">
+                                        <label class="form-label">Rejection Reason (سبب الرفض)</label>
+                                        <select name="rejection_reason" class="form-select mb-3">
+                                            <option value="">-- Select Reason --</option>
+                                            <option value="Weak English">Weak English Language</option>
+                                            <option value="Technical Skills">Technical Skills Gap</option>
+                                            <option value="Attitude">Behavior/Attitude</option>
+                                            <option value="Salary Expectation">Salary Expectation</option>
+                                            <option value="No Show">No Show (Did not attend)</option>
+                                        </select>
+                                        
+                                        <label class="form-label">Recommended Action (إجراء تصحيحي)</label>
+                                        <input type="text" name="action_required" class="form-control mb-3" placeholder="e.g. Needs Conversation Course">
+                                    </div>
+                                    
+                                    <label class="form-label">Detailed Feedback</label>
+                                    <textarea name="feedback" class="form-control" rows="3">{{ m.Feedback }}</textarea>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="btn btn-primary">Save Feedback</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleRejection(val, id) {
+    const div = document.getElementById('rejectionDiv' + id);
+    if (val === 'Rejected') {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

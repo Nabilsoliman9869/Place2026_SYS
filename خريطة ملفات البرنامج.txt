@@ -1,0 +1,44 @@
+E:\Place_2026_SYS\
+│
+├── app.py                  (ملف الكود الرئيسي - السيرفر)
+├── db_config.json          (ملف إعدادات الاتصال بقاعدة البيانات)
+├── DB_SCHEMA_MAP.txt       (خريطة جداول قاعدة البيانات)
+├── add_column_fix.py       (أداة إصلاح - يمكن حذفها)
+├── add_sales_user.py       (أداة إصلاح - يمكن حذفها)
+├── fix_users_schema.py     (أداة إصلاح - يمكن حذفها)
+│
+├── static\                 (ملفات التنسيق والصور)
+│   ├── css\
+│   └── img\
+│       ├── login_photo.jpg
+│       └── (صور أخرى)
+│
+└── templates\              (صفحات الموقع HTML)
+    ├── base.html           (القالب الأساسي والقوائم)
+    ├── dashboard.html      (الرئيسية)
+    ├── login.html          (تسجيل الدخول)
+    ├── setup.html          (إعداد السيرفر)
+    │
+    ├── admin\              (إدارة المستخدمين)
+    │   └── users.html
+    │
+    ├── corporate\          (قسم الشركات)
+    │   ├── finance.html    (ماليات الشركات)
+    │   ├── index.html      (إدارة العملاء والطلبات)
+    │   └── matching.html   (المطابقة)
+    │
+    ├── finance\            (المالية العامة)
+    │   └── index.html
+    │
+    ├── sales\              (المبيعات)
+    │   └── index.html
+    │
+    └── training\           (التدريب)
+        ├── attendance.html
+        ├── batch_details.html
+        ├── exams.html
+        ├── graduate_review.html
+        ├── index.html
+        ├── invoice.html
+        ├── student_decision.html
+        └── student_finance.html

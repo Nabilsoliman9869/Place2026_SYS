@@ -1,0 +1,160 @@
+2026-01-07 12:04:37,652 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 12:04:37,652 - app - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 12:31:05,532 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 12:31:05,533 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 12:31:06,459 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 12:31:06,460 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 12:31:54,995 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:31:54] "GET / HTTP/1.1" 200 -
+2026-01-07 12:31:55,602 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:31:55] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-07 12:31:56,922 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:31:56] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 12:32:03,980 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:03] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 12:32:04,301 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:04] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 12:32:05,342 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:05] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 12:32:18,102 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:18] "GET /test HTTP/1.1" 200 -
+2026-01-07 12:32:23,950 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:23] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 12:32:30,161 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:30] "GET /api/system/check HTTP/1.1" 200 -
+2026-01-07 12:32:48,608 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:32:48] "GET /api/candidates HTTP/1.1" 200 -
+2026-01-07 12:34:48,773 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:34:48] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 12:34:58,372 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:34:58] "GET /api/system/check HTTP/1.1" 200 -
+2026-01-07 12:35:00,381 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:35:00] "GET /api/candidates HTTP/1.1" 200 -
+2026-01-07 12:36:03,629 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:03] "[32mGET /login HTTP/1.1[0m" 302 -
+2026-01-07 12:36:03,894 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:03] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 12:36:05,064 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:05] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 12:36:12,035 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:12] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-07 12:36:31,596 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:31] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 12:36:57,693 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:57] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 12:36:57,958 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:57] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 12:36:58,983 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:36:58] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 12:37:02,478 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:37:02] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-07 12:37:17,134 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:37:17] "GET /test HTTP/1.1" 200 -
+2026-01-07 12:38:16,828 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 12:38:16] "GET /test HTTP/1.1" 200 -
+2026-01-07 12:49:11,617 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 12:49:11,617 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 12:49:12,491 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 12:49:12,492 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 13:15:58,818 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:15:58] "GET / HTTP/1.1" 200 -
+2026-01-07 13:15:59,349 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:15:59] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-07 13:16:00,356 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:00] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 13:16:06,251 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:06] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-07 13:16:11,130 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:11] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 13:16:16,233 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:16] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 13:16:20,179 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:20] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 13:16:20,269 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:20] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 13:16:21,305 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:21] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 13:16:25,330 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:25] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-07 13:16:28,588 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:16:28] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 13:35:34,707 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:35:34] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 13:35:34,730 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:35:34] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 13:35:35,792 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 13:35:35] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:14:03,264 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 14:14:03,264 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 14:14:04,213 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 14:14:04,214 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 14:14:46,913 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:14:46] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 14:14:47,959 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:14:47] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:14:49,650 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:14:49] "GET /test HTTP/1.1" 200 -
+2026-01-07 14:14:51,892 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:14:51] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 14:14:59,016 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:14:59] "GET /api/system/check HTTP/1.1" 200 -
+2026-01-07 14:15:01,765 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:01] "GET /api/candidates HTTP/1.1" 200 -
+2026-01-07 14:15:03,405 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:03] "GET /api/candidates HTTP/1.1" 200 -
+2026-01-07 14:15:13,885 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:13] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 14:15:17,638 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:17] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 14:15:25,469 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:25] "GET / HTTP/1.1" 200 -
+2026-01-07 14:15:26,593 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:26] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:15:32,206 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:32] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 14:15:32,282 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:32] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 14:15:33,314 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:33] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:15:39,276 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:39] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-07 14:15:45,309 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:45] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:15:57,940 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:15:57] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 14:16:00,922 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:16:00] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -
+2026-01-07 14:16:59,292 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:16:59] "GET /test HTTP/1.1" 200 -
+2026-01-07 14:17:02,079 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:02] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 14:17:10,961 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:10] "GET / HTTP/1.1" 200 -
+2026-01-07 14:17:12,076 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:12] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:17:13,368 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:13] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 14:17:13,632 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:13] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 14:17:14,683 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:14] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 14:17:17,926 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:17] "GET /test HTTP/1.1" 200 -
+2026-01-07 14:17:19,582 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:19] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 14:17:22,213 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 14:17:22] "GET /api/system/check HTTP/1.1" 200 -
+2026-01-07 14:18:40,617 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 14:18:40,617 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 14:18:41,489 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 14:18:41,489 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 18:05:07,074 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 18:05:07,076 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 18:05:08,102 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 18:05:08,103 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 18:05:14,543 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:14] "GET /?ide_webview_request_time=1767801914069 HTTP/1.1" 200 -
+2026-01-07 18:05:16,176 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:16] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-07 18:05:17,479 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:17] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 18:05:21,134 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:21] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-07 18:05:21,547 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:21] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 18:05:21,796 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:21] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-07 18:05:22,591 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:22] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 18:05:40,516 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:40] "GET /test?ide_webview_request_time=1767801940350 HTTP/1.1" 200 -
+2026-01-07 18:05:41,959 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:41] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-07 18:05:44,262 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:05:44] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 18:06:32,681 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:06:32] "GET /api/system/check HTTP/1.1" 200 -
+2026-01-07 18:06:34,727 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:06:34] "GET /api/candidates HTTP/1.1" 200 -
+2026-01-07 18:06:36,465 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:06:36] "GET /api/health HTTP/1.1" 200 -
+2026-01-07 18:06:36,932 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:06:36] "GET /api/health?ide_webview_request_time=1767801996553 HTTP/1.1" 200 -
+2026-01-07 18:06:37,869 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:06:37] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-07 18:10:27,139 - database - INFO - ✅ تم تحميل إعدادات الاتصال من config.py
+2026-01-07 18:10:27,139 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-07 18:10:28,014 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-07 18:10:28,015 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-07 18:10:34,948 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:10:34] "GET /dashboard HTTP/1.1" 200 -
+2026-01-07 18:10:36,701 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:10:36] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-07 18:10:38,005 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:10:38] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-07 18:10:42,459 - werkzeug - INFO - 127.0.0.1 - - [07/Jan/2026 18:10:42] "[33mPOST /api/init-database HTTP/1.1[0m" 404 -
+2026-01-08 09:55:11,656 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-08 09:55:12,711 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-08 09:55:12,712 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-08 09:55:33,978 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 09:55:33] "GET / HTTP/1.1" 200 -
+2026-01-08 09:55:34,148 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 09:55:34] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-08 09:55:35,146 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 09:55:35] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-08 10:19:00,523 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-08 10:19:01,395 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.61:5000
+2026-01-08 10:19:01,396 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-08 10:19:09,179 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 10:19:09] "GET /?ide_webview_request_time=1767860349111 HTTP/1.1" 200 -
+2026-01-08 10:19:09,559 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 10:19:09] "[33mGET /@vite/client HTTP/1.1[0m" 404 -
+2026-01-08 10:19:10,873 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 10:19:10] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-08 13:22:36,886 - __main__ - INFO - ✅ تم تحميل واجهة قاعدة البيانات بنجاح
+2026-01-08 13:22:36,929 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://26.247.218.193:5000
+2026-01-08 13:22:36,930 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-08 13:22:51,420 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:22:51] "GET / HTTP/1.1" 200 -
+2026-01-08 13:22:51,665 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:22:51] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-01-08 13:22:52,665 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:22:52] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-08 13:23:03,754 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:23:03] "POST /api/auth/login HTTP/1.1" 200 -
+2026-01-08 13:23:03,849 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:23:03] "GET /dashboard HTTP/1.1" 200 -
+2026-01-08 13:23:04,891 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:23:04] "[33mGET /api/stats/dashboard HTTP/1.1[0m" 404 -
+2026-01-08 13:23:09,060 - werkzeug - INFO - 127.0.0.1 - - [08/Jan/2026 13:23:09] "[33mGET /api/test/connection HTTP/1.1[0m" 404 -

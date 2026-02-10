@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2><i class="fas fa-check-double text-primary"></i> Interview Approvals <span class="text-muted fs-5">(اعتماد المقابلات)</span></h2>
+        <p class="text-muted">Review and record outcomes for candidate interviews with clients.</p>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white">
+        <h5 class="mb-0">Pending Approvals (مقابلات بانتظار الاعتماد)</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Candidate</th>
+                    <th>Client / Job</th>
+                    <th>Match Date (تاريخ الترشيح)</th>
+                    <th>Current Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if matches %}
+                    {% for m in matches %}
+                    <tr>
+                        <td class="fw-bold">{{ m.CandidateName }}</td>
+                        <td>
+                            <div class="text-dark">{{ m.CompanyName }}</div>
+                            <small class="text-muted">{{ m.JobTitle }}</small>
+                        </td>
+                        <td>{{ m.MatchDate.strftime('%d/%m/%Y') }}</td>
+                        <td>
+                            <span class="badge bg-secondary">Pending Decision</span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#approvalModal{{ m.MatchID }}">
+                                <i class="fas fa-edit"></i> Record Outcome
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Approval Modal -->
+                    <div class="modal fade" id="approvalModal{{ m.MatchID }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form action="{{ url_for('add_interview_feedback') }}" method="POST">
+                                    <input type="hidden" name="match_id" value="{{ m.MatchID }}">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Record Interview Outcome</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p><strong>Candidate:</strong> {{ m.CandidateName }}</p>
+                                        <p><strong>Client:</strong> {{ m.CompanyName }}</p>
+                                        <hr>
+                                        
+                                        <label class="form-label">Decision (القرار)</label>
+                                        <select name="status" class="form-select mb-3" required onchange="toggleRejection(this.value, '{{ m.MatchID }}')">
+                                            <option value="" selected disabled>-- Select Outcome --</option>
+                                            <option value="Accepted">Accepted (Hired)</option>
+                                            <option value="Rejected">Rejected</option>
+                                        </select>
+                                        
+                                        <div id="rejectionDiv{{ m.MatchID }}" style="display: none;">
+                                            <label class="form-label">Rejection Reason (سبب الرفض)</label>
+                                            <select name="rejection_reason" class="form-select mb-3">
+                                                <option value="">-- Select Reason --</option>
+                                                <option value="Weak English">Weak English Language</option>
+                                                <option value="Technical Skills">Technical Skills Gap</option>
+                                                <option value="Attitude">Behavior/Attitude</option>
+                                                <option value="Salary Expectation">Salary Expectation</option>
+                                                <option value="No Show">No Show (Did not attend)</option>
+                                            </select>
+                                            
+                                            <label class="form-label">Recommended Action (إجراء تصحيحي)</label>
+                                            <input type="text" name="action_required" class="form-control mb-3" placeholder="e.g. Needs Conversation Course">
+                                        </div>
+                                        
+                                        <label class="form-label">Feedback / Notes</label>
+                                        <textarea name="feedback" class="form-control" rows="3" placeholder="Client comments..."></textarea>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary">Save Decision</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-2x mb-3 d-block text-success"></i>
+                            No pending interviews to approve.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleRejection(val, id) {
+    const div = document.getElementById('rejectionDiv' + id);
+    if (val === 'Rejected') {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

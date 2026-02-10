@@ -1,0 +1,409 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3 align-items-center">
+        <div class="col-md-6">
+            <h3><i class="fas fa-calendar-alt text-warning"></i> Daily Marketing Sheet</h3>
+            <p class="text-muted small">تسجيل ومتابعة المهتمين اليومي</p>
+        </div>
+        <div class="col-md-6 text-end">
+            <form action="{{ url_for('daily_marketing_sheet') }}" method="GET" class="d-inline-flex align-items-center">
+                <label class="me-2 fw-bold">Date:</label>
+                <input type="date" name="date" class="form-control form-control-sm me-2" value="{{ selected_date }}" onchange="this.form.submit()" style="width: 150px;">
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#campaignModal">
+                    <i class="fas fa-plus"></i> New Campaign
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Entry Row (Excel Style) -->
+    <div class="card shadow-sm mb-4 border-warning" style="border-left: 5px solid #ffc107;">
+        <div class="card-body p-2">
+            <form action="{{ url_for('add_lead_row') }}" method="POST" class="row g-2 align-items-end">
+                <input type="hidden" name="entry_date" value="{{ selected_date }}">
+                
+                <div class="col-md-2">
+                    <label class="small text-muted">Name (الاسم)</label>
+                    <input type="text" name="name" class="form-control form-control-sm" required placeholder="Full Name">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Phone (الهاتف)</label>
+                    <input type="text" name="phone" class="form-control form-control-sm" required placeholder="01xxxxxxxxx">
+                </div>
+                <!-- New Email Field -->
+                <div class="col-md-2">
+                    <label class="small text-muted">Email (الايميل)</label>
+                    <input type="email" name="email" class="form-control form-control-sm" placeholder="user@example.com">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Source (المصدر)</label>
+                    <select name="source" class="form-select form-select-sm">
+                        <option value="Facebook">Facebook</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="Referral">Referral</option>
+                        <option value="Website">Website</option>
+                        <option value="Walk-in">Walk-in</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Nationality</label>
+                    <select name="nationality" class="form-select form-select-sm">
+                        <option value="Egyptian">Egypt</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Grad Status</label>
+                    <select name="grad_status" class="form-select form-select-sm">
+                        <option value="Graduated">Graduated</option>
+                        <option value="Student">Student</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Assign Agent (المندوب)</label>
+                    <select name="assigned_agent" class="form-select form-select-sm" required>
+                        <option value="">-- Select --</option>
+                        {% for agent in sales_agents %}
+                        <option value="{{ agent.UserID }}">{{ agent.Username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- New Fields -->
+                <div class="col-md-2">
+                    <label class="small text-muted">Campaign (الحملة)</label>
+                    <select name="campaign_id" class="form-select form-select-sm">
+                        <option value="">-- None --</option>
+                        {% for camp in campaigns %}
+                        <option value="{{ camp.CampaignID }}">{{ camp.Name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Interest</label>
+                    <select name="interest" class="form-select form-select-sm">
+                        <option value="Training">Training</option>
+                        <option value="Career">Career</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Level (المستوى)</label>
+                    <select name="level" class="form-select form-select-sm">
+                        <option value="">--</option>
+                        <option value="Beginner">Beginner (مبتدئ)</option>
+                        <option value="A1">A1</option>
+                        <option value="A2">A2</option>
+                        <option value="B1">B1</option>
+                        <option value="B2">B2</option>
+                        <option value="C1">C1</option>
+                    </select>
+                </div>
+                <!-- New Availability Status Field -->
+                <div class="col-md-2">
+                    <label class="small text-muted">Availability (الوضع الحالي)</label>
+                    <select name="availability_status" class="form-select form-select-sm">
+                        <option value="">-- Select --</option>
+                        <option value="Employed">Employed (على رأس عمل)</option>
+                        <option value="Unemployed">Unemployed (بدون عمل)</option>
+                        <option value="Student">Student (طالب)</option>
+                        <option value="Immediate">Immediate (جاهز فوراً)</option>
+                        <option value="Notice Period">Notice Period (فترة إنذار)</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Work Status</label>
+                    <input type="text" name="work_status" class="form-control form-control-sm" placeholder="e.g. Working">
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Venue</label>
+                    <select name="venue" class="form-select form-select-sm">
+                        <option value="Online">Online</option>
+                        <option value="Onsite">Onsite</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Reason</label>
+                    <select name="placement_reason" class="form-select form-select-sm">
+                        <option value="Course">Course</option>
+                        <option value="Job">Job</option>
+                        <option value="Travel">Travel</option>
+                    </select>
+                </div>
+                <!-- New Free Text Assessment & Prev App Date -->
+                <div class="col-md-3">
+                    <label class="small text-muted">Initial Assessment (تقييم مبدئي)</label>
+                    <input type="text" name="marketing_assessment" class="form-control form-control-sm" placeholder="e.g. Speaks well, worked in Vodafone...">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Prev App Date (تاريخ سابق)</label>
+                    <input type="date" name="prev_app_date" class="form-control form-control-sm" title="Check 3 months rule">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-warning btn-sm w-100 fw-bold">
+                        <i class="fas fa-save"></i> Add Row
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- The Sheet -->
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle table-sm mb-0" style="font-size: 0.9rem;">
+                <thead class="table-light text-center">
+                    <tr>
+                        <th style="width: 3%;">#</th>
+                        <th style="width: 15%;">Candidate Name</th>
+                        <th style="width: 10%;">Phone</th>
+                        <th style="width: 10%;">Email</th>
+                        <th style="width: 8%;">Source</th>
+                        <th style="width: 10%;">Campaign</th>
+                        <th style="width: 12%;">Assigned To</th>
+                        <th style="width: 10%; background-color: #e8f5e9;">Marketing Status</th>
+                        <th style="width: 10%; background-color: #e3f2fd;">Sales Status</th>
+                        <th style="width: 10%; background-color: #fff3e0;">Payment</th>
+                        <th style="width: 15%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lead in leads %}
+                    <tr>
+                        <td class="text-center">{{ loop.index }}</td>
+                        <td class="fw-bold">{{ lead.FullName }}</td>
+                        <td>{{ lead.Phone }}</td>
+                        <td><small>{{ lead.Email or '-' }}</small></td>
+                        <td><span class="badge bg-secondary">{{ lead.SourceChannel }}</span></td>
+                        <td><small>{{ lead.CampaignName or '-' }}</small></td>
+                        <td>
+                            {% if lead.SalesAgentName %}
+                                <span class="text-primary fw-bold"><i class="fas fa-user-tie"></i> {{ lead.SalesAgentName }}</span>
+                            {% else %}
+                                <span class="text-danger small">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Marketing Status (Initial Contact) -->
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">Contacted</span>
+                        </td>
+
+                        <!-- Live Sales Sync -->
+                        <td class="text-center">
+                            {% if lead.Status == 'Lead' %}
+                                <span class="badge bg-warning text-dark">New</span>
+                            {% elif lead.Status == 'Booked' %}
+                                <span class="badge bg-info">Assessment Booked</span>
+                            {% elif lead.Status == 'Evaluated' %}
+                                <span class="badge bg-purple text-white">Evaluated</span>
+                            {% elif lead.Status == 'Enrolled' %}
+                                <span class="badge bg-success">Enrolled</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ lead.Status }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Payment Status (Simulated Sync) -->
+                        <td class="text-center">
+                            {% if lead.PaidInvoicesCount and lead.PaidInvoicesCount > 0 %}
+                                <span class="badge bg-success"><i class="fas fa-check"></i> Paid</span>
+                            {% else %}
+                                <span class="text-muted small">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-sm" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-outline-info btn-sm" title="History"><i class="fas fa-history"></i></button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-5">
+                            <i class="fas fa-clipboard fa-2x mb-3"></i><br>
+                            No leads recorded for this date. Use the form above to add entries.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Campaign Modal -->
+<div class="modal fade" id="campaignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Create New Campaign</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('create_campaign') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label>Campaign Name</label>
+                        <input type="text" name="name" class="form-control" required placeholder="e.g. Feb Recruitment 2026">
+                    </div>
+                    <div class="mb-3">
+                        <label>Platform</label>
+                        <select name="platform" class="form-select">
+                            <option value="Facebook">Facebook</option>
+                            <option value="Instagram">Instagram</option>
+                            <option value="LinkedIn">LinkedIn</option>
+                            <option value="Google">Google Ads</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label>Budget (Optional)</label>
+                        <input type="number" name="budget" class="form-control" placeholder="EGP">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Campaign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Edit Lead Modal -->
+<div class="modal fade" id="editLeadModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">Edit Lead (تعديل بيانات)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('update_marketing_lead') }}" method="POST">
+                <input type="hidden" name="candidate_id" id="edit_id">
+                <input type="hidden" name="entry_date" value="{{ selected_date }}">
+                
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label>Name</label>
+                            <input type="text" name="name" id="edit_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Phone</label>
+                            <input type="text" name="phone" id="edit_phone" class="form-control" required pattern="\d+" title="Numbers only">
+                        </div>
+                        <div class="col-md-6">
+                            <label>Email</label>
+                            <input type="email" name="email" id="edit_email" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label>Source</label>
+                            <select name="source" id="edit_source" class="form-select">
+                                <option value="Facebook">Facebook</option>
+                                <option value="Instagram">Instagram</option>
+                                <option value="Referral">Referral</option>
+                                <option value="Website">Website</option>
+                                <option value="Walk-in">Walk-in</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Campaign</label>
+                            <select name="campaign_id" id="edit_campaign" class="form-select">
+                                <option value="">-- None --</option>
+                                {% for camp in campaigns %}
+                                <option value="{{ camp.CampaignID }}">{{ camp.Name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Sales Agent</label>
+                            <select name="assigned_agent" id="edit_agent" class="form-select">
+                                <option value="">-- Unassigned --</option>
+                                {% for agent in sales_agents %}
+                                <option value="{{ agent.UserID }}">{{ agent.Username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Details -->
+                        <div class="col-md-3">
+                            <label>Interest</label>
+                            <select name="interest" id="edit_interest" class="form-select">
+                                <option value="Training">Training</option>
+                                <option value="Career">Career</option>
+                                <option value="Both">Both</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Level</label>
+                            <select name="level" id="edit_level" class="form-select">
+                                <option value="">--</option>
+                                <option value="Beginner">Beginner</option>
+                                <option value="A1">A1</option>
+                                <option value="A2">A2</option>
+                                <option value="B1">B1</option>
+                                <option value="B2">B2</option>
+                                <option value="C1">C1</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Availability</label>
+                            <select name="availability_status" id="edit_avail" class="form-select">
+                                <option value="">--</option>
+                                <option value="Employed">Employed</option>
+                                <option value="Unemployed">Unemployed</option>
+                                <option value="Student">Student</option>
+                                <option value="Immediate">Immediate</option>
+                                <option value="Notice Period">Notice Period</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Venue</label>
+                            <select name="venue" id="edit_venue" class="form-select">
+                                <option value="Online">Online</option>
+                                <option value="Onsite">Onsite</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label>Assessment / Notes</label>
+                            <input type="text" name="marketing_assessment" id="edit_assess" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Update Lead</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function populateEditModal(btn) {
+        document.getElementById('edit_id').value = btn.getAttribute('data-id');
+        document.getElementById('edit_name').value = btn.getAttribute('data-name');
+        document.getElementById('edit_phone').value = btn.getAttribute('data-phone');
+        document.getElementById('edit_email').value = btn.getAttribute('data-email');
+        document.getElementById('edit_assess').value = btn.getAttribute('data-assess');
+        
+        // Selects
+        setSelectValue('edit_source', btn.getAttribute('data-source'));
+        setSelectValue('edit_campaign', btn.getAttribute('data-campaign'));
+        setSelectValue('edit_agent', btn.getAttribute('data-agent'));
+        setSelectValue('edit_interest', btn.getAttribute('data-interest'));
+        setSelectValue('edit_level', btn.getAttribute('data-level'));
+        setSelectValue('edit_avail', btn.getAttribute('data-avail'));
+        setSelectValue('edit_venue', btn.getAttribute('data-venue'));
+    }
+
+    function setSelectValue(id, val) {
+        const el = document.getElementById(id);
+        if(val && val !== 'None') {
+            el.value = val;
+        } else {
+            el.value = "";
+        }
+    }
+</script>
+{% endblock %}

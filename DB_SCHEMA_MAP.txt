@@ -1,0 +1,101 @@
+
+===========================================================
+    PLACE 2026 SYSTEM - DATABASE SCHEMA REFERENCE
+===========================================================
+
+1. SYSTEM / AUTH
+----------------
+Table: Users
+- UserID (PK)
+- Username (Unique)
+- Password
+- Role (Manager, Sales, Corporate, Trainer)
+- FullName
+- Email
+- CreatedAt
+
+2. CRM & SALES
+--------------
+Table: Clients (الشركات)
+- ClientID (PK)
+- CompanyName
+- Industry, ContactPerson, Email, Phone, Address
+
+Table: ClientRequests (طلبات التوظيف)
+- RequestID (PK)
+- ClientID (FK -> Clients)
+- JobTitle, NeededCount, Status
+- Requirements, Salary, etc.
+
+Table: Campaigns (الحملات)
+- CampaignID (PK)
+- Name, Type, Budget
+- StartDate, EndDate
+
+Table: Candidates (المرشحين)
+- CandidateID (PK)
+- FullName, Phone, Email
+- Status (New, Lead, Hired...)
+- CVPath, SoftSkills, IsReadyForMatching
+
+Table: GeneralSales (مبيعات حرة)
+- SaleID (PK)
+- ServiceName, Amount, PaymentMethod
+- ClientName
+
+3. MATCHING
+-----------
+Table: Matches
+- MatchID (PK)
+- CandidateID (FK)
+- RequestID (FK)
+- Status (Proposed, Accepted, Rejected)
+
+4. TRAINING (LMS)
+-----------------
+Table: Trainers
+- TrainerID (PK)
+- FullName, Specialization
+
+Table: Courses
+- CourseID (PK)
+- CourseName, DefaultPrice
+
+Table: Classrooms
+- RoomID (PK)
+- RoomName, Capacity
+
+Table: CourseBatches (المجموعات)
+- BatchID (PK)
+- CourseID, TrainerID, RoomID
+- StartDate, EndDate, Status
+
+Table: Enrollments (التسجيل)
+- EnrollmentID (PK)
+- BatchID, CandidateID
+- Status, FinalGrade
+- AgreedPrice (السعر المتفق عليه)
+
+Table: Attendance (الغياب)
+- AttendanceID (PK)
+- EnrollmentID, Date, Status
+
+Table: WeeklyExams (الامتحانات)
+- ExamResultID (PK)
+- EnrollmentID, WeekNumber, Score
+
+Table: StudentPayments (ماليات الطالب)
+- PaymentID (PK)
+- EnrollmentID, Amount, Date
+
+5. CORPORATE FINANCE (NEW)
+--------------------------
+Table: CorporateInvoices
+- InvoiceID (PK)
+- ClientID (FK)
+- ServiceType, Amount, Status
+
+Table: CorporatePayments
+- PaymentID (PK)
+- InvoiceID (FK)
+- Amount, PaymentMethod

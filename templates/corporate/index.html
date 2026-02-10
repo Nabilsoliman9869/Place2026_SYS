@@ -1,0 +1,613 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="fas fa-building"></i> إدارة الشركات والطلبات</h2>
+    <a href="{{ url_for('corporate_dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-right"></i> العودة للوحة المؤشرات
+    </a>
+</div>
+
+<ul class="nav nav-tabs" id="myTab" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button"
+            role="tab">العملاء</button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="requests-tab" data-bs-toggle="tab" data-bs-target="#requests" type="button"
+            role="tab">الطلبات</button>
+    </li>
+</ul>
+
+<div class="tab-content p-3 border border-top-0 rounded-bottom bg-white shadow-sm" id="myTabContent">
+    <!-- Clients Tab -->
+    <div class="tab-pane fade show active" id="clients" role="tabpanel">
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addClientModal">
+                <i class="fas fa-plus"></i> إضافة عميل جديد
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>اسم الشركة</th>
+                        <th>الصناعة</th>
+                        <th>الشخص المسؤول</th>
+                        <th>الهاتف</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                    <tr>
+                        <td>{{ client.ClientID }}</td>
+                        <td>{{ client.CompanyName }}</td>
+                        <td>{{ client.Industry }}</td>
+                        <td>{{ client.ContactPerson }}</td>
+                        <td>{{ client.Phone }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary"
+                                onclick="alert('خاصية التعديل قادمة قريباً')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <a href="{{ url_for('corporate_finance', client_id=client.ClientID) }}"
+                                class="btn btn-sm btn-outline-success" title="الماليات وكشف الحساب">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Requests Tab -->
+    <div class="tab-pane fade" id="requests" role="tabpanel">
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addRequestModal">
+                <i class="fas fa-plus"></i> إضافة طلب جديد
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>الشركة</th>
+                        <th>المسمى الوظيفي</th>
+                        <th>العدد</th>
+                        <th>الموقع</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td>{{ req.RequestID }}</td>
+                        <td>{{ req.CompanyName }}</td>
+                        <td>{{ req.JobTitle }}</td>
+                        <td>{{ req.NeededCount }}</td>
+                        <td>{{ req.Location }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if req.Status == 'Open' else 'secondary' }}">
+                                {{ req.Status }}
+                            </span>
+                        </td>
+                        <td>
+                            <!-- Pass all details to JS function -->
+                            <button class="btn btn-sm btn-info text-white" onclick="showRequestDetails(
+                                    '{{ req.JobTitle }}', 
+                                    '{{ req.CompanyName }}',
+                                    '{{ req.NeededCount }}',
+                                    '{{ req.Gender }}',
+                                    '{{ req.Location }}',
+                                    '{{ req.AgeFrom }}', '{{ req.AgeTo }}',
+                                    '{{ req.SalaryFrom }}', '{{ req.SalaryTo }}',
+                                    '{{ req.Benefits }}',
+                                    '{{ req.EnglishLevel }}', '{{ req.ThirdLanguage }}', '{{ req.ComputerLevel }}',
+                                    '{{ req.SoftSkills }}',
+                                    '{{ req.Requirements }}',
+                                    '{{ req.Smoker }}', '{{ req.AppearanceLevel }}', '{{ req.PhysicalTraits }}'
+                                )">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal (Enhanced) -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-info-circle"></i> تفاصيل طلب التوظيف</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h4 id="d_jobTitle" class="text-center text-primary mb-3"></h4>
+                <h6 id="d_company" class="text-center text-muted mb-4"></h6>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header fw-bold">بيانات أساسية</div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><strong>العدد:</strong> <span id="d_count"></span></li>
+                                <li class="list-group-item"><strong>الجنس:</strong> <span id="d_gender"></span></li>
+                                <li class="list-group-item"><strong>الموقع:</strong> <span id="d_location"></span></li>
+                                <li class="list-group-item"><strong>السن:</strong> <span id="d_age"></span></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header fw-bold">الراتب والمميزات</div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><strong>الراتب:</strong> <span id="d_salary"></span> EGP
+                                </li>
+                                <li class="list-group-item"><strong>المميزات:</strong> <span id="d_benefits"></span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header fw-bold">المهارات</div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><strong>الإنجليزية:</strong> <span id="d_english"></span>
+                                </li>
+                                <li class="list-group-item"><strong>لغة ثالثة:</strong> <span id="d_thirdLang"></span>
+                                </li>
+                                <li class="list-group-item"><strong>حاسب آلي:</strong> <span id="d_computer"></span>
+                                </li>
+                                <li class="list-group-item"><strong>متطلبات:</strong> <span id="d_req"></span></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header fw-bold">السمات الشخصية</div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><strong>السمات:</strong> <span id="d_soft"></span></li>
+                                <li class="list-group-item"><strong>التدخين:</strong> <span id="d_smoker"></span></li>
+                                <li class="list-group-item"><strong>المظهر:</strong> <span id="d_appearance"></span>
+                                </li>
+                                <li class="list-group-item"><strong>وصف شكلي:</strong> <span id="d_physical"></span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function showRequestDetails(title, company, count, gender, loc, ageF, ageT, salF, salT, benefits, eng, third, comp, soft, req, smoker, apper, phys) {
+        document.getElementById('d_jobTitle').innerText = title;
+        document.getElementById('d_company').innerText = company;
+        document.getElementById('d_count').innerText = count;
+
+        // Translation Mapping (Simple)
+        const genderMap = { 'Male': 'ذكر', 'Female': 'أنثى', 'Any': 'الجنسين' };
+        document.getElementById('d_gender').innerText = genderMap[gender] || gender;
+
+        document.getElementById('d_location').innerText = loc;
+        document.getElementById('d_age').innerText = ageF + ' - ' + ageT;
+        document.getElementById('d_salary').innerText = salF + ' - ' + salT;
+        document.getElementById('d_benefits').innerText = benefits || 'لا يوجد';
+
+        document.getElementById('d_english').innerText = eng;
+        document.getElementById('d_thirdLang').innerText = third || 'لا يوجد';
+        document.getElementById('d_computer').innerText = comp;
+        document.getElementById('d_req').innerText = req || 'لا يوجد';
+
+        document.getElementById('d_soft').innerText = soft || 'لا يوجد';
+
+        const smokerMap = { 'Accepted': 'مقبول', 'Non-Smoker': 'غير مدخن' };
+        document.getElementById('d_smoker').innerText = smokerMap[smoker] || smoker;
+
+        const apperMap = { 'Acceptable': 'مقبول', 'Normal': 'عادي', 'Good': 'جيد' };
+        document.getElementById('d_appearance').innerText = apperMap[apper] || apper;
+
+        document.getElementById('d_physical').innerText = phys || 'لا يوجد';
+
+        new bootstrap.Modal(document.getElementById('detailsModal')).show();
+    }
+</script>
+
+<!-- Add Client Modal -->
+<div class="modal fade" id="addClientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">إضافة عميل جديد</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('add_client') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label>اسم الشركة</label>
+                        <input type="text" name="company_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>الصناعة / المجال</label>
+                        <input type="text" name="industry" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label>الشخص المسؤول</label>
+                        <input type="text" name="contact_person" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>البريد الإلكتروني</label>
+                        <input type="email" name="email" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label>الهاتف</label>
+                        <input type="text" name="phone" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label>العنوان</label>
+                        <textarea name="address" class="form-control"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Request Modal (FULL COMPREHENSIVE RESTORED) -->
+<div class="modal fade" id="addRequestModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title text-primary"><i class="fas fa-briefcase"></i> إضافة طلب توظيف جديد</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('add_request') }}" method="POST">
+                <div class="modal-body">
+
+                    <!-- Tabs for Sections -->
+                    <ul class="nav nav-tabs mb-3" id="reqTabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic"
+                                type="button">بيانات الوظيفة</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="benefits-tab" data-bs-toggle="tab" data-bs-target="#benefits"
+                                type="button">المميزات والراتب</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="skills-tab" data-bs-toggle="tab" data-bs-target="#skills"
+                                type="button">المهارات والمؤهلات</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="traits-tab" data-bs-toggle="tab" data-bs-target="#traits"
+                                type="button">السمات الشخصية</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="reqTabsContent">
+
+                        <!-- 1. Basic Info -->
+                        <div class="tab-pane fade show active" id="basic">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">العميل <span class="text-danger">*</span></label>
+                                    <select name="client_id" class="form-select" required>
+                                        <option value="">اختر العميل...</option>
+                                        {% for client in clients %}
+                                        <option value="{{ client.ClientID }}">{{ client.CompanyName }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">المسمى الوظيفي <span
+                                            class="text-danger">*</span></label>
+                                    <input type="text" name="job_title" class="form-control" required
+                                        placeholder="مثال: محاسب، مهندس مبيعات...">
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">العدد المطلوب</label>
+                                    <input type="number" name="needed_count" class="form-control" value="1" min="1">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">الجنس المطلوب <span
+                                            class="text-danger">*</span></label>
+                                    <div class="mt-2">
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="gender" value="Any"
+                                                checked>
+                                            <label class="form-check-label">الجنسين</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="gender" value="Male">
+                                            <label class="form-check-label">ذكر</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="gender" value="Female">
+                                            <label class="form-check-label">أنثى</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">منطقة السكن (الموقع) <span
+                                            class="text-danger">*</span></label>
+                                    <select name="location" class="form-select" required>
+                                        <option value="">اختر المنطقة...</option>
+                                        <option value="Cairo">القاهرة</option>
+                                        <option value="Giza">الجيزة</option>
+                                        <option value="Alexandria">الإسكندرية</option>
+                                        <option value="Upper Egypt">وجه قبلي</option>
+                                        <option value="Sinai">سيناء</option>
+                                        <option value="Sharm">شرم الشيخ</option>
+                                        <option value="Other">أخرى</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">السن (من - إلى) <span
+                                            class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="number" name="age_from" class="form-control" placeholder="من"
+                                            required>
+                                        <span class="input-group-text">-</span>
+                                        <input type="number" name="age_to" class="form-control" placeholder="إلى"
+                                            required>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Benefits & Salary -->
+                        <div class="tab-pane fade" id="benefits">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">الراتب المقرر (من - إلى)</label>
+                                <div class="input-group">
+                                    <input type="number" name="salary_from" class="form-control"
+                                        placeholder="الحد الأدنى">
+                                    <span class="input-group-text">-</span>
+                                    <input type="number" name="salary_to" class="form-control"
+                                        placeholder="الحد الأقصى">
+                                    <span class="input-group-text">EGP</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">المميزات الإضافية</label>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Health Insurance">
+                                            <label class="form-check-label">تأمين صحي</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Social Security">
+                                            <label class="form-check-label">تأمين اجتماعي</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Transportation">
+                                            <label class="form-check-label">تأمين انتقال (مواصلات)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Housing">
+                                            <label class="form-check-label">سكن (إقامة)</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Monthly Bonus">
+                                            <label class="form-check-label">حوافز شهرية</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Annual Bonus">
+                                            <label class="form-check-label">حوافز سنوية</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="benefits"
+                                                value="Salary Increase">
+                                            <label class="form-check-label">زيادات سنوية</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Skills & Qualifications -->
+                        <div class="tab-pane fade" id="skills">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">اللغة الإنجليزية (Standard) <span
+                                            class="text-danger">*</span></label>
+                                    <select name="english_level" class="form-select" required>
+                                        <option value="">اختر المستوى...</option>
+                                        <option value="A1">A1 - مبتدئ 1</option>
+                                        <option value="A2">A2 - مبتدئ 2</option>
+                                        <option value="A3">A3 - مبتدئ 3</option>
+                                        <option value="B1">B1 - متوسط 1</option>
+                                        <option value="B2">B2 - متوسط 2</option>
+                                        <option value="B3">B3 - متوسط 3</option>
+                                        <option value="C1">C1 - متقدم 1</option>
+                                        <option value="C2">C2 - متقدم 2</option>
+                                        <option value="C3">C3 - خبير (Native-like)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">لغة ثالثة (اختياري)</label>
+                                    <select name="third_language" class="form-select">
+                                        <option value="">لا يوجد</option>
+                                        <option value="French">الفرنسية</option>
+                                        <option value="German">الألمانية</option>
+                                        <option value="Italian">الإيطالية</option>
+                                        <option value="Chinese">الصينية</option>
+                                        <option value="Turkish">التركية</option>
+                                        <option value="Other">أخرى</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">مهارات الحاسب الآلي</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="computer_level" id="comp1"
+                                        value="Acceptable" checked>
+                                    <label class="btn btn-outline-primary" for="comp1">مقبول</label>
+
+                                    <input type="radio" class="btn-check" name="computer_level" id="comp2" value="Good">
+                                    <label class="btn btn-outline-primary" for="comp2">جيد</label>
+
+                                    <input type="radio" class="btn-check" name="computer_level" id="comp3"
+                                        value="Advanced">
+                                    <label class="btn btn-outline-primary" for="comp3">متقدم</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">متطلبات الوظيفة التفصيلية</label>
+                                <textarea name="requirements" class="form-control" rows="3"
+                                    placeholder="أي تفاصيل فنية أخرى..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- 4. Traits & Soft Skills -->
+                        <div class="tab-pane fade" id="traits">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">السمات الشخصية والقدرات</label>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Shift Work">
+                                            <label class="form-check-label">القدرة على العمل شيفتات</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Travel/Relocation">
+                                            <label class="form-check-label">القدرة على العمل خارج المحافظة</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Learning">
+                                            <label class="form-check-label">القدرة على التطور والتعلم</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Leadership">
+                                            <label class="form-check-label">القدرة على القيادة</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Work Under Pressure">
+                                            <label class="form-check-label">العمل تحت ضغط</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Teamwork">
+                                            <label class="form-check-label">العمل الجماعي</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Communication">
+                                            <label class="form-check-label">مهارات التواصل</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Problem Solving">
+                                            <label class="form-check-label">حل المشكلات</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Time Management">
+                                            <label class="form-check-label">إدارة الوقت</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="soft_skills"
+                                                value="Adaptability">
+                                            <label class="form-check-label">المرونة والتكيف</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">التدخين</label>
+                                    <div class="mt-1">
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="smoker" value="Accepted"
+                                                checked>
+                                            <label class="form-check-label">مقبول</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="smoker"
+                                                value="Non-Smoker">
+                                            <label class="form-check-label">غير مدخن</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">لياقة المظهر والقبول</label>
+                                    <select name="appearance" class="form-select">
+                                        <option value="Acceptable">مقبول</option>
+                                        <option value="Normal" selected>عادي</option>
+                                        <option value="Good">جيد / حسن المظهر</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">وصف السمات الشكلية (اختياري)</label>
+                                <textarea name="physical_traits" class="form-control" rows="2"
+                                    placeholder="أي مواصفات شكلية مطلوبة..."></textarea>
+                            </div>
+                        </div>
+
+                    </div> <!-- End Tab Content -->
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="submit" class="btn btn-primary fw-bold">حفظ الطلب</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-bullhorn"></i> Create Ad Campaign</h2>
+        <a href="{{ url_for('recruiter_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                <div class="row">
+                    <!-- Basic Info -->
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Campaign Title / Post Name <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" required placeholder="e.g. Hiring Sales Agents - Facebook">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Media Type</label>
+                        <select name="media_type" class="form-select">
+                            <option value="Facebook">Facebook</option>
+                            <option value="LinkedIn">LinkedIn</option>
+                            <option value="Instagram">Instagram</option>
+                            <option value="Wuzzuf">Wuzzuf</option>
+                            <option value="Referral">Referral</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Target Count</label>
+                        <input type="number" name="target_count" class="form-control" value="10">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Requirements -->
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Language Level</label>
+                        <select name="language_level" class="form-select">
+                            <option value="A1.1">A1.1</option>
+                            <option value="A1.2">A1.2</option>
+                            <option value="A2.1">A2.1</option>
+                            <option value="A2.2">A2.2</option>
+                            <option value="B1.1">B1.1</option>
+                            <option value="B1.2">B1.2</option>
+                            <option value="B2.1">B2.1</option>
+                            <option value="B2.2">B2.2</option>
+                            <option value="C1">C1</option>
+                            <option value="C2">C2</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Nationality</label>
+                        <select name="nationality" class="form-select">
+                            <option value="Egyptian">Egyptian</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Graduation</label>
+                        <select name="is_graduated" class="form-select">
+                            <option value="1">Graduated</option>
+                            <option value="0">Undergrad / Any</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Age From</label>
+                        <input type="number" name="age_from" class="form-control" placeholder="18">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Age To</label>
+                        <input type="number" name="age_to" class="form-control" placeholder="35">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preferred Location</label>
+                        <input type="text" name="location" class="form-control" placeholder="e.g. Cairo, Maadi">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Special Requirements</label>
+                    <textarea name="requirements" class="form-control" rows="3" placeholder="e.g. Excellent communication skills..."></textarea>
+                </div>
+
+                <hr>
+
+                <div class="mb-3">
+                    <label class="form-label">Link to Client Request (Optional)</label>
+                    <select name="request_id" class="form-select">
+                        <option value="">-- General / Not Linked --</option>
+                        {% for r in requests %}
+                        <option value="{{ r.RequestID }}">{{ r.CompanyName }} - {{ r.JobTitle }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">If this ad is specifically for a job order, select it here.</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Create Campaign</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

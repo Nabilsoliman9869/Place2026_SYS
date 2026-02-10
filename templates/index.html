@@ -1,0 +1,321 @@
+<!-- [file name]: index.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة التدريب والموارد البشرية</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            margin-top: 100px;
+        }
+        
+        .system-title {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .system-title h1 {
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .system-title p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .btn-custom {
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        
+        .btn-custom:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .card-stat {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .card-stat:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #3498db;
+        }
+        
+        .stat-label {
+            font-size: 1rem;
+            color: #7f8c8d;
+            margin-bottom: 0;
+        }
+        
+        .quick-links {
+            margin-top: 40px;
+        }
+        
+        .quick-link {
+            display: block;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            text-decoration: none;
+            color: #2c3e50;
+            transition: all 0.3s;
+        }
+        
+        .quick-link:hover {
+            background: white;
+            transform: translateX(-5px);
+            text-decoration: none;
+            color: #3498db;
+        }
+        
+        .quick-link i {
+            font-size: 1.5rem;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="system-title">
+            <h1><i class="bi bi-person-badge"></i> نظام إدارة التدريب والموارد البشرية</h1>
+            <p>الإصدار 2.0 - نظام متكامل للإدارة والتدريب والتوظيف</p>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="login-container">
+                    <h3 class="text-center mb-4">🔐 تسجيل الدخول إلى النظام</h3>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        يرجى تسجيل الدخول للوصول إلى لوحة التحكم
+                    </div>
+                    
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">اسم المستخدم</label>
+                            <input type="text" class="form-control form-control-lg" id="username" 
+                                   placeholder="أدخل اسم المستخدم" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">كلمة المرور</label>
+                            <input type="password" class="form-control form-control-lg" id="password" 
+                                   placeholder="أدخل كلمة المرور" required>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-custom">
+                                <i class="bi bi-box-arrow-in-right"></i> تسجيل الدخول
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="mt-3 text-center">
+                        <small class="text-muted">بيانات الدخول الافتراضية: admin / admin@123</small>
+                    </div>
+                    
+                    <div id="loginResult" class="mt-3"></div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="quick-links">
+                    <h3 class="text-white mb-4">🚀 الوصول السريع</h3>
+                    
+                    <a href="/test" class="quick-link" target="_blank">
+                        <i class="bi bi-wrench"></i> اختبار النظام والتشخيص
+                    </a>
+                    
+                    <a href="#" class="quick-link" onclick="showStats()">
+                        <i class="bi bi-graph-up"></i> عرض إحصائيات النظام
+                    </a>
+                    
+                    <a href="#" class="quick-link" onclick="initDatabase()">
+                        <i class="bi bi-database-add"></i> تهيئة قاعدة البيانات
+                    </a>
+                    
+                    <a href="/api/test/connection" class="quick-link" target="_blank">
+                        <i class="bi bi-plug"></i> اختبار اتصال قاعدة البيانات
+                    </a>
+                </div>
+                
+                <div id="systemStats" class="mt-4" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card-stat">
+                                <div class="stat-number" id="statCandidates">0</div>
+                                <p class="stat-label">المرشحين المسجلين</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card-stat">
+                                <div class="stat-number" id="statInterests">0</div>
+                                <p class="stat-label">تسجيلات الاهتمام</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card-stat">
+                                <div class="stat-number" id="statTrainings">0</div>
+                                <p class="stat-label">التدريبات النشطة</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card-stat">
+                                <div class="stat-number" id="statClients">0</div>
+                                <p class="stat-label">العملاء النشطين</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- مكتبات JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // معالجة تسجيل الدخول
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const resultDiv = document.getElementById('loginResult');
+            resultDiv.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="bi bi-hourglass-split"></i> جاري تسجيل الدخول...
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({username, password})
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // تخزين التوكن
+                    localStorage.setItem('token', result.token);
+                    localStorage.setItem('user', JSON.stringify(result.user));
+                    
+                    // توجيه إلى لوحة التحكم
+                    window.location.href = '/dashboard';
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            ${result.error || 'اسم المستخدم أو كلمة المرور غير صحيحة'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        خطأ في الاتصال بالخادم: ${error.message}
+                    </div>
+                `;
+            }
+        });
+        
+        // تعبئة بيانات الدخول الافتراضية (للتسهيل)
+        document.getElementById('username').value = 'admin';
+        document.getElementById('password').value = 'admin@123';
+        
+        // عرض إحصائيات النظام
+        async function showStats() {
+            const statsDiv = document.getElementById('systemStats');
+            statsDiv.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/stats/dashboard');
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('statCandidates').textContent = result.data.total_candidates || 0;
+                    document.getElementById('statInterests').textContent = result.data.total_interests || 0;
+                    document.getElementById('statTrainings').textContent = result.data.active_trainings || 0;
+                    document.getElementById('statClients').textContent = result.data.active_clients || 0;
+                }
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+        
+        // تهيئة قاعدة البيانات
+        async function initDatabase() {
+            if (!confirm('⚠️ هل تريد تهيئة قاعدة البيانات؟\nسيتم إنشاء الجداول الأساسية.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/init-database', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ ' + result.message);
+                    showStats(); // تحديث الإحصائيات
+                } else {
+                    alert('❌ ' + (result.error || 'فشل التهيئة'));
+                }
+            } catch (error) {
+                alert('❌ خطأ: ' + error.message);
+            }
+        }
+        
+        // فحص تلقائي للإحصائيات عند التحميل
+        window.addEventListener('load', function() {
+            // محاولة جلب الإحصائيات إذا كان النظام يعمل
+            setTimeout(showStats, 1000);
+        });
+    </script>
+</body>
+</html>

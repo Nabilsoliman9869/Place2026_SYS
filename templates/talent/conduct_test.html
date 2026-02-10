@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tasks"></i> Conduct Talent Tests</h2>
+        <div class="d-flex gap-2">
+            <!-- Filter Dropdown -->
+            <form method="GET" class="d-flex">
+                <select name="date_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="today" {{ 'selected' if filter == 'today' }}>Today</option>
+                    <option value="tomorrow" {{ 'selected' if filter == 'tomorrow' }}>Tomorrow</option>
+                    <option value="upcoming" {{ 'selected' if filter == 'upcoming' }}>Upcoming</option>
+                </select>
+            </form>
+            <span class="badge bg-primary fs-6 align-self-center">{{ tests|length }} Scheduled</span>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- List of Tests -->
+        <div class="col-md-4">
+            <div class="list-group shadow-sm" id="testList" role="tablist">
+                {% for t in tests %}
+                <a class="list-group-item list-group-item-action {{ 'active' if loop.first else '' }}" 
+                   id="list-{{ t.ScheduleID }}-list" data-bs-toggle="list" href="#list-{{ t.ScheduleID }}" role="tab">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ t.SlotTime }}</h5>
+                        <small class="text-{{ 'warning' if t.Status=='Booked' else 'success' }}">{{ t.Status }}</small>
+                    </div>
+                    <p class="mb-1">{{ t.FullName }}</p>
+                    <div class="d-flex justify-content-between">
+                        <small>{{ t.BookingMode }}</small>
+                        <small class="text-muted">{{ t.SlotDate.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                </a>
+                {% else %}
+                <div class="alert alert-info">No tests scheduled for this period.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Test Execution Form -->
+        <div class="col-md-8">
+            <div class="tab-content" id="nav-tabContent">
+                {% for t in tests %}
+                <div class="tab-pane fade {{ 'show active' if loop.first else '' }}" id="list-{{ t.ScheduleID }}" role="tabpanel">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Candidate: {{ t.FullName }}</h5>
+                            <div class="btn-group">
+                                <a href="{{ url_for('view_candidate_profile', cand_id=t.BookedCandidateID) }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    <i class="fas fa-external-link-alt"></i> Full Profile
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#transferModal{{ t.ScheduleID }}">
+                                    <i class="fas fa-exchange-alt"></i> Transfer
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Candidate Context (Read-Only) -->
+                            <div class="alert alert-secondary">
+                                <h6 class="alert-heading"><i class="fas fa-info-circle"></i> Candidate Context</h6>
+                                <hr>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <small class="text-muted d-block">Recruiter:</small>
+                                        <strong>{{ t.RecruiterName or 'System' }}</strong>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small class="text-muted d-block">Campaign:</small>
+                                        <strong>{{ t.CampaignName or 'General/Private' }}</strong>
+                                    </div>
+                                    <div class="col-md-6 mt-2">
+                                        <small class="text-muted d-block">Interest Date:</small>
+                                        <span>{{ t.InterestDate }}</span>
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <small class="text-muted d-block">Recruiter Notes:</small>
+                                        <p class="mb-0 fst-italic">{{ t.MarketingAssessment or 'No notes provided.' }}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+                            
+                            <!-- Contact Info -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Phone:</strong> {{ t.Phone }}<br>
+                                    <strong>Email:</strong> {{ t.Email or 'N/A' }}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Mode:</strong> {{ t.BookingMode }}<br>
+                                    {% if t.BookingMode == 'Online' %}
+                                    <a href="{{ t.MeetingLink or '#' }}" target="_blank" class="btn btn-sm btn-success mt-1"><i class="fas fa-video"></i> Join Meeting</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <hr>
+
+                            <!-- Evaluation Form -->
+                            <form action="{{ url_for('talent_conduct_test') }}" method="POST" data-turbo="false">
+                                <input type="hidden" name="schedule_id" value="{{ t.ScheduleID }}">
+                                <input type="hidden" name="candidate_id" value="{{ t.BookedCandidateID }}">
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">1. Interview Recording Link (Google Drive)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fab fa-google-drive"></i></span>
+                                        <input type="url" name="recording_link" class="form-control" placeholder="Paste Google Drive Link here..." required>
+                                        <a href="https://drive.google.com" target="_blank" class="btn btn-outline-secondary">Open Drive</a>
+                                    </div>
+                                    <div class="form-text">Please upload the recording to the shared drive and paste the link here.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">2. English Level (Standard)</label>
+                                    <select name="cefr_score" class="form-select" required>
+                                        <option value="">-- Select Level --</option>
+                                        <option value="A0">A0 (Beginner)</option>
+                                        <option value="A1.1">A1.1</option>
+                                        <option value="A1.2">A1.2</option>
+                                        <option value="A2.1">A2.1</option>
+                                        <option value="A2.2">A2.2</option>
+                                        <option value="B1.1">B1.1</option>
+                                        <option value="B1.2">B1.2</option>
+                                        <option value="B2.1">B2.1</option>
+                                        <option value="B2.2">B2.2</option>
+                                        <option value="C1.1">C1.1</option>
+                                        <option value="C1.2">C1.2</option>
+                                        <option value="C2">C2 (Proficient)</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">3. Assessment Notes</label>
+                                    <textarea name="notes" class="form-control" rows="4" placeholder="Strengths, weaknesses, communication skills..." required></textarea>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">4. Final Recommendation</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="recommendation" id="hire{{ t.ScheduleID }}" value="Hire" required>
+                                        <label class="btn btn-outline-success" for="hire{{ t.ScheduleID }}">Hire (Ready for Job)</label>
+
+                                        <input type="radio" class="btn-check" name="recommendation" id="train{{ t.ScheduleID }}" value="Train">
+                                        <label class="btn btn-outline-warning" for="train{{ t.ScheduleID }}">Train (Needs Course)</label>
+
+                                        <input type="radio" class="btn-check" name="recommendation" id="reject{{ t.ScheduleID }}" value="Reject">
+                                        <label class="btn btn-outline-danger" for="reject{{ t.ScheduleID }}">Reject</label>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary w-100">Submit Result & Close Ticket</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Transfer Modal -->
+                    <div class="modal fade" id="transferModal{{ t.ScheduleID }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Transfer Appointment</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form action="{{ url_for('talent_transfer_slot') }}" method="POST">
+                                    <div class="modal-body">
+                                        <p>Transfer <strong>{{ t.FullName }}</strong>'s appointment to another colleague.</p>
+                                        <input type="hidden" name="schedule_id" value="{{ t.ScheduleID }}">
+                                        <div class="mb-3">
+                                            <label class="form-label">Select Colleague</label>
+                                            <select name="new_owner_id" class="form-select" required>
+                                                <option value="">-- Select --</option>
+                                                {% for c in colleagues %}
+                                                <option value="{{ c.UserID }}">{{ c.Username }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-warning">Transfer Now</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

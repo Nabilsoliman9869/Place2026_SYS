@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-lg">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h4 class="mb-0"><i class="fas fa-user-circle"></i> Candidate Profile</h4>
+            <a href="javascript:history.back()" class="btn btn-outline-light btn-sm">Back</a>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Basic Info -->
+                <div class="col-md-4 text-center border-end">
+                    <div class="mb-3">
+                        <i class="fas fa-user-circle fa-6x text-secondary"></i>
+                    </div>
+                    <h4 class="fw-bold">{{ cand.FullName }}</h4>
+                    <span class="badge bg-{{ 'success' if cand.Status == 'Ready_For_Matching' else 'secondary' }} fs-6 mb-3">
+                        {{ cand.Status }}
+                    </span>
+                    <hr>
+                    <div class="text-start px-3">
+                        <p><strong>Phone:</strong> {{ cand.Phone }}</p>
+                        <p><strong>Email:</strong> {{ cand.Email or 'N/A' }}</p>
+                        <p><strong>Graduated:</strong> {{ 'Yes' if cand.IsGraduated else 'No' }}</p>
+                        <p><strong>Employment:</strong> {{ cand.EmploymentStatus }}</p>
+                    </div>
+                </div>
+                
+                <!-- Recruitment Details -->
+                <div class="col-md-8">
+                    <h5 class="text-muted border-bottom pb-2">Recruitment Details</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="text-muted small">Recruiter</label>
+                            <p class="fw-bold">{{ cand.AgentName or 'System' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Campaign</label>
+                            <p class="fw-bold">{{ cand.CampaignName or 'General' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Interest Date</label>
+                            <p class="fw-bold">{{ cand.CreatedAt.strftime('%Y-%m-%d') if cand.CreatedAt else '-' }}</p>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="text-muted small">Initial Marketing Assessment</label>
+                            <div class="alert alert-light border">{{ cand.MarketingAssessment or 'No notes recorded.' }}</div>
+                        </div>
+                    </div>
+                    
+                    <h5 class="text-muted border-bottom pb-2 mt-4">Talent Assessment</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="text-muted small">CEFR Level</label>
+                            <p class="fw-bold fs-5 text-primary">{{ cand.CurrentCEFR or 'Not Assessed' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Ready for Matching?</label>
+                            <p class="fw-bold {{ 'text-success' if cand.IsReadyForMatching else 'text-danger' }}">
+                                {{ 'Yes' if cand.IsReadyForMatching else 'No' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

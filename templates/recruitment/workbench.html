@@ -1,0 +1,260 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-briefcase"></i> Recruiter Workbench</h2>
+        <div>
+            <a href="{{ url_for('recruiter_dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+            <a href="{{ url_for('recruiter_test_schedule') }}" class="btn btn-info text-white me-2">
+                <i class="fas fa-calendar-check"></i> Test Confirmations
+            </a>
+            <a href="{{ url_for('create_ad_campaign') }}" class="btn btn-primary">
+                <i class="fas fa-plus-circle"></i> Create New Ad Campaign
+            </a>
+        </div>
+    </div>
+
+    <!-- 1. Quick Add Candidate (Excel-like Row) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-user-plus"></i> Quick Register Candidate</h5>
+        </div>
+        <div class="card-body p-2">
+            <form action="{{ url_for('add_candidate_manual') }}" method="POST" class="row g-2 align-items-end">
+                <!-- Row 1 -->
+                <div class="col-md-3">
+                    <label class="small text-muted">Full Name</label>
+                    <input type="text" name="full_name" class="form-control form-control-sm" required placeholder="Quadruple Name">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Phone</label>
+                    <input type="text" name="phone" class="form-control form-control-sm" required placeholder="01xxxxxxxxx" value="{{ request.args.get('search_phone', '') }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Email</label>
+                    <input type="email" name="email" class="form-control form-control-sm" placeholder="email@example.com">
+                </div>
+                <div class="col-md-1">
+                    <label class="small text-muted">Age</label>
+                    <input type="number" name="age" class="form-control form-control-sm" placeholder="Age">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Address / Area</label>
+                    <input type="text" name="address" class="form-control form-control-sm" placeholder="Area">
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Campaign</label>
+                    <select name="campaign_id" class="form-select form-select-sm">
+                        <option value="">-- General --</option>
+                        {% for c in campaigns %}
+                        <option value="{{ c.CampaignID }}">{{ c.Name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Row 2 -->
+                <div class="col-md-2">
+                    <label class="small text-muted">Status</label>
+                    <select name="employment_status" class="form-select form-select-sm">
+                        <option value="Unemployed">Ready</option>
+                        <option value="Employed">Work</option>
+                        <option value="NoticePeriod">Notice</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Graduated?</label>
+                    <select name="is_graduated" class="form-select form-select-sm">
+                        <option value="1">Yes</option>
+                        <option value="0">No</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted">Applied Before?</label>
+                    <select name="worked_before" class="form-select form-select-sm">
+                        <option value="0">No</option>
+                        <option value="1">Yes</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success btn-sm w-100 fw-bold mt-4">ADD</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Found Duplicate Candidate Display -->
+    {% if found_candidate %}
+    <div class="alert alert-warning border-start border-5 border-warning shadow-sm">
+        <h5 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Candidate Already Exists</h5>
+        <hr>
+        <div class="row">
+            <div class="col-md-4">
+                <strong>Name:</strong> {{ found_candidate.FullName }}<br>
+                <strong>Phone:</strong> {{ found_candidate.Phone }}<br>
+                <strong>Age:</strong> {{ found_candidate.Age or '-' }}
+            </div>
+            <div class="col-md-4">
+                <strong>Current Status:</strong> <span class="badge bg-secondary">{{ found_candidate.Status }}</span><br>
+                <strong>Managed By (Original):</strong> {{ found_candidate.AgentName or 'Unknown' }}<br>
+                <strong>Worked Before:</strong> {{ 'Yes' if found_candidate.WorkedHereBefore else 'No' }}
+            </div>
+            <div class="col-md-4">
+                <strong>Campaign:</strong> {{ found_candidate.CampaignName or 'Manual' }}<br>
+                <strong>Date Added:</strong> {{ found_candidate.CreatedAt.strftime('%Y-%m-%d') if found_candidate.CreatedAt else '-' }}<br>
+                
+                <a href="{{ url_for('candidate_profile', candidate_id=found_candidate.CandidateID) }}" class="btn btn-primary btn-sm mt-2" target="_blank">
+                    <i class="fas fa-id-card"></i> View Full Profile
+                </a>
+            </div>
+        </div>
+        <div class="mt-3">
+            <!-- If current user owns it, allow action. Else, read-only. -->
+            {% if found_candidate.SalesAgentID == session['user_id'] %}
+                <span class="text-success fw-bold"><i class="fas fa-check-circle"></i> You manage this candidate. See list below.</span>
+            {% else %}
+                <span class="text-danger fw-bold"><i class="fas fa-lock"></i> Managed by another agent. Contact admin to transfer.</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 2. My Candidates List (Actionable) -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white d-flex justify-content-between">
+            <h5 class="mb-0">My Recent Candidates</h5>
+            <span class="badge bg-warning text-dark">{{ candidates|length }} Pending Actions</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Grad.</th>
+                        <th>Applied Before?</th>
+                        <th>Status</th>
+                        <th>Action (Feedback)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in candidates %}
+                    <tr>
+                        <td class="fw-bold">{{ c.FullName }}</td>
+                        <td>{{ c.Phone }}</td>
+                        <td>{{ c.Email or '-' }}</td>
+                        <td>
+                            {% if c.IsGraduated %}
+                            <i class="fas fa-check text-success"></i> Yes
+                            {% else %}
+                            <span class="text-muted">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.PreviousApplicationDate %}
+                            <span class="badge bg-warning text-dark">Yes</span>
+                            {% else %}
+                            <span class="text-muted">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.Status == 'New' %}
+                            <span class="badge bg-primary">New</span>
+                            {% elif c.Status == 'Talent_Pool' %}
+                            <span class="badge bg-success">Valid (Talent)</span>
+                            {% elif c.Status == 'Rejected_Recruitment' %}
+                            <span class="badge bg-danger">Training Sales</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ c.Status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.Status == 'New' or c.Status == 'Lead' %}
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#evaluateModal{{ c.CandidateID }}">
+                                <i class="fas fa-gavel"></i> Feedback
+                            </button>
+                            {% else %}
+                            <small class="text-muted">Done</small>
+                            {% endif %}
+
+                            <!-- Feedback Modal -->
+                            <div class="modal fade" id="evaluateModal{{ c.CandidateID }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('recruiter_evaluate_candidate') }}" method="POST">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title">Initial Feedback: {{ c.FullName }}</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <input type="hidden" name="candidate_id" value="{{ c.CandidateID }}">
+                                                
+                                                <div class="mb-3">
+                                                    <label class="form-label">Language Level</label>
+                                                    <select name="language_level" class="form-select" required>
+                                                        <option value="">-- Select --</option>
+                                                        <option value="A1">A1</option>
+                                                        <option value="A2">A2</option>
+                                                        <option value="B1">B1</option>
+                                                        <option value="High B1">High B1</option>
+                                                        <option value="Low B1+">Low B1+</option>
+                                                        <option value="Compromised B1+">Compromised B1+</option>
+                                                        <option value="Solid B1+">Solid B1+</option>
+                                                        <option value="Compromised B2">Compromised B2</option>
+                                                        <option value="B2">B2</option>
+                                                        <option value="C1">C1</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Employment Status</label>
+                                                    <select name="employment_status" class="form-select" required>
+                                                        <option value="">-- Select --</option>
+                                                        <option value="Unemployed">Unemployed (Ready)</option>
+                                                        <option value="Employed">Employed</option>
+                                                        <option value="NoticePeriod">Notice Period</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Decision</label>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="decision" value="Valid" checked>
+                                                        <label class="form-check-label text-success fw-bold">
+                                                            <i class="fas fa-check-circle"></i> Valid (Move to Talent Pool)
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="decision" value="Invalid">
+                                                        <label class="form-check-label text-danger fw-bold">
+                                                            <i class="fas fa-times-circle"></i> Invalid (Move to Training Sales)
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label class="form-label">Notes</label>
+                                                    <textarea name="feedback" class="form-control" rows="2"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary">Submit Evaluation</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

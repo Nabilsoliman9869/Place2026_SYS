@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4"><i class="fas fa-poll"></i> Interview Results Log</h2>
+    
+    <div class="alert alert-info border-start border-5 border-info">
+        <i class="fas fa-info-circle"></i> Log the outcome of client interviews. If accepted, the candidate will move to the next stage (Offer/2nd Interview).
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Pending Results (Confirmed/Scheduled Interviews)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Candidate</th>
+                            <th>Client & Job</th>
+                            <th>Interview Date</th>
+                            <th>Current Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in matches %}
+                        <tr>
+                            <td>
+                                <strong>{{ m.FullName }}</strong>
+                            </td>
+                            <td>
+                                <strong>{{ m.CompanyName }}</strong><br>
+                                <small class="text-muted">{{ m.JobTitle }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ m.InterviewDate.strftime('%Y-%m-%d %H:%M') if m.InterviewDate else 'TBD' }}</span>
+                            </td>
+                            <td>
+                                {% if m.Status == 'Confirmed by Candidate' %}
+                                <span class="badge bg-success">Confirmed by Cand.</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">{{ m.Status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#resultModal{{ m.MatchID }}">
+                                    <i class="fas fa-edit"></i> Log Result
+                                </button>
+                            </td>
+                        </tr>
+
+                        <!-- Result Modal -->
+                        <div class="modal fade" id="resultModal{{ m.MatchID }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Log Interview Result</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form action="{{ url_for('allocation_log_interview_result') }}" method="POST">
+                                        <div class="modal-body">
+                                            <input type="hidden" name="match_id" value="{{ m.MatchID }}">
+                                            <p>Outcome for <strong>{{ m.FullName }}</strong> at <strong>{{ m.CompanyName }}</strong>:</p>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Client Decision</label>
+                                                <select name="result" class="form-select" required onchange="toggleNextSteps(this, '{{ m.MatchID }}')">
+                                                    <option value="">-- Select Outcome --</option>
+                                                    <option value="Accepted">Accepted (Passed Interview)</option>
+                                                    <option value="Rejected">Rejected</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div id="nextStepDiv{{ m.MatchID }}" class="mb-3 d-none">
+                                                <label class="form-label fw-bold">Next Step?</label>
+                                                <select name="next_step" class="form-select">
+                                                    <option value="offer">Move to Offer & Docs</option>
+                                                    <option value="2nd_interview">Require 2nd Interview</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label">Feedback / Reason / Next Steps</label>
+                                                <textarea name="notes" class="form-control" rows="3" placeholder="e.g. Good technical skills, wants 2nd interview..."></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Save Result</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                        function toggleNextSteps(select, id) {
+                            var div = document.getElementById('nextStepDiv' + id);
+                            if (select.value === 'Accepted') {
+                                div.classList.remove('d-none');
+                            } else {
+                                div.classList.add('d-none');
+                            }
+                        }
+                        </script>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No interviews pending results.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

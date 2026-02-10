@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+  <!-- Active Campaigns -->
+  <div class="col-md-3">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fas fa-bullhorn text-warning"></i> الحملات النشطة</h5>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for c in campaigns %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ c.Name }}</strong>
+            <div class="small text-muted">{{ c.Type }}</div>
+          </div>
+          <span class="badge bg-primary rounded-pill">{{ c.Budget }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="card-body">
+        <button class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#addCampaignModal">
+          <i class="fas fa-plus"></i> حملة جديدة
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Requests -->
+    <div class="card shadow-sm">
+      <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fas fa-tasks text-info"></i> طلبات مفتوحة</h5>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for r in active_requests %}
+        <li class="list-group-item">
+          <strong>{{ r.JobTitle }}</strong>
+          <div class="small text-muted">{{ r.CompanyName }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="col-md-6">
+
+    <!-- TA BOOKING (New Feature) -->
+    <div class="card shadow-sm mb-4 border-primary">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="fas fa-calendar-check"></i> Book Assessment (TA)</h5>
+        <span class="small opacity-75">حجز موعد تقييم مستوى</span>
+      </div>
+      <div class="card-body">
+        <!-- Date Selector -->
+        <form method="GET" class="mb-3 d-flex gap-2">
+          <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date }}"
+            onchange="this.form.submit()">
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+            onclick="document.querySelector('[name=date]').valueAsDate = new Date(); this.form.submit()">Today</button>
+        </form>
+
+        <form action="{{ url_for('book_ta_slot') }}" method="POST">
+          <div class="row">
+            <div class="col-md-6 mb-2">
+              <label class="small text-muted">Candidate (العميل)</label>
+              <select name="candidate_id" class="form-select select2-client" required>
+                <option value="">-- Select Candidate --</option>
+                {% for c in candidates %}
+                <option value="{{ c.CandidateID }}">{{ c.FullName }} ({{ c.Phone }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-2">
+              <label class="small text-muted">Available Slot (الموعد المتاح)</label>
+              <select name="slot_id" class="form-select" required>
+                <option value="">-- Select Time --</option>
+                {% for slot in available_slots %}
+                <!-- Explicitly show Evaluator Name -->
+                <option value="{{ slot.SlotID }}">
+                  {{ slot.SlotTime }}
+                  {% if slot.EvaluatorName %}
+                  - with {{ slot.EvaluatorName }} (Evaluator)
+                  {% else %}
+                  - General Pool
+                  {% endif %}
+                </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block mt-1">Date: {{ selected_date }}</small>
+            </div>
+            <div class="col-md-12 mb-2">
+              <label class="small text-muted">Interview Type (نوع المقابلة)</label>
+              <select name="interview_type" class="form-select" required>
+                <option value="Zoom">Zoom Meeting</option>
+                <option value="Phone">Phone Call</option>
+                <option value="Onsite">Onsite (مقر الشركة)</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-outline-primary w-100">
+            <i class="fas fa-check-circle"></i> Confirm Booking (تأكيد الحجز)
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Leads Registration -->
+    <div class="card shadow-sm mb-4 bg-light">
+      <div class="card-body">
+        <h5 class="card-title text-primary"><i class="fas fa-user-plus"></i> تسجيل عميل محتمل (Lead)</h5>
+        <form action="{{ url_for('add_lead') }}" method="POST">
+          <input type="text" name="full_name" class="form-control mb-2" placeholder="الاسم بالكامل *" required>
+          <input type="text" name="phone" class="form-control mb-2" placeholder="رقم الهاتف *" required>
+          <input type="email" name="email" class="form-control mb-2" placeholder="البريد الإلكتروني">
+
+          <label class="small text-muted">مصدر العميل:</label>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="source_type" id="srcGeneral" value="general" checked
+              onclick="toggleCampaigns(false)">
+            <label class="form-check-label" for="srcGeneral">عام (General Walk-in/Call)</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="source_type" id="srcCampaign" value="campaign"
+              onclick="toggleCampaigns(true)">
+            <label class="form-check-label" for="srcCampaign">حملة إعلانية (Campaign)</label>
+          </div>
+
+          <div id="campaignSelectDiv" style="display:none;" class="mb-2">
+            <select name="campaign_id" class="form-select">
+              <option value="">-- اختر الحملة --</option>
+              {% for c in campaigns %}
+              <option value="{{ c.CampaignID }}">{{ c.Name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <select name="interest_level" class="form-select mb-2">
+                <option value="High">مهتم جداً</option>
+                <option value="Medium" selected>متوسط</option>
+                <option value="Low">ضعيف</option>
+              </select>
+            </div>
+            <div class="col">
+              <input type="text" name="next_followup" class="form-control mb-2"
+                placeholder="تاريخ المتابعة (yyyy-mm-dd)" onfocus="(this.type='date')">
+            </div>
+          </div>
+
+          <textarea name="feedback" class="form-control mb-2" placeholder="ملاحظات المتابعة..." rows="2"></textarea>
+
+          <button type="submit" class="btn btn-primary w-100">تسجيل</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Recent Leads List -->
+    <div class="card shadow-sm">
+      <div class="card-header bg-white">
+        <h5 class="mb-0">آخر العملاء المسجلين</h5>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for l in leads %}
+        <a href="{{ url_for('candidate_profile', candidate_id=l.CandidateID) }}"
+          class="list-group-item list-group-item-action">
+          <div class="d-flex w-100 justify-content-between">
+            <h6 class="mb-1">{{ l.FullName }}</h6>
+            <small>{{ l.CreatedAt.strftime('%Y-%m-%d') }}</small>
+          </div>
+          <p class="mb-1 small text-muted">{{ l.Phone }} | {{ l.Status }}</p>
+          {% if l.CampaignName %}
+          <small class="text-primary"><i class="fas fa-tag"></i> {{ l.CampaignName }}</small>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Invoice (NEW DROPDOWN VERSION) -->
+  <div class="col-md-3">
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h5 class="card-title text-success"><i class="fas fa-file-invoice-dollar"></i> بيع خدمة (أفراد)</h5>
+        <form action="{{ url_for('add_sales_invoice') }}" method="POST">
+
+          <div class="mb-2">
+            <label class="small text-muted">العميل</label>
+            <select name="candidate_id" class="form-select select2-client" required>
+              <option value="">-- اختر العميل --</option>
+              {% for c in candidates %}
+              <option value="{{ c.CandidateID }}" {% if c.FullName=='عميل نقدي' %}selected{% endif %}>
+                {{ c.FullName }} ({{ c.Phone }})
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="small text-muted">الخدمة</label>
+            <select name="service_id" class="form-select" required>
+              <option value="">-- اختر الخدمة --</option>
+              {% for s in services %}
+              <option value="{{ s.ServiceID }}">{{ s.ServiceName }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <input type="number" name="amount" class="form-control mb-2" placeholder="المبلغ" step="0.01" required>
+
+          <select name="payment_method" class="form-select mb-2">
+            <option value="Cash">نقدي</option>
+            <option value="Visa">فيزا</option>
+            <option value="BankTransfer">تحويل بنكي</option>
+            <option value="Instapay">Instapay</option>
+          </select>
+
+          <textarea name="notes" class="form-control mb-2" placeholder="ملاحظات..." rows="1"></textarea>
+
+          <button type="submit" class="btn btn-success w-100">إصدار الفاتورة</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Invoices List -->
+<div class="card shadow-sm mt-4">
+  <div class="card-header bg-white">
+    <h5 class="mb-0">آخر الفواتير</h5>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>رقم</th>
+          <th>العميل</th>
+          <th>الخدمة</th>
+          <th>المبلغ</th>
+          <th>التاريخ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td>#{{ inv.SaleID }}</td>
+          <td>
+            {% if inv.LinkedCandidate %}
+            <a href="{{ url_for('candidate_profile', candidate_id=inv.CandidateID) }}">{{ inv.LinkedCandidate }}</a>
+            {% else %}
+            {{ inv.ClientName }}
+            {% endif %}
+          </td>
+          <td>{{ inv.ServiceName }}</td>
+          <td class="text-success fw-bold">{{ inv.Amount }}</td>
+          <td class="small text-muted">{{ inv.SaleDate.strftime('%Y-%m-%d') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Campaign Modal -->
+<div class="modal fade" id="addCampaignModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{{ url_for('add_campaign') }}" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title">إضافة حملة إعلانية</h5><button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" name="name" class="form-control mb-2" placeholder="اسم الحملة" required>
+          <select name="type" class="form-select mb-2">
+            <option value="General">عامة (Brand Awareness)</option>
+            <option value="Linked">مرتبطة بوظيفة (Recruitment)</option>
+          </select>
+          <input type="text" name="media_channel" class="form-control mb-2" placeholder="القناة (Facebook, LinkedIn...)"
+            required>
+          <input type="number" name="budget" class="form-control mb-2" placeholder="الميزانية" step="0.01">
+          <div class="row">
+            <div class="col"><input type="date" name="start_date" class="form-control mb-2" placeholder="تاريخ البدء">
+            </div>
+            <div class="col"><input type="date" name="end_date" class="form-control mb-2" placeholder="تاريخ الانتهاء">
+            </div>
+          </div>
+          <textarea name="ad_text" class="form-control" placeholder="نص الإعلان..."></textarea>
+        </div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary">حفظ</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggleCampaigns(show) {
+    document.getElementById('campaignSelectDiv').style.display = show ? 'block' : 'none';
+  }
+</script>
+{% endblock %}

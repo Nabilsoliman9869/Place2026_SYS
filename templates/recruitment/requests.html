@@ -1,0 +1,270 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2 class="text-primary fw-bold"><i class="fas fa-file-signature me-2"></i> Client Job Orders</h2>
+        <p class="text-muted">Receive and manage detailed job requests from clients.</p>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-primary">Open Job Orders</h5>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRequestModal">
+            <i class="fas fa-plus me-2"></i> Receive New Order
+        </button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Client</th>
+                    <th>Job Title</th>
+                    <th>Needed</th>
+                    <th>Specs (Lang/Loc)</th>
+                    <th>Salary</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in requests %}
+                <tr>
+                    <td>#{{ r.RequestID }}</td>
+                    <td class="fw-bold text-primary">{{ r.CompanyName }}</td>
+                    <td class="fw-bold">{{ r.JobTitle }}</td>
+                    <td><span class="badge bg-info rounded-pill fs-6">{{ r.NeededCount }}</span></td>
+                    <td class="small">
+                        <div><i class="fas fa-language me-1"></i> {{ r.EnglishLevel or 'Any' }}</div>
+                        <div><i class="fas fa-map-marker-alt me-1"></i> {{ r.Location or 'Any' }}</div>
+                    </td>
+                    <td>{{ r.SalaryFrom }} - {{ r.SalaryTo }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if r.Status == 'Closed' else 'warning' }} text-dark">
+                            {{ r.Status }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('match_candidates', request_id=r.RequestID) }}" class="btn btn-sm btn-outline-dark">
+                            <i class="fas fa-random me-1"></i> Match
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center py-4 text-muted">No open job orders found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Request Modal (Professional Tabs) -->
+<div class="modal fade" id="addRequestModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <form action="{{ url_for('add_request') }}" method="POST">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-briefcase me-2"></i> New Job Order Form</h5>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body p-0">
+                    <!-- Tabs Header -->
+                    <ul class="nav nav-tabs nav-fill bg-white px-3 pt-3" id="reqTabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#tab-basic" type="button">
+                                <i class="fas fa-info-circle me-2"></i> 1. Basic Info
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-demographics" type="button">
+                                <i class="fas fa-users me-2"></i> 2. Demographics
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-location" type="button">
+                                <i class="fas fa-map-marked-alt me-2"></i> 3. Location & Shift
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-profile" type="button">
+                                <i class="fas fa-id-card-alt me-2"></i> 4. Profile & Skills
+                            </button>
+                        </li>
+                    </ul>
+
+                    <!-- Tabs Content -->
+                    <div class="tab-content p-4" id="reqTabsContent">
+                        
+                        <!-- TAB 1: BASIC INFO -->
+                        <div class="tab-pane fade show active" id="tab-basic">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Client Company <span class="text-danger">*</span></label>
+                                    <select name="client_id" class="form-select" required>
+                                        <option value="">-- Select Client --</option>
+                                        {% for c in clients %}
+                                        <option value="{{ c.ClientID }}">{{ c.CompanyName }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">
+                                        <i class="fas fa-plus-circle text-primary"></i> 
+                                        Client not listed? <a href="{{ url_for('manage_clients') }}" target="_blank">Define Client Here</a>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Job Title <span class="text-danger">*</span></label>
+                                    <input type="text" name="job_title" class="form-control" required placeholder="e.g. CSR German Speaker">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Headcount Needed</label>
+                                    <input type="number" name="needed_count" class="form-control" value="10" min="1">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Net Salary (Min)</label>
+                                    <input type="number" name="salary_from" class="form-control" placeholder="EGP">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Net Salary (Max)</label>
+                                    <input type="number" name="salary_to" class="form-control" placeholder="EGP">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: DEMOGRAPHICS -->
+                        <div class="tab-pane fade" id="tab-demographics">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Gender Preference</label>
+                                    <select name="gender" class="form-select">
+                                        <option value="Any">Any Gender</option>
+                                        <option value="Male">Male Only</option>
+                                        <option value="Female">Female Only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Nationality</label>
+                                    <select name="nationality" class="form-select">
+                                        <option value="Any">Any / Egyptians</option>
+                                        <option value="Native">Native Speakers Only</option>
+                                        <option value="Foreigner">Foreigners Allowed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Age Range</label>
+                                    <div class="input-group">
+                                        <input type="number" name="age_from" class="form-control" placeholder="Min Age">
+                                        <span class="input-group-text">-</span>
+                                        <input type="number" name="age_to" class="form-control" placeholder="Max Age">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Physical Traits</label>
+                                    <input type="text" name="physical_traits" class="form-control" placeholder="e.g. Height > 170cm (Optional)">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB 3: LOCATION & SHIFT -->
+                        <div class="tab-pane fade" id="tab-location">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Work Location (Area)</label>
+                                    <select name="location" class="form-select">
+                                        <option value="">-- Select Area --</option>
+                                        <option value="Maadi">Maadi</option>
+                                        <option value="New Cairo">New Cairo (5th Settlement)</option>
+                                        <option value="October">6th of October</option>
+                                        <option value="Smart Village">Smart Village</option>
+                                        <option value="Downtown">Downtown</option>
+                                        <option value="Nasr City">Nasr City</option>
+                                        <option value="Alexandria">Alexandria</option>
+                                        <option value="Remote">Work From Home (Remote)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Shift Type</label>
+                                    <select name="shift_type" class="form-select">
+                                        <option value="Rotational">Rotational Shifts (24/7)</option>
+                                        <option value="Fixed Morning">Fixed Morning (9-5)</option>
+                                        <option value="Fixed Night">Fixed Night / Overnight</option>
+                                        <option value="Part Time">Part Time</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Working Conditions / Transport</label>
+                                <textarea name="working_conditions" class="form-control" rows="2" placeholder="e.g. Transportation provided, Door-to-door, Meal allowance..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- TAB 4: PROFILE & SKILLS -->
+                        <div class="tab-pane fade" id="tab-profile">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">English Level (CEFR)</label>
+                                    <select name="english_level" class="form-select">
+                                        <option value="Any">Any</option>
+                                        <option value="A1">A1 (Beginner)</option>
+                                        <option value="A2">A2 (Elementary)</option>
+                                        <option value="B1">B1 (Intermediate)</option>
+                                        <option value="B2">B2 (Upper Intermediate)</option>
+                                        <option value="C1">C1 (Advanced)</option>
+                                        <option value="Fluent">Fluent / Native</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">3rd Language</label>
+                                    <input type="text" name="third_language" class="form-control" placeholder="e.g. German B2">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Computer Skills</label>
+                                    <select name="computer_level" class="form-select">
+                                        <option value="Basic">Basic</option>
+                                        <option value="Good">Good (Office)</option>
+                                        <option value="Excellent">Excellent / Tech Savvy</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Education Level</label>
+                                    <select name="education_level" class="form-select">
+                                        <option value="Any">Grads & Undergrads</option>
+                                        <option value="Graduates">Graduates Only</option>
+                                        <option value="Undergrads">Undergrads Only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Experience</label>
+                                    <input type="number" name="experience_years" class="form-control" placeholder="Min Years">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Soft Skills (Tags)</label>
+                                <input type="text" name="soft_skills" class="form-control" placeholder="e.g. Communication, Negotiation, Empathy">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4">
+                        <i class="fas fa-save me-2"></i> Create Job Order
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

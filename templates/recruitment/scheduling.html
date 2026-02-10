@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-calendar-alt"></i> Talent Scheduling</h2>
+        <a href="{{ url_for('recruiter_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Candidates Ready for Talent Test (Talent Pool)</h5>
+        </div>
+        <div class="card-body">
+            {% if candidates %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Campaign</th>
+                            <th>Date Added</th>
+                            <th>Language (Est.)</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in candidates %}
+                        <tr>
+                            <td class="fw-bold">{{ c.FullName }}</td>
+                            <td>{{ c.Phone }}</td>
+                            <td><span class="badge bg-info text-dark">{{ c.CampaignName or 'Manual' }}</span></td>
+                            <td>{{ c.CreatedAt.strftime('%Y-%m-%d') if c.CreatedAt else '-' }}</td>
+                            <td>{{ c.CurrentCEFR or '-' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#bookSlotModal{{ c.CandidateID }}">
+                                    <i class="fas fa-calendar-check"></i> Book Slot
+                                </button>
+
+                                <!-- Booking Modal -->
+                                <div class="modal fade" id="bookSlotModal{{ c.CandidateID }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form action="{{ url_for('recruiter_book_test') }}" method="POST">
+                                                <div class="modal-header bg-success text-white">
+                                                    <h5 class="modal-title">Book Talent Test Slot</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <input type="hidden" name="candidate_id" value="{{ c.CandidateID }}">
+                                                    <p>Booking slot for: <strong>{{ c.FullName }}</strong></p>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Interview Mode</label>
+                                                        <select name="mode" class="form-select" required>
+                                                            <option value="Phone">Phone Interview</option>
+                                                            <option value="Online">Online Meeting (Zoom/Teams)</option>
+                                                            <option value="DoorToDoor">Door-to-Door (In Person)</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Select Available Slot</label>
+                                                        <select name="slot_id" class="form-select select2" required>
+                                                            <option value="">-- Select Date & Time --</option>
+                                                            {% for slot in available_slots %}
+                                                            <option value="{{ slot.ScheduleID }}">
+                                                                {{ slot.SlotDate }} @ {{ slot.SlotTime }} ({{ slot.EvaluatorName or 'Any TA' }})
+                                                            </option>
+                                                            {% endfor %}
+                                                        </select>
+                                                        {% if not available_slots %}
+                                                        <div class="form-text text-danger">No slots available. Ask TA Manager to open slots.</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-success" {{ 'disabled' if not available_slots }}>Confirm Booking</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No candidates are currently in the "Talent Pool" waiting for scheduling.
+                <br>
+                Go to <a href="{{ url_for('recruiter_workbench') }}">Workbench</a> to evaluate new candidates.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
