@@ -170,6 +170,7 @@
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             padding: 20px;
             min-height: 100vh;
+            padding-top: calc(var(--top-bar-height) + 20px);
         }
 
         .sidebar.collapsed+.main-content {
@@ -184,38 +185,58 @@
             display: flex;
             align-items: center;
             padding: 0 20px;
-            border-radius: 8px;
-            margin-bottom: 25px;
+            position: fixed;
+            top: 0;
+            right: 0;
+            left: var(--sidebar-width);
+            z-index: 900;
+            transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .sidebar.collapsed~.main-content .top-navbar {
+            left: var(--sidebar-collapsed-width);
         }
 
         /* Mobile Adjustments */
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
+                width: 100%;
+                height: auto;
+                position: fixed;
+                top: var(--top-bar-height);
+                bottom: 0;
+                background: var(--primary-color);
+                overflow-y: auto;
+                z-index: 999;
+                box-shadow: none;
+                display: none;
             }
 
             .sidebar.mobile-open {
                 transform: translateX(0);
-                width: var(--sidebar-width) !important;
+                display: block;
+            }
+
+            .sidebar-header {
+                display: none;
+                /* Hide sidebar header on mobile as we have top navbar */
             }
 
             .main-content {
                 margin-left: 0 !important;
+                padding-top: var(--top-bar-height);
+            }
+
+            .top-navbar {
+                left: 0 !important;
+                z-index: 1001;
+                /* Above sidebar on mobile */
             }
 
             .sidebar-overlay {
                 display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                z-index: 999;
-            }
-
-            .sidebar-overlay.show {
-                display: block;
+                /* Not needed if sidebar is full width drop down style */
             }
         }
 
