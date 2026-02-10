@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g, Markup
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from markupsafe import Markup
 import pyodbc
 import functools
 import os
