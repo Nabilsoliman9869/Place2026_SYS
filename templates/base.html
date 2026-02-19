@@ -427,6 +427,19 @@
             </div>
         </header>
 
+        <!-- Help / User Guide Modal -->
+        {% if session.get('role') %}
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+            <button class="btn btn-primary rounded-circle shadow-lg" style="width: 60px; height: 60px;"
+                data-bs-toggle="modal" data-bs-target="#userGuideModal" title="Open User Guide">
+                <i class="fas fa-question fa-lg"></i>
+            </button>
+        </div>
+
+        <!-- Include Context-Aware User Guide -->
+        {% include 'includes/user_guide_modal.html' %}
+        {% endif %}
+
         <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -449,25 +462,31 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
     <script>
-        // Sidebar Toggle Logic with LocalStorage Memory
         document.addEventListener("DOMContentLoaded", function () {
             const sidebar = document.getElementById('sidebar');
             const toggleBtn = document.getElementById('sidebarToggle');
             const overlay = document.getElementById('sidebarOverlay');
 
-            // Check stored preference
-            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
-            if (isCollapsed && window.innerWidth > 768) {
-                sidebar.classList.add('collapsed');
+            if (!sidebar || !toggleBtn || !overlay) {
+                console.error("Sidebar elements not found!");
+                return;
             }
 
-            toggleBtn.addEventListener('click', function () {
+            // Restore state for desktop
+            if (window.innerWidth > 768) {
+                const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+                if (isCollapsed) sidebar.classList.add('collapsed');
+            }
+
+            toggleBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
                 if (window.innerWidth <= 768) {
                     sidebar.classList.toggle('mobile-open');
                     overlay.classList.toggle('show');
                 } else {
                     sidebar.classList.toggle('collapsed');
-                    // Save preference
                     localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
                 }
             });
@@ -477,14 +496,16 @@
                 sidebar.classList.remove('mobile-open');
                 overlay.classList.remove('show');
             });
-        });
 
-        // Turbo Events for Plugins
-        document.addEventListener("turbo:load", function () {
-            // Re-initialize Select2
-            $('.select2').select2({ width: '100%' });
-
-            // Re-initialize any other dynamic UI elements if needed
+            // Close mobile sidebar when clicking a link
+            document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+                link.addEventListener('click', function () {
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.remove('mobile-open');
+                        overlay.classList.remove('show');
+                    }
+                });
+            });
         });
     </script>
 </body>

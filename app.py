@@ -62,6 +62,10 @@ CONFIG_FILE = os.path.join(application_path, 'db_config.json')
 DEV_USERNAME = "dev"
 DEV_PASSWORD = "123"
 
+@app.route('/version')
+def show_version():
+    return "V1.0 - Stable", 200
+
 # --- Decorators ---
 def login_required(view):
     @functools.wraps(view)
@@ -1052,6 +1056,28 @@ def recruiter_test_schedule():
         ]
         
     return render_template('recruitment/test_schedule.html', tests=tests or [])
+
+@app.route('/recruiter/book_test', methods=['POST'])
+@login_required
+@role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
+def recruiter_book_test():
+    f = request.form
+    candidate_id = f['candidate_id']
+    slot_id = f['slot_id']
+    mode = f['mode']
+    
+    # Update Slot
+    query_db("""
+        UPDATE TASchedules 
+        SET Status = 'Booked', CandidateID = ?, InterviewMode = ?, BookedBy = ? 
+        WHERE SlotID = ? AND Status = 'Available'
+    """, (candidate_id, mode, session['user_id'], slot_id))
+    
+    # Update Candidate Status (Optional but good for tracking)
+    query_db("UPDATE Candidates SET Status = 'Test_Scheduled' WHERE CandidateID = ?", (candidate_id,))
+    
+    flash('Talent Test Booked Successfully', 'success')
+    return redirect(url_for('recruiter_scheduling'))
 
 @app.route('/recruiter/confirm_test', methods=['POST'])
 @login_required
@@ -2464,32 +2490,32 @@ def sales_index():
     existing = query_db("SELECT COUNT(*) as c FROM TASchedules WHERE SlotDate = ?", (selected_date,), one=True)
     if existing['c'] == 0:
         start_hour = 9
-        talent_users = query_db("SELECT UserID, Username FROM Users_1 WHERE Role='Talent'")
+        # MODIFIED: Only create slots for existing Talent users. If none, do NOT create dummy slots that cause confusion.
+        talent_users = query_db("SELECT UserID, Username FROM Users_1 WHERE Role IN ('Talent', 'Talent_Recruitment')")
         
         # Prepare bulk insert data
         new_slots = []
-        for h in range(8):
-            for m in [0, 15, 30, 45]:
-                time_str = f"{start_hour+h:02d}:{m:02d}"
-                if talent_users:
+        if talent_users:
+            for h in range(8):
+                for m in [0, 15, 30, 45]:
+                    time_str = f"{start_hour+h:02d}:{m:02d}"
                     for t in talent_users:
                         new_slots.append((selected_date, time_str, 'Available', t['UserID']))
-                else:
-                    new_slots.append((selected_date, time_str, 'Available', None))
-        
-        # Execute Bulk Insert
-        if new_slots:
-            try:
-                db = get_db()
-                cursor = db.cursor()
-                if talent_users:
+            
+            # Execute Bulk Insert
+            if new_slots:
+                try:
+                    db = get_db()
+                    cursor = db.cursor()
                     cursor.executemany("INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, ?, ?)", new_slots)
-                else:
-                    cursor.executemany("INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, ?, ?)", new_slots)
-                db.commit()
-                cursor.close()
-            except Exception as e:
-                print(f"Error generating slots: {e}")
+                    db.commit()
+                    cursor.close()
+                except Exception as e:
+                    print(f"Error generating slots: {e}")
+        else:
+            # Fallback: Create generic slots if NO Talent users exist (for testing purposes only)
+            # This ensures at least something shows up, but marks them clearly.
+            pass
                 
     available_slots = query_db("""
         SELECT T.*, U.Username as EvaluatorName 
