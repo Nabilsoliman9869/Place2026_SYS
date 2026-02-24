@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-user-graduate text-success"></i> مراجعة الخريجين وتأهيلهم</h2>
+    <a href="{{ url_for('training_index') }}" class="btn btn-outline-secondary">عودة</a>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">خريجين بانتظار الاعتماد للمطابقة</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الاسم</th>
+                            <th>الدورة التي اجتازها</th>
+                            <th>الدرجة النهائية</th>
+                            <th>حالة الملف</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for grad in graduates %}
+                        <tr>
+                            <td>
+                                <strong>{{ grad.FullName }}</strong>
+                                <br><small class="text-muted">{{ grad.Phone }}</small>
+                            </td>
+                            <td>{{ grad.CourseName }}</td>
+                            <td><span class="badge bg-success">{{ grad.FinalGrade }}%</span></td>
+                            <td>
+                                {% if grad.IsReadyForMatching %}
+                                <span class="badge bg-primary">جاهز للمطابقة</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">تحت المراجعة</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#reviewModal{{ grad.CandidateID }}">
+                                    <i class="fas fa-search"></i> مراجعة واعتماد
+                                </button>
+                            </td>
+                        </tr>
+
+                        <!-- Review Modal -->
+                        <div class="modal fade" id="reviewModal{{ grad.CandidateID }}" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('approve_graduate') }}" method="POST" enctype="multipart/form-data">
+                                        <input type="hidden" name="candidate_id" value="{{ grad.CandidateID }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">تأهيل: {{ grad.FullName }}</h5>
+                                            <button class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label>المهارات الشخصية (Soft Skills)</label>
+                                                    <textarea name="soft_skills" class="form-control" rows="3">{{ grad.SoftSkills }}</textarea>
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label>مستوى اللغة الإنجليزية</label>
+                                                    <select name="english_level" class="form-select">
+                                                        <option value="Beginner">مبتدئ</option>
+                                                        <option value="Intermediate">متوسط</option>
+                                                        <option value="Advanced">متقدم</option>
+                                                        <option value="Fluent">طلاقة</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-12 mb-3">
+                                                    <label>رفع CV محدث (PDF/Word)</label>
+                                                    <input type="file" name="cv_file" class="form-control">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" name="is_ready" id="readyCheck{{ grad.CandidateID }}" checked>
+                                                        <label class="form-check-label fw-bold text-success" for="readyCheck{{ grad.CandidateID }}">
+                                                            اعتماد الطالب كجاهز للمطابقة مع الشركات (Ready for Matching)
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-success">حفظ واعتماد</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        {% if not graduates %}
+                        <tr><td colspan="5" class="text-center py-5 text-muted">لا يوجد خريجين جدد للمراجعة حالياً</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

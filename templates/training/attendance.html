@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-user-check"></i> تسجيل الحضور اليومي</h2>
+    <a href="{{ url_for('training_index') }}" class="btn btn-outline-secondary">عودة</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body bg-light">
+        <form method="GET" action="{{ url_for('training_attendance') }}" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">اختر المجموعة</label>
+                <select name="batch_id" class="form-select" onchange="this.form.submit()">
+                    <option value="" disabled selected>-- اختر المجموعة --</option>
+                    {% for b in batches %}
+                    <option value="{{ b.BatchID }}" {% if selected_batch and selected_batch.BatchID == b.BatchID %}selected{% endif %}>
+                        {{ b.BatchName }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">تاريخ اليوم</label>
+                <input type="date" name="date" class="form-control" value="{{ selected_date }}" onchange="this.form.submit()">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">عرض القائمة</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if selected_batch %}
+<div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">قائمة الحضور: {{ selected_batch.BatchName }}</h5>
+        <span class="badge bg-info">{{ selected_date }}</span>
+    </div>
+    <div class="card-body p-0">
+        <form action="{{ url_for('save_attendance') }}" method="POST">
+            <input type="hidden" name="batch_id" value="{{ selected_batch.BatchID }}">
+            <input type="hidden" name="date" value="{{ selected_date }}">
+            
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>الطالب</th>
+                        <th>الحالة السابقة</th>
+                        <th class="text-center">حاضر (Present)</th>
+                        <th class="text-center">غائب (Absent)</th>
+                        <th class="text-center">متأخر (Late)</th>
+                        <th class="text-center">معذور (Excused)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td class="fw-bold">{{ student.FullName }}</td>
+                        <td>
+                            {% if student.AttendanceStatus %}
+                                <span class="badge bg-{{ 'success' if student.AttendanceStatus == 'Present' else 'danger' }}">
+                                    {{ student.AttendanceStatus }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <input type="radio" class="form-check-input" name="status_{{ student.EnrollmentID }}" value="Present" 
+                                   {% if student.AttendanceStatus == 'Present' or not student.AttendanceStatus %}checked{% endif %}>
+                        </td>
+                        <td class="text-center">
+                            <input type="radio" class="form-check-input" name="status_{{ student.EnrollmentID }}" value="Absent"
+                                   {% if student.AttendanceStatus == 'Absent' %}checked{% endif %}>
+                        </td>
+                        <td class="text-center">
+                            <input type="radio" class="form-check-input" name="status_{{ student.EnrollmentID }}" value="Late"
+                                   {% if student.AttendanceStatus == 'Late' %}checked{% endif %}>
+                        </td>
+                        <td class="text-center">
+                            <input type="radio" class="form-check-input" name="status_{{ student.EnrollmentID }}" value="Excused"
+                                   {% if student.AttendanceStatus == 'Excused' %}checked{% endif %}>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not students %}
+                    <tr><td colspan="6" class="text-center py-4">لا يوجد طلاب مسجلين في هذه المجموعة</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            
+            {% if students %}
+            <div class="p-3 bg-light border-top text-end">
+                <button type="submit" class="btn btn-success btn-lg px-5">
+                    <i class="fas fa-save"></i> حفظ الحضور
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

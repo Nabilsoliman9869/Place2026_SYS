@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="fas fa-chalkboard"></i> {{ batch.BatchName }}</h2>
+        <p class="text-muted mb-0">
+            {{ batch.CourseName }} | المدرب: {{ batch.TrainerName }} | القاعة: {{ batch.RoomName }}
+            <br>
+            <small>{{ batch.ScheduleDescription }} ({{ batch.StartDate }} - {{ batch.EndDate }})</small>
+        </p>
+    </div>
+    <div>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#enrollStudentModal">
+            <i class="fas fa-user-plus"></i> تسجيل طالب
+        </button>
+        <a href="{{ url_for('training_index') }}" class="btn btn-outline-secondary">عودة</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">الطلاب المسجلين ({{ students|length }})</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>اسم الطالب</th>
+                            <th>رقم الهاتف</th>
+                            <th>تاريخ التسجيل</th>
+                            <th>الحالة</th>
+                            <th>النتيجة النهائية</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ student.FullName }}</td>
+                            <td>{{ student.Phone }}</td>
+                            <td>{{ student.EnrollmentDate }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if student.Status == 'Active' else 'warning' }}">
+                                    {{ student.Status }}
+                                </span>
+                            </td>
+                            <td>{{ student.FinalGrade or '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('student_finance', enrollment_id=student.EnrollmentID) }}" class="btn btn-sm btn-outline-success" title="الماليات">
+                                    <i class="fas fa-money-bill-wave"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" title="إلغاء التسجيل"><i class="fas fa-times"></i></button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not students %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">لا يوجد طلاب مسجلين في هذه المجموعة بعد</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enroll Student Modal -->
+<div class="modal fade" id="enrollStudentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{{ url_for('enroll_student') }}" method="POST">
+      <input type="hidden" name="batch_id" value="{{ batch.BatchID }}">
+      <div class="modal-header"><h5 class="modal-title">تسجيل طالب في المجموعة</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+          <p class="text-muted small">اختر من المرشحين الموجودين في النظام (Leads / Candidates)</p>
+          <label>اسم الطالب</label>
+          <select name="candidate_id" class="form-select mb-2" required>
+              <option value="" selected disabled>-- اختر الطالب --</option>
+              {% for cand in candidates %}
+              <option value="{{ cand.CandidateID }}">{{ cand.FullName }} - {{ cand.Phone }}</option>
+              {% endfor %}
+          </select>
+
+          <label>السعر المتفق عليه</label>
+          <input type="number" name="agreed_price" class="form-control mb-2" placeholder="اتركه فارغاً للسعر الافتراضي للدورة">
+          
+          <label>ملاحظات</label>
+          <textarea name="notes" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">تأكيد التسجيل</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

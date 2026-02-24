@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2 class="text-primary fw-bold"><i class="fas fa-sitemap me-2"></i> Lead Distribution</h2>
+        <p class="text-muted">Assign candidates to Recruiters or Allocation Specialists.</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Unassigned Candidates -->
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 text-primary">Unassigned Leads / Candidates</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Source</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in candidates %}
+                        <tr>
+                            <td class="fw-bold">{{ c.FullName }}</td>
+                            <td><span class="badge bg-secondary">{{ c.Status }}</span></td>
+                            <td>{{ c.SourceChannel or '-' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#distributeModal{{ c.CandidateID }}">
+                                    <i class="fas fa-share-alt me-1"></i> Distribute
+                                </button>
+                                
+                                <!-- Distribute Modal -->
+                                <div class="modal fade" id="distributeModal{{ c.CandidateID }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form action="{{ url_for('distribute_recruitment_tasks') }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Assign Candidate</h5>
+                                                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <input type="hidden" name="candidate_id" value="{{ c.CandidateID }}">
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">Assign to Recruiter (Follow-up)</label>
+                                                        <!-- Added select2 class for searchable dropdown -->
+                                                        <select name="recruiter_id" class="form-select select2">
+                                                            <option value="">-- Select Recruiter --</option>
+                                                            {% for u in recruiters %}
+                                                            <option value="{{ u.UserID }}">{{ u.Username }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">Assign to Allocator (Matching)</label>
+                                                        <select name="allocator_id" class="form-select select2">
+                                                            <option value="">-- Select Allocator --</option>
+                                                            {% for u in allocators %}
+                                                            <option value="{{ u.UserID }}">{{ u.Username }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="submit" class="btn btn-primary">Assign Task</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center py-4 text-muted">No unassigned candidates found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats -->
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase small fw-bold">Team Workload</h6>
+                <hr>
+                {% for u in recruiters %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span>{{ u.Username }}</span>
+                    {% set lead_count = u.ActiveLeads if u.ActiveLeads is defined else 0 %}
+                    <span class="badge {{ 'bg-success' if lead_count < 10 else 'bg-warning' }} text-white border">
+                        {{ lead_count }} Leads
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script to Initialize Select2 in Modals -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // We need to use jQuery for Select2 event binding
+        // Bind event to every modal open
+        $('.modal').on('shown.bs.modal', function () {
+            // Find select2 elements inside THIS modal
+            $(this).find('.select2').select2({
+                dropdownParent: $(this), // Critical for Modal
+                width: '100%'
+            });
+        });
+    });
+</script>
+{% endblock %}

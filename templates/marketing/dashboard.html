@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2><i class="fas fa-bullhorn text-warning"></i> Marketing Dashboard (التسويق)</h2>
+        <p class="text-muted">Manage campaigns and distribute leads to sales agents.</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Unassigned Leads -->
+    <div class="col-md-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">New Leads (Unassigned)</h5>
+                <span class="badge bg-warning text-dark">{{ leads|length }} Pending</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Source</th>
+                                <th>Date</th>
+                                <th>Assigned To</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lead in leads %}
+                            <tr>
+                                <td class="fw-bold">{{ lead.FullName }}<br><small class="text-muted">{{ lead.Phone }}</small></td>
+                                <td><span class="badge bg-info">{{ lead.SourceChannel }}</span></td>
+                                <td>{{ lead.CreatedAt }}</td>
+                                <td>
+                                    {% if lead.AssignedTo %}
+                                        <span class="text-success fw-bold">{{ lead.AssignedTo }}</span>
+                                    {% else %}
+                                        <span class="text-danger">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form action="{{ url_for('assign_lead') }}" method="POST" class="d-flex gap-2">
+                                        <input type="hidden" name="lead_id" value="{{ lead.CandidateID }}">
+                                        <select name="agent_id" class="form-select form-select-sm" required style="width: 150px;">
+                                            <option value="">Assign to...</option>
+                                            {% for agent in sales_agents %}
+                                            <option value="{{ agent.UserID }}" {% if lead.SalesAgentID == agent.UserID %}selected{% endif %}>{{ agent.Username }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">No leads found.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Campaign Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Total Leads:</strong> {{ leads|length }}
+                </div>
+                <!-- Placeholder for charts -->
+                <div class="text-center py-5 text-muted bg-light rounded">
+                    <i class="fas fa-chart-pie fa-3x mb-3"></i>
+                    <p>Analytics Module Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

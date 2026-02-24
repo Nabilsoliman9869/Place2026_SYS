@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="fas fa-handshake"></i> نافذة المطابقة (Matching Window)</h2>
+    <a href="{{ url_for('corporate_dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-right"></i> العودة
+    </a>
+</div>
+
+<div class="row">
+    <!-- Left: Open Requests -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-briefcase"></i> طلبات التوظيف المفتوحة
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="requestsList">
+                    {% for req in requests %}
+                    <a href="#" class="list-group-item list-group-item-action" onclick="selectRequest('{{ req.RequestID }}', '{{ req.JobTitle }} - {{ req.CompanyName }}')">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">{{ req.JobTitle }}</h6>
+                            <small class="text-muted">{{ req.NeededCount }} مطلوب</small>
+                        </div>
+                        <p class="mb-1 small text-muted">{{ req.CompanyName }}</p>
+                        <small class="text-info">{{ req.Location }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Qualified Candidates -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-user-check"></i> المرشحين المؤهلين (Passed Exams)
+            </div>
+            <div class="card-body p-0">
+                <form action="{{ url_for('corporate_submit_match') }}" method="POST">
+                    <input type="hidden" name="request_id" id="selectedRequestId">
+                    
+                    <div class="p-3 bg-light border-bottom" id="selectionHeader" style="display:none;">
+                        <strong>جاري المطابقة لـ:</strong> <span id="selectedJobTitle" class="text-primary fw-bold"></span>
+                        <button type="submit" class="btn btn-sm btn-primary float-end">تأكيد المطابقة</button>
+                    </div>
+
+                    <div class="list-group list-group-flush" id="candidatesList">
+                        {% for cand in candidates %}
+                        <label class="list-group-item d-flex gap-3">
+                            <input class="form-check-input flex-shrink-0" type="checkbox" name="candidate_ids" value="{{ cand.CandidateID }}">
+                            <span class="pt-1 form-checked-content">
+                                <strong>{{ cand.FullName }}</strong>
+                                <small class="d-block text-muted">
+                                    <i class="fas fa-star text-warning"></i> {{ cand.ExamResult }} | {{ cand.EvaluationDetails }}
+                                </small>
+                            </span>
+                        </label>
+                        {% endfor %}
+                        {% if not candidates %}
+                        <div class="p-4 text-center text-muted">لا يوجد مرشحين جاهزين حالياً</div>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectRequest(id, title) {
+    document.getElementById('selectedRequestId').value = id;
+    document.getElementById('selectedJobTitle').innerText = title;
+    document.getElementById('selectionHeader').style.display = 'block';
+    
+    // Highlight selected
+    document.querySelectorAll('#requestsList a').forEach(el => el.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+}
+</script>
+{% endblock %}

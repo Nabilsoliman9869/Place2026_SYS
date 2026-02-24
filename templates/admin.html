@@ -1,0 +1,151 @@
+<!-- templates/admin.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة النظام</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; padding: 20px; }
+        .status-card { border-radius: 10px; margin-bottom: 20px; }
+        .healthy { border-left: 5px solid #28a745; }
+        .warning { border-left: 5px solid #ffc107; }
+        .error { border-left: 5px solid #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">⚙️ إدارة نظام الموارد البشرية</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card status-card" id="systemStatusCard">
+                    <div class="card-body">
+                        <h5 class="card-title">حالة النظام</h5>
+                        <div id="systemStatus">جارِ التحقق...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">الإجراءات</h5>
+                        <button class="btn btn-primary w-100 mb-2" onclick="checkSystem()">
+                            <i class="bi bi-arrow-clockwise"></i> فحص النظام
+                        </button>
+                        <button class="btn btn-success w-100 mb-2" onclick="initTables()">
+                            <i class="bi bi-database-add"></i> إنشاء الجداول المفقودة
+                        </button>
+                        <button class="btn btn-warning w-100 mb-2" onclick="testConnection()">
+                            <i class="bi bi-wrench"></i> اختبار الاتصال
+                        </button>
+                        <button class="btn btn-info w-100" onclick="viewLogs()">
+                            <i class="bi bi-journal-text"></i> عرض السجلات
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">المعلومات الفنية</h5>
+                <pre id="techInfo">جارِ التحميل...</pre>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        async function checkSystem() {
+            try {
+                const response = await fetch('/api/system/check');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displaySystemStatus(data.data);
+                    displayTechInfo(data.data);
+                }
+            } catch (error) {
+                document.getElementById('systemStatus').innerHTML = `
+                    <div class="alert alert-danger">خطأ في الاتصال: ${error.message}</div>
+                `;
+            }
+        }
+        
+        function displaySystemStatus(status) {
+            const card = document.getElementById('systemStatusCard');
+            card.classList.remove('healthy', 'warning', 'error');
+            
+            let html = '';
+            
+            if (status.overall === 'healthy') {
+                card.classList.add('healthy');
+                html = `<div class="alert alert-success">✅ النظام يعمل بشكل صحيح</div>`;
+            } else if (status.overall === 'database_error') {
+                card.classList.add('error');
+                html = `<div class="alert alert-danger">❌ مشكلة في قاعدة البيانات</div>`;
+            } else {
+                card.classList.add('warning');
+                html = `<div class="alert alert-warning">⚠️ النظام يحتاج إعداد</div>`;
+            }
+            
+            html += `<p><strong>قاعدة البيانات:</strong> ${status.database.status}</p>`;
+            html += `<p><strong>الملفات:</strong> ${status.files.status}</p>`;
+            html += `<p><strong>واجهات API:</strong> ${status.api.endpoints.length} متاحة</p>`;
+            
+            document.getElementById('systemStatus').innerHTML = html;
+        }
+        
+        function displayTechInfo(data) {
+            let info = `=== تقرير النظام ===\n`;
+            info += `الوقت: ${new Date().toLocaleString('ar-EG')}\n\n`;
+            
+            info += `=== قاعدة البيانات ===\n`;
+            info += `الحالة: ${data.database.status}\n`;
+            info += `الجداول: ${data.database.tables.join(', ')}\n\n`;
+            
+            info += `=== الملفات ===\n`;
+            info += `الملفات الموجودة: ${data.files.existing.join(', ')}\n\n`;
+            
+            info += `=== API ===\n`;
+            data.api.endpoints.forEach(endpoint => {
+                info += `${endpoint}\n`;
+            });
+            
+            document.getElementById('techInfo').textContent = info;
+        }
+        
+        async function initTables() {
+            if (!confirm('هل تريد إنشاء الجداول المفقودة؟')) return;
+            
+            try {
+                const response = await fetch('/api/init-tables', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    checkSystem();
+                } else {
+                    alert(`❌ ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ خطأ: ${error.message}`);
+            }
+        }
+        
+        function testConnection() {
+            window.open('/test', '_blank');
+        }
+        
+        function viewLogs() {
+            window.open('/api/test/connection', '_blank');
+        }
+        
+        // فحص تلقائي عند التحميل
+        window.addEventListener('load', checkSystem);
+    </script>
+</body>
+</html>

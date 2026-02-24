@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-warning fw-bold"><i class="fas fa-clock me-2"></i> Daily Attendance Grid</h2>
+        <span class="badge bg-secondary">{{ selected_date }}</span>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body bg-light">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Select Batch</label>
+                    <select name="batch_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Choose Batch --</option>
+                        {% for b in batches %}
+                        <option value="{{ b.BatchID }}" {% if selected_batch and selected_batch.BatchID == b.BatchID %}selected{% endif %}>
+                            {{ b.BatchName }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Select Date</label>
+                    <input type="date" name="date" class="form-control" value="{{ selected_date }}" onchange="this.form.submit()">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if selected_batch %}
+    <form method="POST" action="{{ url_for('save_attendance_grid') }}">
+        <input type="hidden" name="batch_id" value="{{ selected_batch.BatchID }}">
+        <input type="hidden" name="date" value="{{ selected_date }}">
+
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between">
+                <h5 class="mb-0 text-primary">Attendance Sheet: {{ selected_batch.BatchName }}</h5>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="markAllPresent()">
+                    <i class="fas fa-check-double me-1"></i> Mark All Present (Default 4h)
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 5%;">#</th>
+                            <th style="width: 25%;">Trainee Name</th>
+                            <th style="width: 15%;">Status</th>
+                            <th style="width: 15%;">Check In</th>
+                            <th style="width: 15%;">Check Out</th>
+                            <th style="width: 10%;">Assignment?</th>
+                            <th style="width: 15%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in students %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td class="fw-bold">{{ s.FullName }}</td>
+                            
+                            <!-- Status -->
+                            <td>
+                                <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" 
+                                        data-id="{{ s.EnrollmentID }}" onchange="toggleTimeInputs(this)">
+                                    <option value="Present" {% if s.Status == 'Present' %}selected{% endif %}>Present</option>
+                                    <option value="Absent" {% if s.Status == 'Absent' %}selected{% endif %}>Absent</option>
+                                    <option value="Late" {% if s.Status == 'Late' %}selected{% endif %}>Late</option>
+                                    <option value="Excused" {% if s.Status == 'Excused' %}selected{% endif %}>Excused</option>
+                                </select>
+                            </td>
+
+                            <!-- Time In -->
+                            <td>
+                                <input type="time" name="in_{{ s.EnrollmentID }}" class="form-control form-control-sm time-in"
+                                       value="{{ s.CheckInTime.strftime('%H:%M') if s.CheckInTime else '' }}">
+                            </td>
+
+                            <!-- Time Out -->
+                            <td>
+                                <input type="time" name="out_{{ s.EnrollmentID }}" class="form-control form-control-sm time-out"
+                                       value="{{ s.CheckOutTime.strftime('%H:%M') if s.CheckOutTime else '' }}">
+                            </td>
+
+                            <!-- Assignment -->
+                            <td class="text-center">
+                                <div class="form-check d-flex justify-content-center">
+                                    <input class="form-check-input" type="checkbox" name="assign_{{ s.EnrollmentID }}" 
+                                           {% if s.AssignmentDone %}checked{% endif %}>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    {% if s.CheckInTime and s.CheckOutTime %}
+                                        Auto Calc
+                                    {% else %}
+                                        --:--
+                                    {% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center py-4 text-muted">No students found in this batch.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-white py-3">
+                <button type="submit" class="btn btn-primary w-100 fw-bold">
+                    <i class="fas fa-save me-2"></i> Save Daily Attendance
+                </button>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+function toggleTimeInputs(select) {
+    const row = select.closest('tr');
+    const inputs = row.querySelectorAll('input[type="time"]');
+    const isAbsent = select.value === 'Absent';
+    
+    inputs.forEach(input => {
+        input.disabled = isAbsent;
+        if(isAbsent) input.value = '';
+    });
+}
+
+function markAllPresent() {
+    document.querySelectorAll('.status-select').forEach(s => s.value = 'Present');
+    document.querySelectorAll('.time-in').forEach(i => { if(!i.disabled && !i.value) i.value = '16:30'; }); // Default 4:30 PM
+    document.querySelectorAll('.time-out').forEach(i => { if(!i.disabled && !i.value) i.value = '20:30'; }); // Default 8:30 PM
+}
+</script>
+{% endblock %}

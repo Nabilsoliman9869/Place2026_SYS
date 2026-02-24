@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-random text-primary"></i> توجيه الطلاب بعد النتائج</h2>
+    <a href="{{ url_for('training_index') }}" class="btn btn-outline-secondary">عودة</a>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">قائمة الطلاب (ناجحون وراسبون) بانتظار التوجيه</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الاسم</th>
+                            <th>الدورة الحالية</th>
+                            <th>النتيجة</th>
+                            <th>الحالة</th>
+                            <th>الإجراء المطلوب</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr class="{% if student.Status == 'Failed' %}table-danger{% elif student.Status == 'Passed' %}table-success{% endif %}">
+                            <td>
+                                <strong>{{ student.FullName }}</strong>
+                                <br><small class="text-muted">{{ student.Phone }}</small>
+                            </td>
+                            <td>{{ student.CourseName }}</td>
+                            <td>
+                                <strong>{{ student.FinalGrade }}%</strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if student.Status == 'Passed' else 'danger' }}">
+                                    {{ 'ناجح' if student.Status == 'Passed' else 'راسب' }}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-dark btn-sm" data-bs-toggle="modal" data-bs-target="#decisionModal{{ student.EnrollmentID }}">
+                                    <i class="fas fa-gavel"></i> اتخاذ قرار
+                                </button>
+                            </td>
+                        </tr>
+
+                        <!-- Decision Modal -->
+                        <div class="modal fade" id="decisionModal{{ student.EnrollmentID }}" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('process_student_decision') }}" method="POST">
+                                        <input type="hidden" name="enrollment_id" value="{{ student.EnrollmentID }}">
+                                        <input type="hidden" name="candidate_id" value="{{ student.CandidateID }}">
+                                        <input type="hidden" name="current_course_id" value="{{ student.CourseID }}">
+                                        <input type="hidden" name="status" value="{{ student.Status }}">
+                                        
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">توجيه الطالب: {{ student.FullName }}</h5>
+                                            <button class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            
+                                            {% if student.Status == 'Passed' %}
+                                            <!-- OPTIONS FOR PASSED STUDENTS -->
+                                            <div class="alert alert-success">
+                                                <i class="fas fa-check-circle"></i> الطالب <strong>ناجح</strong>. ما هي الخطوة التالية؟
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">اختر المسار:</label>
+                                                
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="decision" value="promote" id="optPromote{{ student.EnrollmentID }}" checked>
+                                                    <label class="form-check-label" for="optPromote{{ student.EnrollmentID }}">
+                                                        <strong>1. ترقية للدورة التالية (Upgrade)</strong>
+                                                        <br><small class="text-muted">يتم إضافته لقائمة الترشيحات + تسجيله في دورة جديدة.</small>
+                                                    </label>
+                                                </div>
+                                                
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="decision" value="stop" id="optStop{{ student.EnrollmentID }}">
+                                                    <label class="form-check-label" for="optStop{{ student.EnrollmentID }}">
+                                                        <strong>2. اكتفاء وتوقف (Stop)</strong>
+                                                        <br><small class="text-muted">يتم إضافته لقائمة الترشيحات فقط وإنهاء التدريب.</small>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div id="nextCourseDiv{{ student.EnrollmentID }}" class="mb-3 p-3 bg-light border rounded">
+                                                <label class="form-label">اختر المجموعة التالية (للمسار الأول):</label>
+                                                <select name="next_batch_id" class="form-select">
+                                                    <option value="" selected>-- اختر مجموعة المستوى التالي --</option>
+                                                    {% for b in next_batches %}
+                                                    <option value="{{ b.BatchID }}">{{ b.BatchName }} ({{ b.CourseName }}) - {{ b.StartDate }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+
+                                            <hr>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" name="is_ready" id="readyCheck{{ student.EnrollmentID }}" checked>
+                                                <label class="form-check-label fw-bold text-success" for="readyCheck{{ student.EnrollmentID }}">
+                                                    تفعيل الظهور في قائمة الترشيحات (Matching)
+                                                </label>
+                                            </div>
+
+                                            {% else %}
+                                            <!-- OPTIONS FOR FAILED STUDENTS -->
+                                            <div class="alert alert-danger">
+                                                <i class="fas fa-times-circle"></i> الطالب <strong>راسب</strong>.
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">اختر المسار:</label>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="decision" value="retake" checked>
+                                                    <label class="form-check-label">
+                                                        <strong>3. إعادة الدورة (Retake)</strong>
+                                                        <br><small class="text-muted">تسجيل جديد في نفس الدورة مع خصم.</small>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div class="mb-3 p-3 bg-light border rounded">
+                                                <label class="form-label">اختر مجموعة الإعادة:</label>
+                                                <select name="retake_batch_id" class="form-select">
+                                                    <option value="" selected>-- اختر مجموعة --</option>
+                                                    {% for b in all_batches %}
+                                                    {% if b.CourseID == student.CourseID %}
+                                                    <option value="{{ b.BatchID }}">{{ b.BatchName }} - {{ b.StartDate }}</option>
+                                                    {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                                
+                                                <label class="mt-2">نسبة الخصم للإعادة (%)</label>
+                                                <input type="number" name="discount_percent" class="form-control" value="50">
+                                            </div>
+                                            {% endif %}
+
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-primary">تنفيذ القرار</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        {% if not students %}
+                        <tr><td colspan="5" class="text-center py-5 text-muted">لا يوجد طلاب بانتظار التوجيه حالياً</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-calendar-check"></i> Talent Test Confirmation</h2>
+        <a href="{{ url_for('recruiter_workbench') }}" class="btn btn-outline-secondary">Back to Workbench</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Upcoming Tests (Call List)</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Candidate</th>
+                        <th>Phone</th>
+                        <th>Evaluator</th>
+                        <th>Confirmation Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tests %}
+                    <tr>
+                        <td>
+                            {{ t.SlotDate }}<br>
+                            <span class="badge bg-secondary">{{ t.SlotTime }}</span>
+                        </td>
+                        <td>{{ t.FullName }}</td>
+                        <td>
+                            <a href="tel:{{ t.Phone }}" class="text-decoration-none fw-bold">{{ t.Phone }}</a>
+                            <a href="https://wa.me/2{{ t.Phone }}" target="_blank" class="text-success ms-2"><i class="fab fa-whatsapp"></i></a>
+                        </td>
+                        <td>{{ t.EvaluatorName }}</td>
+                        <td>
+                            {% if t.IsConfirmedByRecruiter %}
+                            <span class="badge bg-success"><i class="fas fa-check-circle"></i> Confirmed</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form action="{{ url_for('recruiter_confirm_test') }}" method="POST">
+                                <input type="hidden" name="slot_id" value="{{ t.SlotID }}">
+                                {% if t.IsConfirmedByRecruiter %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" name="confirmed" value="off">
+                                        <i class="fas fa-undo"></i> Un-Confirm
+                                    </button>
+                                {% else %}
+                                    <button type="submit" class="btn btn-sm btn-success" name="confirmed" value="on">
+                                        <i class="fas fa-check"></i> Confirm Attendance
+                                    </button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted p-4">No upcoming tests booked for your candidates.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

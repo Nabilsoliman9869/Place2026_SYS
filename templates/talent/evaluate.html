@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-tasks"></i> Candidate Evaluation 
+                        <span class="arabic-sub d-inline text-white-50 ms-2">تقييم المرشح</span>
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Candidate Info -->
+                    <div class="alert alert-light border">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Candidate:</strong> {{ slot.FullName }}
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <strong>Type:</strong> <span class="badge bg-info">{{ eval_type }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form action="" method="POST">
+                        
+                        <!-- Common Fields -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">CEFR Level (from Sheet)</label>
+                            <select name="cefr_level" class="form-select" required>
+                                <option value="">Select Level...</option>
+                                <option value="A1">A1</option>
+                                <option value="A2">A2</option>
+                                <option value="B1">B1</option>
+                                <option value="High B1">High B1</option>
+                                <option value="Low B1+">Low B1+</option>
+                                <option value="Compromised B1+">Compromised B1+</option>
+                                <option value="Solid B1+">Solid B1+</option>
+                                <option value="Compromised B2">Compromised B2</option>
+                                <option value="B2">B2</option>
+                                <option value="C1">C1</option>
+                            </select>
+                        </div>
+
+                        <!-- Full TA Fields -->
+                        <div class="row">
+                            <div class="col-md-2 mb-3">
+                                <label>C (Comprehension)</label>
+                                <input type="number" name="score_c" class="form-control" step="0.5" min="0" max="10">
+                            </div>
+                            <div class="col-md-2 mb-3">
+                                <label>F (Fluency)</label>
+                                <input type="number" name="score_f" class="form-control" step="0.5" min="0" max="10">
+                            </div>
+                            <div class="col-md-2 mb-3">
+                                <label>P (Pronunciation)</label>
+                                <input type="number" name="score_p" class="form-control" step="0.5" min="0" max="10">
+                            </div>
+                            <div class="col-md-2 mb-3">
+                                <label>G (Grammar)</label>
+                                <input type="number" name="score_g" class="form-control" step="0.5" min="0" max="10">
+                            </div>
+                            <div class="col-md-2 mb-3">
+                                <label>V (Vocabulary)</label>
+                                <input type="number" name="score_v" class="form-control" step="0.5" min="0" max="10">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="fw-bold">Language Comments (Detailed)</label>
+                            <textarea name="lang_comments" class="form-control" rows="4" placeholder="e.g. Arabic usage, tenses issues..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label>Recording Link (Google Drive)</label>
+                            <input type="url" name="recording_link" class="form-control" placeholder="https://drive.google.com/...">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">3. Assessment Notes <small class="text-muted">(ملاحظات التقييم)</small></label>
+                            <textarea name="comments" class="form-control" rows="3" placeholder="Strengths, weaknesses, communication skills..."></textarea>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">4. Final Recommendation</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="decision" id="dec1" value="Accepted" required>
+                                <label class="btn btn-outline-success" for="dec1">Accepted</label>
+
+                                <input type="radio" class="btn-check" name="decision" id="dec2" value="Training">
+                                <label class="btn btn-outline-warning" for="dec2">Training</label>
+
+                                <input type="radio" class="btn-check" name="decision" id="dec3" value="Rejected">
+                                <label class="btn btn-outline-danger" for="dec3">Rejected</label>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">Submit Result & Close Ticket</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

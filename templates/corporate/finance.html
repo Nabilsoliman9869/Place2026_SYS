@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3><i class="fas fa-building text-primary"></i> الملف المالي: {{ client.CompanyName }}</h3>
+        <p class="text-muted mb-0">المسؤول: {{ client.ContactPerson }} | {{ client.Phone }}</p>
+    </div>
+    <a href="{{ url_for('corporate_manage') }}" class="btn btn-outline-secondary">عودة للقائمة</a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-light border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted">إجمالي الفواتير</h6>
+                <h3 class="text-primary">{{ total_billed }} EGP</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted">إجمالي المدفوع</h6>
+                <h3 class="text-success">{{ total_paid }} EGP</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div
+            class="card {{ 'bg-danger text-white' if balance > 0 else 'bg-success text-white' }} border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <h6>الرصيد المستحق (المتبقي)</h6>
+                <h3>{{ balance }} EGP</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">سجل الفواتير</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createInvoiceModal">
+                    <i class="fas fa-plus"></i> إصدار فاتورة
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>الخدمة</th>
+                            <th>المبلغ</th>
+                            <th>التاريخ</th>
+                            <th>الحالة</th>
+                            <th>إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in invoices %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <strong>{{ inv.ServiceType }}</strong>
+                                <br><small class="text-muted">{{ inv.Description }}</small>
+                            </td>
+                            <td class="fw-bold">{{ inv.Amount }}</td>
+                            <td>{{ inv.IssueDate.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <span
+                                    class="badge bg-{{ 'success' if inv.Status == 'Paid' else 'warning' if inv.Status == 'Partial' else 'danger' }}">
+                                    {{ inv.Status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if inv.Status != 'Paid' %}
+                                <button class="btn btn-success btn-sm" data-bs-toggle="modal"
+                                    data-bs-target="#payModal{{ inv.InvoiceID }}">
+                                    <i class="fas fa-hand-holding-usd"></i> سداد
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        <!-- Pay Modal -->
+                        <div class="modal fade" id="payModal{{ inv.InvoiceID }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('add_corporate_payment') }}" method="POST">
+                                        <input type="hidden" name="client_id" value="{{ client.ClientID }}">
+                                        <input type="hidden" name="invoice_id" value="{{ inv.InvoiceID }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">تسجيل دفعة للفاتورة #{{ inv.InvoiceID }}</h5>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p>قيمة الفاتورة: <strong>{{ inv.Amount }}</strong></p>
+                                            <label>المبلغ المدفوع</label>
+                                            <input type="number" name="amount" class="form-control mb-2" required
+                                                max="{{ inv.Amount }}">
+                                            <label>طريقة الدفع</label>
+                                            <select name="payment_method" class="form-select">
+                                                <option value="Check">شيك بنكي</option>
+                                                <option value="Transfer">تحويل بنكي</option>
+                                                <option value="Cash">نقدي</option>
+                                            </select>
+                                        </div>
+                                        <div class="modal-footer"><button type="submit" class="btn btn-success">تسجيل
+                                                الدفعة</button></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">آخر المدفوعات المستلمة</div>
+            <ul class="list-group list-group-flush">
+                {% for p in payments %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold text-success">+{{ p.Amount }}</span>
+                        <br><small class="text-muted">{{ p.PaymentDate.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                    <span class="badge bg-light text-dark">{{ p.PaymentMethod }}</span>
+                </li>
+                {% endfor %}
+                {% if not payments %}
+                <li class="list-group-item text-center text-muted">لا توجد مدفوعات</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Create Invoice Modal -->
+<div class="modal fade" id="createInvoiceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('create_corporate_invoice') }}" method="POST">
+                <input type="hidden" name="client_id" value="{{ client.ClientID }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">إصدار فاتورة جديدة</h5><button class="btn-close"
+                        data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label>نوع الخدمة</label>
+                    <select name="service_type" class="form-select mb-2">
+                        <option value="Recruitment Fee">رسوم توظيف (Placement Fee)</option>
+                        <option value="Consultation">استشارات HR</option>
+                        <option value="Ad Package">باقة إعلانية</option>
+                        <option value="Training">تدريب موظفين</option>
+                    </select>
+
+                    <label>التفاصيل</label>
+                    <textarea name="description" class="form-control mb-2"
+                        placeholder="مثلاً: تعيين 3 محاسبين..."></textarea>
+
+                    <label>المبلغ (EGP)</label>
+                    <input type="number" name="amount" class="form-control mb-2" required>
+
+                    <label>تاريخ الاستحقاق</label>
+                    <input type="date" name="due_date" class="form-control">
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">إصدار وحفظ</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,70 @@
+
+خطوات عمل ملف 
+من ملف المشروع 
+exe 
+جملة cmd
+pip install pyinstaller
+
+
+جملة باور شيل pyinstaller --onefile --noconsole --add-data "templates;templates" --add-data "static;static" --add-data "db_config.json;." --hidden-import pyodbc app.py
+
+
+
+pyinstaller --onefile --noconsole ^
+  --add-data "templates;templates" ^
+  --add-data "static;static" ^
+  --add-data "db_config.json;." ^
+  --hidden-import "pyodbc" app.py
+
+
+
+اذا ظهر ان الكود شغال من قبل 
+الحل الأسرع (بدون كود تطوير – أوامر فقط)
+1) اقفل أي نسخة شغّالة من app.exe
+
+نفّذ في PowerShell (كـ Admin يفضّل):
+
+taskkill /F /IM app.exe
+
+
+ولو مش باسم app.exe (أحيانًا يكون runw أو python)، جرّب:
+
+taskkill /F /IM python.exe
+taskkill /F /IM pythonw.exe
+
+2) امسح مجلدات الإخراج القديمة
+Remove-Item -Recurse -Force .\dist,.\build
+
+
+ولو رفض الحذف بسبب صلاحيات:
+
+اقفل أي نافذة Explorer فاتحة على dist أو build أو بتعرض app.exe.
+
+3) شغّل البناء من جديد
+
+نفّذ نفس أمر pyinstaller اللي استخدمناه (سطر واحد).
+
+لو تكرر نفس الخطأ بعد كده
+
+ده غالبًا واحد من دول:
+
+Windows Defender / Antivirus بيقفل الملف أثناء البناء
+
+صلاحيات على الدرايف E: أو Controlled Folder Access
+
+حل عملي سريع:
+
+شغّل PowerShell Run as Administrator
+
+أو انقل المشروع مؤقتًا لمسار سهل مثل: C:\Place_2026_SYS\ ثم أعد البناء
+
+أو أضف استثناء (Exclusion) لمجلد المشروع في Defender (لو مسموح)
+
+تأكيد سريع
+
+قبل ما تعيد البناء:
+ادخل على E:\Place_2026_SYS\dist\ وشوف هل app.exe موجود؟
+
+لو موجود: احذفه يدويًا بعد taskkill أو بالأمر:
+
+Remove-Item .\dist\app.exe -Force

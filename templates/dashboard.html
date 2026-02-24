@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    .org-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+        border-left: 5px solid transparent;
+        height: 100%;
+    }
+
+    .org-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .org-header {
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+    }
+
+    .org-header i {
+        margin-right: 10px;
+        font-size: 1.2em;
+    }
+
+    .sub-role {
+        font-size: 0.85em;
+        color: #6c757d;
+        margin-left: 28px;
+        display: block;
+        margin-bottom: 3px;
+    }
+
+    .stat-row {
+        font-size: 0.9em;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed #dee2e6;
+    }
+
+    /* Sector Colors */
+    .sector-marketing {
+        border-left-color: #ffc107;
+    }
+
+    .sector-sales {
+        border-left-color: #28a745;
+    }
+
+    .sector-ta {
+        border-left-color: #17a2b8;
+    }
+
+    .sector-recruit {
+        border-left-color: #6f42c1;
+    }
+
+    .sector-training {
+        border-left-color: #fd7e14;
+    }
+
+    .sector-finance {
+        border-left-color: #dc3545;
+    }
+
+    .sector-admin {
+        border-left-color: #343a40;
+    }
+</style>
+
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="fw-bold text-dark">الهيكل الإداري للمنظومة</h2>
+        <p class="text-muted">Organizational Structure & Operational Dashboard</p>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- 1. Marketing Sector -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-marketing shadow-sm"
+            onclick="window.location='{{ url_for('daily_marketing_sheet') }}'">
+            <div class="card-body">
+                <div class="org-header text-warning">
+                    <i class="fas fa-bullhorn"></i> إدارة التسويق
+                </div>
+                <span class="sub-role">• إدارة الحملات (Campaigns)</span>
+                <span class="sub-role">• استيراد المهتمين (Leads)</span>
+                <span class="sub-role">• توزيع العملاء (Distribution)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>New Leads:</span>
+                    <span class="fw-bold">{{ stats.leads_new }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Sales Sector -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-sales shadow-sm" onclick="window.location='{{ url_for('sales_index') }}'">
+            <div class="card-body">
+                <div class="org-header text-success">
+                    <i class="fas fa-hand-holding-usd"></i> قطاع المبيعات
+                </div>
+                <span class="sub-role">• مدير المبيعات (Manager)</span>
+                <span class="sub-role">• مندوبي البيع (Agents)</span>
+                <span class="sub-role">• متابعة الحجوزات (Booking)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Pending Invoices:</span>
+                    <span class="fw-bold">{{ stats.sales_pending }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Talent Acquisition (TA) -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-ta shadow-sm" onclick="window.location='{{ url_for('talent_dashboard') }}'">
+            <div class="card-body">
+                <div class="org-header text-info">
+                    <i class="fas fa-user-check"></i> مختبر المواهب (TA)
+                </div>
+                <span class="sub-role">• TA for Recruitment</span>
+                <span class="sub-role">• TA for Training</span>
+                <span class="sub-role">• جداول التقييم (Schedules)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Today's Tests:</span>
+                    <span class="fw-bold">{{ stats.ta_today }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Recruitment Sector -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-recruit shadow-sm"
+            onclick="window.location='{{ url_for('recruiter_dashboard') }}'">
+            <div class="card-body">
+                <div class="org-header text-purple" style="color: #6f42c1;">
+                    <i class="fas fa-briefcase"></i> قطاع التوظيف
+                </div>
+                <span class="sub-role">• مديري الحسابات (AM)</span>
+                <span class="sub-role">• مسؤولي التوظيف (Recruiters)</span>
+                <span class="sub-role">• التسكين (Allocation)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Open Vacancies:</span>
+                    <span class="fw-bold">{{ stats.rec_open }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Training Sector -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-training shadow-sm"
+            onclick="window.location='{{ url_for('training_index') }}'">
+            <div class="card-body">
+                <div class="org-header text-orange" style="color: #fd7e14;">
+                    <i class="fas fa-chalkboard-teacher"></i> قطاع التدريب
+                </div>
+                <span class="sub-role">• مدير التدريب (Manager)</span>
+                <span class="sub-role">• رئيس المدربين (Head)</span>
+                <span class="sub-role">• المدربين (Trainers)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Active Classes:</span>
+                    <span class="fw-bold">{{ stats.training_active }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Finance Sector -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-finance shadow-sm" onclick="window.location='{{ url_for('finance_index') }}'">
+            <div class="card-body">
+                <div class="org-header text-danger">
+                    <i class="fas fa-file-invoice-dollar"></i> قسم الحسابات
+                </div>
+                <span class="sub-role">• الفواتير (Invoices)</span>
+                <span class="sub-role">• المصروفات (Expenses)</span>
+                <span class="sub-role">• التقارير المالية (Reports)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Revenue (M):</span>
+                    <span class="fw-bold text-success">{{ stats.revenue_month }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Admin & Users -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card sector-admin shadow-sm" onclick="window.location='{{ url_for('manage_users') }}'">
+            <div class="card-body">
+                <div class="org-header text-dark">
+                    <i class="fas fa-users-cog"></i> إدارة المستخدمين
+                </div>
+                <span class="sub-role">• إضافة مستخدم جديد</span>
+                <span class="sub-role">• الصلاحيات (Roles)</span>
+                <span class="sub-role">• مراقبة النظام (Logs)</span>
+                <div class="stat-row d-flex justify-content-between">
+                    <span>Total Users:</span>
+                    <span class="fw-bold">{{ stats.total_users }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. Global Search -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card org-card shadow-sm border-left-primary" style="border-left-color: #0d6efd;"
+            onclick="window.location='{{ url_for('global_search') }}'">
+            <div class="card-body">
+                <div class="org-header text-primary">
+                    <i class="fas fa-search"></i> بحث عام شامل
+                </div>
+                <span class="sub-role">• بحث عن طالب / مرشح</span>
+                <span class="sub-role">• بحث عن فاتورة</span>
+                <span class="sub-role">• تتبع حالة (Status Tracking)</span>
+                <div class="stat-row text-center text-muted">
+                    <small>Search Everywhere</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

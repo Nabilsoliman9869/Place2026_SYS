@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2><i class="fas fa-chalkboard-teacher text-primary"></i> Training & Waves</h2>
+        <p class="text-muted">إدارة الدورات التدريبية والدفعات (Waves).</p>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Active Waves (الدفعات النشطة)</h5>
+        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBatchModal">
+            <i class="fas fa-plus"></i> New Wave
+        </button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Wave Name</th>
+                    <th>Course</th>
+                    <th>Trainer</th>
+                    <th>Room</th>
+                    <th>Dates</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wave in waves %}
+                <tr>
+                    <td class="fw-bold">{{ wave.BatchName }}</td>
+                    <td>{{ wave.CourseName }}</td>
+                    <td>{{ wave.TrainerName or '-' }}</td>
+                    <td>{{ wave.RoomName or '-' }}</td>
+                    <td>
+                        <small class="d-block">{{ wave.StartDate }}</small>
+                        <small class="text-muted">{{ wave.EndDate }}</small>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-eye"></i> Manage
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Wave Modal (Reuse Batch Modal Logic) -->
+<div class="modal fade" id="addBatchModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('add_batch') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Wave</h5><button class="btn-close"
+                        data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label>Wave Name (e.g. Wave 34)</label>
+                    <input type="text" name="batch_name" class="form-control mb-2" required placeholder="Wave Name *">
+
+                    <label class="small text-muted">Course (الدورة)</label>
+                    <select name="course_id" class="form-select mb-2" required>
+                        <option value="">-- Select Course --</option>
+                        {% for c in courses %}
+                        <option value="{{ c.CourseID }}">{{ c.CourseName }} ({{ c.DefaultPrice }} EGP)</option>
+                        {% endfor %}
+                    </select>
+
+                    <label class="small text-muted">Trainer (المدرب)</label>
+                    <select name="trainer_id" class="form-select mb-2">
+                        <option value="">-- Select Trainer --</option>
+                        {% for t in trainers %}
+                        <option value="{{ t.TrainerID }}">{{ t.FullName }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label class="small text-muted">Classroom (القاعة)</label>
+                    <select name="room_id" class="form-select mb-2">
+                        <option value="">-- Select Room --</option>
+                        {% for r in classrooms %}
+                        <option value="{{ r.RoomID }}">{{ r.RoomName }} (Cap: {{ r.Capacity }})</option>
+                        {% endfor %}
+                    </select>
+
+                    <div class="row">
+                        <div class="col">
+                            <label class="small text-muted">Start Date</label>
+                            <input type="date" name="start_date" class="form-control mb-2">
+                        </div>
+                        <div class="col">
+                            <label class="small text-muted">End Date</label>
+                            <input type="date" name="end_date" class="form-control mb-2">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

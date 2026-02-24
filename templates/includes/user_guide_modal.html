@@ -1,0 +1,168 @@
+<!-- Help / User Guide Modal -->
+{% if session['role'] %}
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+    <button class="btn btn-primary rounded-circle shadow-lg" 
+            style="width: 60px; height: 60px;" 
+            data-bs-toggle="modal" 
+            data-bs-target="#userGuideModal"
+            title="Open User Guide">
+        <i class="fas fa-question fa-lg"></i>
+    </button>
+</div>
+
+<div class="modal fade" id="userGuideModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">
+                    <i class="fas fa-book-reader text-primary"></i> 
+                    Role Guide: <span class="badge bg-primary">{{ session['role'] }}</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                
+                <!-- RECRUITER GUIDE -->
+                {% if session['role'] in ['Recruiter', 'Manager'] %}
+                <div class="guide-section">
+                    <h6 class="text-success fw-bold">1. Registration & Evaluation (التسجيل والتقييم)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-check-circle text-success"></i> <strong>Goal:</strong> Add new candidate and screen them.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Recruiter Workbench</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-keyboard"></i> Fill "Quick Register" (Name, Phone, Worked Before). Click <strong>ADD</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-mouse-pointer"></i> Find candidate in list below. Click <strong>Feedback</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-gavel"></i> Decide: <strong>Valid</strong> (for Test) or <strong>Invalid</strong> (Training Sales).
+                        </li>
+                    </ul>
+
+                    <h6 class="text-info fw-bold">2. Test Scheduling (حجز الاختبار)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Scheduling</strong> sidebar menu.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-calendar-alt"></i> Find your 'Valid' candidate. Click <strong>Book Test</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-user-clock"></i> Select Date, Time, and Evaluator (e.g., `tal_eval`).
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- TALENT / EVALUATOR GUIDE -->
+                {% if session['role'] in ['Talent', 'Talent_Recruitment', 'Manager'] %}
+                <div class="guide-section">
+                    <h6 class="text-warning fw-bold">1. Conducting Tests (إجراء الاختبار)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-check-circle text-success"></i> <strong>Goal:</strong> Evaluate candidate's language level.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Conduct Tests</strong> (Talent Center).
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-list"></i> You will see booked slots assigned to you.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-edit"></i> Click <strong>Evaluate</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-star-half-alt"></i> Enter Scores (Fluency, Grammar, etc.) & Final CEFR Level (e.g., B2).
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-save"></i> Submit. Candidate status becomes <strong>Evaluated</strong>.
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- ALLOCATION SPECIALIST GUIDE -->
+                {% if session['role'] in ['AllocationSpecialist', 'AllocationManager', 'Manager'] %}
+                <div class="guide-section">
+                    <h6 class="text-primary fw-bold">1. Matching (الترشيح للوظائف)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-check-circle text-success"></i> <strong>Goal:</strong> Link Ready Candidates to Job Orders.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Matching</strong> sidebar menu.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-filter"></i> Select a <strong>Job Order</strong> from the left list.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-magic"></i> System auto-filters candidates (Right List).
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-link"></i> Click <strong>Match</strong>. Candidate moves to <strong>Interview</strong> stage.
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- ACCOUNT MANAGER GUIDE -->
+                {% if session['role'] in ['AccountManager', 'Manager'] %}
+                <div class="guide-section">
+                    <h6 class="text-danger fw-bold">1. Job Orders (طلبات العملاء)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Job Orders</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-plus"></i> Create New Request for a Client.
+                        </li>
+                    </ul>
+                    <h6 class="text-success fw-bold">2. Client Interviews (مقابلات العملاء)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Interviews</strong> (or Dashboard).
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-poll"></i> See candidates in 'Interview' stage.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-check-double"></i> Mark Final Result: <strong>Accepted</strong> (Hired) or <strong>Rejected</strong>.
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- TRAINING MANAGER GUIDE -->
+                {% if session['role'] in ['TrainingManager', 'Trainer', 'Manager'] %}
+                <div class="guide-section">
+                    <h6 class="text-secondary fw-bold">1. Academy Management (إدارة الأكاديمية)</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item">
+                            <i class="fas fa-arrow-right"></i> Go to <strong>Academy</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-layer-group"></i> Create <strong>Courses</strong> & <strong>Classrooms</strong>.
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-users"></i> Create <strong>Waves (Batches)</strong>.
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+
+            </div>
+            <div class="modal-footer bg-light">
+                <small class="text-muted me-auto">
+                    <i class="fas fa-info-circle"></i> This guide is context-aware based on your role.
+                </small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
