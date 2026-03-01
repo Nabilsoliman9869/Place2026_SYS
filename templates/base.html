@@ -380,7 +380,7 @@
 
             {% if check_role_access(['Manager', 'Admin']) %}
             <div class="sidebar-section-label">Admin</div>
-            <a href="{{ url_for('admin_users') }}" class="nav-link">
+            <a href="{{ url_for('manage_users') }}" class="nav-link">
                 <i class="fas fa-user-shield"></i>
                 <span class="link-text">Users</span>
             </a>

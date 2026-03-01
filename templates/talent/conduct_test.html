@@ -119,18 +119,15 @@
                                     <label class="form-label fw-bold">2. English Level (Standard)</label>
                                     <select name="cefr_score" class="form-select" required>
                                         <option value="">-- Select Level --</option>
-                                        <option value="A0">A0 (Beginner)</option>
-                                        <option value="A1.1">A1.1</option>
-                                        <option value="A1.2">A1.2</option>
-                                        <option value="A2.1">A2.1</option>
-                                        <option value="A2.2">A2.2</option>
-                                        <option value="B1.1">B1.1</option>
-                                        <option value="B1.2">B1.2</option>
-                                        <option value="B2.1">B2.1</option>
-                                        <option value="B2.2">B2.2</option>
-                                        <option value="C1.1">C1.1</option>
-                                        <option value="C1.2">C1.2</option>
-                                        <option value="C2">C2 (Proficient)</option>
+                                        <option value="A1">A1</option>
+                                        <option value="A2">A2</option>
+                                        <option value="High B1">High B1</option>
+                                        <option value="Low B1+">Low B1+</option>
+                                        <option value="Compromised B1+">Compromised B1+</option>
+                                        <option value="Solid B1+">Solid B1+</option>
+                                        <option value="Compromised B2">Compromised B2</option>
+                                        <option value="B2">B2</option>
+                                        <option value="C1">C1</option>
                                     </select>
                                 </div>
 
@@ -143,7 +140,7 @@
                                     <label class="form-label fw-bold">4. Final Recommendation</label>
                                     <div class="btn-group w-100" role="group">
                                         <input type="radio" class="btn-check" name="recommendation" id="hire{{ t.ScheduleID }}" value="Hire" required>
-                                        <label class="btn btn-outline-success" for="hire{{ t.ScheduleID }}">Hire (Ready for Job)</label>
+                                        <label class="btn btn-outline-success" for="hire{{ t.ScheduleID }}">Accepted</label>
 
                                         <input type="radio" class="btn-check" name="recommendation" id="train{{ t.ScheduleID }}" value="Train">
                                         <label class="btn btn-outline-warning" for="train{{ t.ScheduleID }}">Train (Needs Course)</label>

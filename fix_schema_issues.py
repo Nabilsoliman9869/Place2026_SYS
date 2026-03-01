@@ -1,47 +1,44 @@
 import pyodbc
 import json
-import os
-import sys
-
-# --- CONFIG ---
-if getattr(sys, 'frozen', False):
-    application_path = os.path.dirname(sys.executable)
-else:
-    application_path = os.path.dirname(os.path.abspath(__file__))
-
-CONFIG_FILE = os.path.join(application_path, 'db_config.json')
 
 def get_db_connection():
-    with open(CONFIG_FILE, 'r') as f:
+    with open('db_config.json', 'r') as f:
         config = json.load(f)
-    if config.get("use_trusted"):
-        conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]},{config["port"]};DATABASE={config["database"]};Trusted_Connection=yes;'
-    else:
-        conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]},{config["port"]};DATABASE={config["database"]};UID={config["username"]};PWD={config["password"]}'
+    
+    conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config['server']},{config['port']};DATABASE={config['database']};UID={config['username']};PWD={config['password']}"
     return pyodbc.connect(conn_str)
 
 def fix_schema():
-    print(">>> FIXING SCHEMA ISSUES <<<")
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    # 1. Add ServiceType to Services
-    try:
-        print("Checking Services.ServiceType...")
-        cursor.execute("SELECT TOP 1 ServiceType FROM Services")
-        print(" - Exists.")
-    except:
-        print(" - Missing. Adding column...")
-        cursor.execute("ALTER TABLE Services ADD ServiceType NVARCHAR(50) DEFAULT 'General'")
-        cursor.execute("UPDATE Services SET ServiceType = 'General'")
-        conn.commit()
-        print(" - Added and populated.")
-
-    # 2. Rename Date to AttendanceDate in Attendance? 
-    # Actually, it's better to keep 'Date' if it works, but 'AttendanceDate' is more descriptive.
-    # Let's just leave it as 'Date' but ensure app.py uses it.
     
-    print(">>> SCHEMA FIX COMPLETE <<<")
+    print("Checking Candidates table schema...")
+    
+    try:
+        # 1. Fix Language Level Column Size (Image 3 Fix)
+        print("Altering CurrentCEFR to NVARCHAR(100)...")
+        cursor.execute("ALTER TABLE Candidates ALTER COLUMN CurrentCEFR NVARCHAR(100)")
+        print("✅ CurrentCEFR resized.")
+    except Exception as e:
+        print(f"⚠️ CurrentCEFR resize failed (might already be large enough): {e}")
+
+    try:
+        # 2. Add 'HasWorkExperience' column (Image 1 Fix)
+        # Check if exists first
+        cursor.execute("SELECT COUNT(*) FROM sys.columns WHERE Name = N'HasWorkExperience' AND Object_ID = Object_ID(N'Candidates')")
+        if cursor.fetchone()[0] == 0:
+            print("Adding HasWorkExperience column...")
+            cursor.execute("ALTER TABLE Candidates ADD HasWorkExperience BIT DEFAULT 0")
+            print("✅ HasWorkExperience added.")
+        else:
+            print("ℹ️ HasWorkExperience already exists.")
+            
+    except Exception as e:
+        print(f"❌ Failed to add HasWorkExperience: {e}")
+
+    conn.commit()
+    conn.close()
+    print("Schema update complete.")
 
 if __name__ == "__main__":
     fix_schema()

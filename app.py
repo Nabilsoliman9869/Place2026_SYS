@@ -769,36 +769,7 @@ def init_db_route():
         flash(f"Initialization Failed: {e}", 'danger')
         return redirect(url_for('setup'))
 
-@app.route('/admin/users')
-@login_required
-@role_required(['Manager', 'Admin'])
-def admin_users():
-    users = query_db('SELECT * FROM Users_1')
-    return render_template('admin/users.html', users=users or [])
 
-@app.route('/admin/add_user', methods=('POST',))
-@login_required
-@role_required(['Manager', 'Admin'])
-def admin_add_user():
-    # fullname field name differs in form (fullname) vs db (FullName)
-    # Using .get to handle potential keys
-    full_name = request.form.get('fullname') or request.form.get('full_name')
-    query_db('INSERT INTO Users_1 (Username, Password, Role, FullName, Email) VALUES (?,?,?,?,?)',
-             (request.form['username'], request.form['password'], request.form['role'], full_name, request.form.get('email')))
-    flash('User Added', 'success')
-    return redirect(url_for('admin_users'))
-
-@app.route('/admin/delete_user/<int:user_id>')
-@login_required
-@role_required(['Manager', 'Admin'])
-def admin_delete_user(user_id):
-    if user_id == session.get('user_id'):
-        flash('لا يمكنك حذف حسابك الحالي', 'danger')
-    else:
-        # Prevent deleting the last dev/manager if needed, but for now just delete
-        query_db('DELETE FROM Users_1 WHERE UserID = ?', (user_id,))
-        flash('تم حذف المستخدم', 'success')
-    return redirect(url_for('admin_users'))
 
 @app.route('/recruiter/dashboard_kpi')
 @login_required
@@ -980,13 +951,16 @@ def add_candidate_manual():
             # Use dummy date if worked before, for legacy compatibility
             prev_app_date = '2000-01-01' if worked_before else None
             
+            # New Field: has_work_experience (separate from PreviousApplicationDate)
+            has_experience = 1 if f.get('has_experience') == '1' else 0
+            
             query_db("""
                 INSERT INTO Candidates (
                     FullName, Phone, Email, Status, SourceChannel, InterestLevel, 
                     IsGraduated, CampaignID, SalesAgentID, PreviousApplicationDate, CreatedAt, EmploymentStatus,
-                    Address, Age, WorkedHereBefore
+                    Address, Age, WorkedHereBefore, HasWorkExperience, NationalID
                 )
-                VALUES (?, ?, ?, 'New', ?, 'High', ?, ?, ?, ?, GETDATE(), ?, ?, ?, ?)
+                VALUES (?, ?, ?, 'New', ?, 'High', ?, ?, ?, ?, GETDATE(), ?, ?, ?, ?, ?, ?)
             """, (
                 f['full_name'], f['phone'], f['email'], 
                 f.get('source', 'Manual'), 
@@ -997,7 +971,9 @@ def add_candidate_manual():
                 f.get('employment_status'),
                 f.get('address'),
                 f.get('age'),
-                worked_before
+                worked_before,
+                has_experience,
+                f.get('national_id')
             ))
             flash('Candidate Registered Successfully', 'success')
     except Exception as e:
@@ -1044,8 +1020,8 @@ def recruiter_test_schedule():
         JOIN Candidates C ON T.CandidateID = C.CandidateID
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.Status = 'Booked' 
-        AND T.SlotDate >= CONVERT(DATE, GETDATE()) 
-        AND T.SlotDate <= DATEADD(day, 7, GETDATE())
+        AND T.SlotDate >= DATEADD(day, -30, GETDATE()) 
+        AND T.SlotDate <= DATEADD(day, 30, GETDATE())
         ORDER BY T.SlotDate, T.SlotTime
     """
     tests = query_db(sql)
@@ -1797,6 +1773,35 @@ def add_client():
     flash('Added Client', 'success')
     # Redirect to the referrer to support both Corporate Manager and Recruitment Manager views
     return redirect(request.referrer or url_for('corporate_manage'))
+
+@app.route('/corporate/matching')
+@login_required
+@role_required(['Corporate', 'Manager', 'AllocationManager'])
+def corporate_matching():
+    # Open Requests
+    requests = query_db("SELECT CR.*, C.CompanyName FROM ClientRequests CR JOIN Clients C ON CR.ClientID = C.ClientID WHERE CR.Status='Open'")
+    # Qualified Candidates
+    candidates = query_db("SELECT * FROM Candidates WHERE Status IN ('Ready_For_Matching', 'Talent_Pool', 'Ready')")
+    return render_template('corporate/matching.html', requests=requests or [], candidates=candidates or [])
+
+@app.route('/corporate/submit_match', methods=['POST'])
+@login_required
+def corporate_submit_match():
+    req_id = request.form.get('request_id')
+    cand_ids = request.form.getlist('candidate_ids')
+    
+    if not req_id or not cand_ids:
+        flash('Please select a request and at least one candidate', 'warning')
+        return redirect(url_for('corporate_matching'))
+        
+    for cid in cand_ids:
+        # Check if already matched
+        existing = query_db("SELECT * FROM Matches WHERE RequestID=? AND CandidateID=?", (req_id, cid), one=True)
+        if not existing:
+            query_db("INSERT INTO Matches (RequestID, CandidateID, MatchDate, Status) VALUES (?, ?, GETDATE(), 'Proposed')", (req_id, cid))
+            
+    flash(f'Matched {len(cand_ids)} candidates to request', 'success')
+    return redirect(url_for('corporate_matching'))
 
 @app.route('/recruitment/add_request', methods=['POST'])
 @login_required
@@ -2948,6 +2953,39 @@ def batch_details(batch_id):
     students = query_db("SELECT E.*, C.FullName, C.Phone FROM Enrollments E JOIN Candidates C ON E.CandidateID = C.CandidateID WHERE E.BatchID = ?", (batch_id,))
     candidates = query_db('SELECT * FROM Candidates')
     return render_template('training/batch_details.html', batch=batch, students=students or [], candidates=candidates or [])
+
+@app.route('/training/enroll_student', methods=['POST'])
+@login_required
+def enroll_student():
+    f = request.form
+    batch_id = f.get('batch_id')
+    cand_id = f.get('candidate_id')
+    price = f.get('agreed_price')
+    notes = f.get('notes')
+    
+    if not batch_id or not cand_id:
+        flash('Missing batch or candidate', 'danger')
+        return redirect(request.referrer)
+        
+    # Get Default Price if not provided
+    if not price:
+        batch = query_db("SELECT C.DefaultPrice FROM CourseBatches B JOIN Courses C ON B.CourseID=C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
+        price = batch['DefaultPrice'] if batch else 0
+        
+    # Check existing enrollment
+    existing = query_db("SELECT * FROM Enrollments WHERE BatchID=? AND CandidateID=?", (batch_id, cand_id), one=True)
+    if existing:
+        flash('Student already enrolled in this batch', 'warning')
+        return redirect(request.referrer)
+        
+    query_db("INSERT INTO Enrollments (BatchID, CandidateID, EnrollmentDate, Status, AgreedPrice, Notes) VALUES (?, ?, GETDATE(), 'Active', ?, ?)",
+             (batch_id, cand_id, price, notes))
+             
+    # Update Candidate Status
+    query_db("UPDATE Candidates SET Status='Enrolled' WHERE CandidateID=?", (cand_id,))
+    
+    flash('Student Enrolled Successfully', 'success')
+    return redirect(request.referrer)
 
 @app.route('/training/hiring_plan')
 @login_required

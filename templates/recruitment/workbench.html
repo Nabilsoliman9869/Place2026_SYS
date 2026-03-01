@@ -55,6 +55,10 @@
                     <input type="text" name="address" class="form-control form-control-sm" placeholder="Area">
                 </div>
                 <div class="col-md-2">
+                    <label class="small text-muted">National ID</label>
+                    <input type="text" name="national_id" class="form-control form-control-sm" placeholder="National ID">
+                </div>
+                <div class="col-md-2">
                     <label class="small text-muted">Campaign</label>
                     <select name="campaign_id" class="form-select form-select-sm">
                         <option value="">-- General --</option>
@@ -83,6 +87,13 @@
                 <div class="col-md-2">
                     <label class="small text-muted">Applied Before?</label>
                     <select name="worked_before" class="form-select form-select-sm">
+                        <option value="0">No</option>
+                        <option value="1">Yes</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="small text-muted text-primary fw-bold">Worked Before?</label>
+                    <select name="has_experience" class="form-select form-select-sm border-primary">
                         <option value="0">No</option>
                         <option value="1">Yes</option>
                     </select>
@@ -207,7 +218,6 @@
                                                         <option value="">-- Select --</option>
                                                         <option value="A1">A1</option>
                                                         <option value="A2">A2</option>
-                                                        <option value="B1">B1</option>
                                                         <option value="High B1">High B1</option>
                                                         <option value="Low B1+">Low B1+</option>
                                                         <option value="Compromised B1+">Compromised B1+</option>
