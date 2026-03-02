@@ -2009,15 +2009,22 @@ def recruiter_dashboard():
 @login_required
 def recruiter_hiring_onboarding():
     # Show candidates who passed the client interview (Status='Accepted')
-    hired_candidates = query_db("""
-        SELECT M.*, C.FullName, C.Phone, CR.JobTitle, Cl.CompanyName
-        FROM Matches M
-        JOIN Candidates C ON M.CandidateID = C.CandidateID
-        JOIN ClientRequests CR ON M.RequestID = CR.RequestID
-        JOIN Clients Cl ON CR.ClientID = Cl.ClientID
-        WHERE M.Status = 'Accepted'
-        AND NOT EXISTS (SELECT 1 FROM HiringRecords H WHERE H.MatchID = M.MatchID)
-    """)
+    try:
+        hired_candidates = query_db("""
+            SELECT M.*, C.FullName, C.Phone, CR.JobTitle, Cl.CompanyName
+            FROM Matches M
+            JOIN Candidates C ON M.CandidateID = C.CandidateID
+            JOIN ClientRequests CR ON M.RequestID = CR.RequestID
+            JOIN Clients Cl ON CR.ClientID = Cl.ClientID
+            WHERE M.Status = 'Accepted'
+            AND NOT EXISTS (SELECT 1 FROM HiringRecords H WHERE H.MatchID = M.MatchID)
+        """)
+    except Exception as e:
+        if getattr(g, 'db', None) is None:
+            flash('لا يمكن الاتصال بقاعدة البيانات. تحقق من الإعدادات.', 'danger')
+        else:
+            flash(f'خطأ في تحميل البيانات: {str(e)[:100]}', 'danger')
+        hired_candidates = []
     return render_template('recruitment/hiring_onboarding.html', candidates=hired_candidates or [])
 
 @app.route('/recruiter/finalize_hiring', methods=['POST'])
