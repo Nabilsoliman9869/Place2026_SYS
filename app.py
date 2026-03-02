@@ -1426,16 +1426,23 @@ def allocation_matching():
 @login_required
 @role_required(['Allocator', 'Manager'])
 def allocation_confirm_match():
-    req_id = request.form['request_id']
-    cand_id = request.form['candidate_id']
+    req_id = request.form.get('request_id')
+    cand_id = request.form.get('candidate_id')
+    if not req_id or not cand_id:
+        flash('Missing request_id or candidate_id.', 'danger')
+        return redirect(url_for('allocation_matching'))
     notes = request.form.get('notes', '')
-    feedback = request.form.get('allocator_feedback', '') # New Feedback Field
-    
-    query_db("""
-        INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
-        VALUES (?, ?, 'Approved', ?, ?, ?)
-    """, (cand_id, req_id, session['user_id'], notes, feedback))
-    
+    feedback = request.form.get('allocator_feedback', '')
+
+    try:
+        query_db("""
+            INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
+            VALUES (?, ?, 'Approved', ?, ?, ?)
+        """, (cand_id, req_id, session['user_id'], notes, feedback))
+    except Exception as e:
+        flash('خطأ: جدول Matches يحتاج أعمدة AllocatorID, ReviewNotes, AllocatorFeedback. شغّل سكربت add_matches_columns.sql على قاعدة البيانات.', 'danger')
+        return redirect(url_for('allocation_matching'))
+
     flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
     return redirect(url_for('allocation_matching'))
 
