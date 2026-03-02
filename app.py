@@ -1040,10 +1040,27 @@ def recruiter_test_schedule():
 @app.route('/recruiter/confirm_test', methods=['POST'])
 @login_required
 def recruiter_confirm_test():
-    slot_id = request.form['slot_id']
-    is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
-    query_db("UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=?", (is_confirmed, slot_id))
-    flash('Attendance Status Updated', 'success')
+    # Update attendance status (Showed Up or No Show)
+    # The form might send multiple updates if it's a list, but usually it's one by one or handled via JS.
+    # Assuming simple form submission for now.
+    
+    # Check if this is a bulk update or single
+    # If the form has 'slot_id', it's single.
+    if 'slot_id' in request.form:
+        slot_id = request.form['slot_id']
+        # 'confirmed' checkbox: if checked -> 1 (Showed Up), else -> 0 (No Show / Pending)
+        # But wait, usually confirmation means "Client Confirmed attendance".
+        # If this is "Mark Attendance" (Showed Up):
+        attendance_status = 'Completed' if request.form.get('attendance') == 'on' else 'Booked' # Or 'No_Show'
+        
+        # Actually, let's stick to the existing logic but ensure it updates Status if needed.
+        is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
+        
+        # If confirmed (Showed Up), maybe update status to 'Completed'?
+        # For now, just update the IsConfirmedByRecruiter flag as requested.
+        query_db("UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=?", (is_confirmed, slot_id))
+        flash('Attendance Status Updated', 'success')
+        
     return redirect(url_for('recruiter_test_schedule'))
 
 @app.route('/recruiter/test_results')
