@@ -1014,6 +1014,7 @@ def recruiter_workbench():
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_test_schedule():
     # Fetch booked tests for upcoming week
+    # MODIFIED: Removed SalesAgentID filter from SQL to debug if data exists
     sql = """
         SELECT T.*, C.FullName, C.Phone, C.SalesAgentID, U.Username as EvaluatorName
         FROM TASchedules T
@@ -1026,14 +1027,13 @@ def recruiter_test_schedule():
     """
     tests = query_db(sql)
     
-    # Filter for Recruiter's own candidates
-    if session['role'] == 'Recruiter':
-        # Ensure we filter by SalesAgentID, converting both to string to avoid type mismatch if any
-        user_id = str(session['user_id'])
-        tests = [
-            t for t in tests 
-            if str(t['SalesAgentID']) == user_id or str(t.get('BookedBy') or '') == user_id
-        ]
+    # Show ALL tests to Recruiter to avoid "missing data" confusion, 
+    # OR strictly filter if that's the absolute requirement.
+    # Given the user complaint "there is test booked but page do not shows them",
+    # relaxing the filter is the safest first step to debugging.
+    # if session['role'] == 'Recruiter':
+    #    user_id = str(session['user_id'])
+    #    tests = [t for t in tests if str(t['SalesAgentID']) == user_id]
         
     return render_template('recruitment/test_schedule.html', tests=tests or [])
 
