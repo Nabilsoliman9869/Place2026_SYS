@@ -831,15 +831,13 @@ def recruiter_scheduling():
         ORDER BY C.CreatedAt DESC
     """, (session['user_id'],))
     
-    # Fetch available slots from Schedules (Unified)
-    # Logic: Fetch today and future available slots
     today = datetime.today().strftime('%Y-%m-%d')
     available_slots = query_db("""
-        SELECT T.*, U.Username as EvaluatorName 
-        FROM Schedules T 
-        LEFT JOIN Users_1 U ON T.OwnerUserID = U.UserID 
-        WHERE Context='Talent_Recruitment' AND SlotDate >= ? AND Status = 'Available' 
-        ORDER BY SlotDate ASC, SlotTime ASC
+        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.EvaluatorID, U.Username as EvaluatorName
+        FROM TASchedules T
+        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+        WHERE T.SlotDate >= ? AND T.Status = 'Available'
+        ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username ASC
     """, (today,))
     
     return render_template('recruitment/scheduling.html', candidates=candidates or [], available_slots=available_slots or [])
@@ -856,18 +854,17 @@ def recruiter_book_test():
     if not slot_id:
         flash('Please select a valid time slot.', 'warning')
         return redirect(url_for('recruiter_scheduling'))
-        
-    # Book the slot in Schedules
-    # CRITICAL FIX: Ensure we keep the original OwnerUserID if it exists (Specific TA), 
-    # or assign it to NULL (Any TA) if it was NULL. 
-    # BUT, actually, we don't need to change OwnerUserID here unless we want to assign it to a specific TA *at booking time* 
-    # if it wasn't assigned. For now, let's respect existing OwnerUserID.
-    
-    query_db("""
-        UPDATE Schedules 
-        SET BookedCandidateID = ?, Status = 'Booked', BookingMode = ?
-        WHERE ScheduleID = ? AND Status = 'Available'
-    """, (cand_id, mode, slot_id))
+
+    interview_type = 'Phone'
+    if mode == 'Online':
+        interview_type = 'Zoom'
+    elif mode == 'DoorToDoor':
+        interview_type = 'Onsite'
+
+    query_db(
+        "UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=? WHERE SlotID=? AND Status='Available'",
+        (cand_id, session['user_id'], interview_type, slot_id),
+    )
     
     # Update Candidate Status
     query_db("UPDATE Candidates SET Status='Test Scheduled' WHERE CandidateID=?", (cand_id,))
@@ -1013,8 +1010,6 @@ def recruiter_workbench():
 @login_required
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_test_schedule():
-    # Fetch booked tests for upcoming week
-    # MODIFIED: Removed SalesAgentID filter from SQL to debug if data exists
     sql = """
         SELECT T.*, C.FullName, C.Phone, C.SalesAgentID, U.Username as EvaluatorName
         FROM TASchedules T
@@ -1025,42 +1020,44 @@ def recruiter_test_schedule():
         AND T.SlotDate <= DATEADD(day, 30, GETDATE())
         ORDER BY T.SlotDate, T.SlotTime
     """
-    tests = query_db(sql)
-    
-    # Show ALL tests to Recruiter to avoid "missing data" confusion, 
-    # OR strictly filter if that's the absolute requirement.
-    # Given the user complaint "there is test booked but page do not shows them",
-    # relaxing the filter is the safest first step to debugging.
-    # if session['role'] == 'Recruiter':
-    #    user_id = str(session['user_id'])
-    #    tests = [t for t in tests if str(t['SalesAgentID']) == user_id]
+
+    if session.get('role') == 'Recruiter':
+        sql = """
+            SELECT T.*, C.FullName, C.Phone, C.SalesAgentID, U.Username as EvaluatorName
+            FROM TASchedules T
+            JOIN Candidates C ON T.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE T.Status = 'Booked'
+            AND T.BookedBy = ?
+            AND T.SlotDate >= DATEADD(day, -30, GETDATE())
+            AND T.SlotDate <= DATEADD(day, 30, GETDATE())
+            ORDER BY T.SlotDate, T.SlotTime
+        """
+        tests = query_db(sql, (session['user_id'],))
+    else:
+        tests = query_db(sql)
         
     return render_template('recruitment/test_schedule.html', tests=tests or [])
 
 @app.route('/recruiter/confirm_test', methods=['POST'])
 @login_required
 def recruiter_confirm_test():
-    # Update attendance status (Showed Up or No Show)
-    # The form might send multiple updates if it's a list, but usually it's one by one or handled via JS.
-    # Assuming simple form submission for now.
-    
-    # Check if this is a bulk update or single
-    # If the form has 'slot_id', it's single.
-    if 'slot_id' in request.form:
-        slot_id = request.form['slot_id']
-        # 'confirmed' checkbox: if checked -> 1 (Showed Up), else -> 0 (No Show / Pending)
-        # But wait, usually confirmation means "Client Confirmed attendance".
-        # If this is "Mark Attendance" (Showed Up):
-        attendance_status = 'Completed' if request.form.get('attendance') == 'on' else 'Booked' # Or 'No_Show'
-        
-        # Actually, let's stick to the existing logic but ensure it updates Status if needed.
-        is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
-        
-        # If confirmed (Showed Up), maybe update status to 'Completed'?
-        # For now, just update the IsConfirmedByRecruiter flag as requested.
+    slot_id = request.form.get('slot_id')
+    if not slot_id:
+        flash('Missing slot_id.', 'danger')
+        return redirect(url_for('recruiter_test_schedule'))
+
+    is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
+
+    if session.get('role') == 'Recruiter':
+        query_db(
+            "UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=? AND BookedBy=?",
+            (is_confirmed, slot_id, session['user_id']),
+        )
+    else:
         query_db("UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=?", (is_confirmed, slot_id))
-        flash('Attendance Status Updated', 'success')
-        
+
+    flash('Attendance Status Updated', 'success')
     return redirect(url_for('recruiter_test_schedule'))
 
 @app.route('/recruiter/test_results')
