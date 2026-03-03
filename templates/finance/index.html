@@ -50,7 +50,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for inv in corp_inv[:5] %}
+                        {% for inv in corp_inv %}
                         <tr>
                             <td>{{ inv.CompanyName }}</td>
                             <td>{{ inv.ServiceType }}</td>
@@ -62,7 +62,6 @@
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer text-center"><a href="{{ url_for('corporate_manage') }}">عرض الكل</a></div>
         </div>
     </div>
 
@@ -81,7 +80,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for p in stud_pay[:5] %}
+                        {% for p in stud_pay %}
                         <tr>
                             <td>{{ p.FullName }}</td>
                             <td>{{ p.Amount }}</td>
@@ -91,7 +90,6 @@
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer text-center"><a href="{{ url_for('training_index') }}">عرض الكل</a></div>
         </div>
     </div>
 
