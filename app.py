@@ -1182,9 +1182,9 @@ def dashboard():
     if role == 'Corporate': return redirect(url_for('corporate_dashboard'))
     
     # --- 2. Allocation ---
-    if role == 'AllocationManager': return redirect(url_for('allocation_matching')) # Updated to new route
-    if role == 'AllocationSpecialist': return redirect(url_for('allocation_matching')) # Updated to new route
-    if role == 'Allocator': return redirect(url_for('allocation_matching')) # Added generic role
+    if role == 'AllocationManager': return redirect(url_for('allocation_matching'))
+    if role == 'AllocationSpecialist': return redirect(url_for('allocation_matching'))
+    if role == 'Allocator': return redirect(url_for('allocation_matching'))
     
     # --- 3. Recruitment ---
     if role == 'RecruitmentManager': return redirect(url_for('distribute_recruitment_tasks'))
@@ -1374,7 +1374,7 @@ def check_expired_appointments():
 # --- ALLOCATION / MATCHING ---
 @app.route('/allocation/matching', methods=['GET', 'POST'])
 @login_required
-@role_required(['Allocator', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager'])
 def allocation_matching():
     # 1. Fetch Open Requests
     open_requests = query_db("""
@@ -1447,7 +1447,7 @@ def allocation_matching():
 
 @app.route('/allocation/confirm_match', methods=['POST'])
 @login_required
-@role_required(['Allocator', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager'])
 def allocation_confirm_match():
     req_id = request.form.get('request_id')
     cand_id = request.form.get('candidate_id')
@@ -1471,7 +1471,7 @@ def allocation_confirm_match():
 
 @app.route('/allocation/schedule_interview/<int:match_id>', methods=['POST'])
 @login_required
-@role_required(['Allocator', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager'])
 def allocation_schedule_interview(match_id):
     interview_date = request.form['interview_date']
     interview_time = request.form['interview_time']

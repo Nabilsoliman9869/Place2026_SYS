@@ -291,25 +291,31 @@
                 <i class="fas fa-chart-pie"></i>
                 <span class="link-text">AM Dashboard</span>
             </a>
-            {% endif %}
-
-            {% if check_role_access(['Manager', 'AccountManager', 'AllocationManager']) %}
-            <div class="sidebar-section-label">Allocation</div>
-            <a href="{{ url_for('finance_index') }}" class="nav-link">
+            <a href="{{ url_for('accounting_invoices') }}" class="nav-link">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span class="link-text">Invoices <span class="arabic-sub">فواتير</span></span>
             </a>
-            <a href="{{ url_for('add_campaign') }}" class="nav-link">
+            <a href="{{ url_for('create_ad_campaign') }}" class="nav-link">
                 <i class="fas fa-bullhorn"></i>
                 <span class="link-text">Campaigns <span class="arabic-sub">حملات</span></span>
             </a>
+            {% endif %}
+
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist']) %}
+            <div class="sidebar-section-label">Allocation</div>
+            <a href="{{ url_for('allocation_matching') }}" class="nav-link">
+                <i class="fas fa-random"></i>
+                <span class="link-text">Matching Center <span class="arabic-sub">مركز المطابقة</span></span>
+            </a>
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager']) %}
             <a href="{{ url_for('allocator_dashboard') }}" class="nav-link">
                 <i class="fas fa-chart-line"></i>
                 <span class="link-text">Manager Dash</span>
             </a>
             {% endif %}
+            {% endif %}
 
-            {% if check_role_access(['Manager', 'AccountManager', 'AllocationManager', 'AllocationSpecialist']) %}
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist']) %}
             <div class="sidebar-section-label">Specialist</div>
             <a href="{{ url_for('match_candidates') }}" class="nav-link">
                 <i class="fas fa-people-arrows"></i>
@@ -454,15 +460,18 @@
 
         <!-- Page Tour (مرشد النافذة - أول زيارة) -->
         {% if session.get('role') %}
-        <div id="pageTourCard" class="alert alert-info alert-dismissible shadow-sm border-0 mb-0 d-none" role="alert" style="border-radius: 12px; margin: 12px 16px;">
+        <div id="pageTourCard" class="alert alert-info alert-dismissible shadow-sm border-0 mb-0 d-none" role="alert"
+            style="border-radius: 12px; margin: 12px 16px;">
             <div class="d-flex align-items-start">
                 <i class="fas fa-lightbulb text-warning fa-2x me-3 mt-1"></i>
                 <div class="flex-grow-1">
                     <h6 class="alert-heading mb-1" id="pageTourTitle">مرحباً بك</h6>
-                    <p class="mb-2 small" id="pageTourBody">هذه الصفحة جزء من نظام Place. استخدم زر المساعدة (?) للمزيد.</p>
+                    <p class="mb-2 small" id="pageTourBody">هذه الصفحة جزء من نظام Place. استخدم زر المساعدة (?) للمزيد.
+                    </p>
                     <button type="button" class="btn btn-sm btn-primary" id="pageTourDismiss">فهمت</button>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" id="pageTourClose"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"
+                    id="pageTourClose"></button>
             </div>
         </div>
         {% endif %}
