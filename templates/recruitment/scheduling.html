@@ -67,7 +67,7 @@
                                                         <select name="slot_id" class="form-select select2" required>
                                                             <option value="">-- Select Date & Time --</option>
                                                             {% for slot in available_slots %}
-                                                            <option value="{{ slot.SlotID }}">
+                                                            <option value="{{ slot.ScheduleID }}">
                                                                 {{ slot.SlotDate }} @ {{ slot.SlotTime }} ({{ slot.EvaluatorName or 'Any TA' }})
                                                             </option>
                                                             {% endfor %}

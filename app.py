@@ -833,11 +833,11 @@ def recruiter_scheduling():
     
     today = datetime.today().strftime('%Y-%m-%d')
     available_slots = query_db("""
-        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.EvaluatorID, U.Username as EvaluatorName
-        FROM TASchedules T
-        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-        WHERE T.SlotDate >= ? AND T.Status = 'Available'
-        ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username ASC
+        SELECT T.*, U.Username as EvaluatorName 
+        FROM Schedules T 
+        LEFT JOIN Users_1 U ON T.OwnerUserID = U.UserID 
+        WHERE Context='Talent_Recruitment' AND SlotDate >= ? AND Status = 'Available' 
+        ORDER BY SlotDate ASC, SlotTime ASC
     """, (today,))
     
     return render_template('recruitment/scheduling.html', candidates=candidates or [], available_slots=available_slots or [])
@@ -855,16 +855,11 @@ def recruiter_book_test():
         flash('Please select a valid time slot.', 'warning')
         return redirect(url_for('recruiter_scheduling'))
 
-    interview_type = 'Phone'
-    if mode == 'Online':
-        interview_type = 'Zoom'
-    elif mode == 'DoorToDoor':
-        interview_type = 'Onsite'
-
-    query_db(
-        "UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=? WHERE SlotID=? AND Status='Available'",
-        (cand_id, session['user_id'], interview_type, slot_id),
-    )
+    query_db("""
+        UPDATE Schedules 
+        SET BookedCandidateID = ?, Status = 'Booked', BookingMode = ?
+        WHERE ScheduleID = ? AND Status = 'Available' AND Context='Talent_Recruitment'
+    """, (cand_id, mode, slot_id))
     
     # Update Candidate Status
     query_db("UPDATE Candidates SET Status='Test Scheduled' WHERE CandidateID=?", (cand_id,))
@@ -1011,27 +1006,33 @@ def recruiter_workbench():
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_test_schedule():
     sql = """
-        SELECT T.*, C.FullName, C.Phone, C.SalesAgentID, U.Username as EvaluatorName
-        FROM TASchedules T
-        JOIN Candidates C ON T.CandidateID = C.CandidateID
-        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-        WHERE T.Status = 'Booked' 
-        AND T.SlotDate >= DATEADD(day, -30, GETDATE()) 
-        AND T.SlotDate <= DATEADD(day, 30, GETDATE())
-        ORDER BY T.SlotDate, T.SlotTime
+        SELECT S.ScheduleID, S.SlotDate, S.SlotTime, S.IsConfirmedByRecruiter,
+               C.FullName, C.Phone, C.SalesAgentID,
+               U.Username as EvaluatorName
+        FROM Schedules S
+        JOIN Candidates C ON S.BookedCandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON S.OwnerUserID = U.UserID
+        WHERE S.Context = 'Talent_Recruitment'
+          AND S.Status = 'Booked'
+          AND S.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
+          AND S.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
+        ORDER BY S.SlotDate, S.SlotTime
     """
 
     if session.get('role') == 'Recruiter':
         sql = """
-            SELECT T.*, C.FullName, C.Phone, C.SalesAgentID, U.Username as EvaluatorName
-            FROM TASchedules T
-            JOIN Candidates C ON T.CandidateID = C.CandidateID
-            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-            WHERE T.Status = 'Booked'
-            AND T.BookedBy = ?
-            AND T.SlotDate >= DATEADD(day, -30, GETDATE())
-            AND T.SlotDate <= DATEADD(day, 30, GETDATE())
-            ORDER BY T.SlotDate, T.SlotTime
+            SELECT S.ScheduleID, S.SlotDate, S.SlotTime, S.IsConfirmedByRecruiter,
+                   C.FullName, C.Phone, C.SalesAgentID,
+                   U.Username as EvaluatorName
+            FROM Schedules S
+            JOIN Candidates C ON S.BookedCandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON S.OwnerUserID = U.UserID
+            WHERE S.Context = 'Talent_Recruitment'
+              AND S.Status = 'Booked'
+              AND C.SalesAgentID = ?
+              AND S.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
+              AND S.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
+            ORDER BY S.SlotDate, S.SlotTime
         """
         tests = query_db(sql, (session['user_id'],))
     else:
@@ -1042,20 +1043,28 @@ def recruiter_test_schedule():
 @app.route('/recruiter/confirm_test', methods=['POST'])
 @login_required
 def recruiter_confirm_test():
-    slot_id = request.form.get('slot_id')
-    if not slot_id:
+    schedule_id = request.form.get('schedule_id')
+    if not schedule_id:
         flash('Missing slot_id.', 'danger')
         return redirect(url_for('recruiter_test_schedule'))
 
     is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
 
     if session.get('role') == 'Recruiter':
-        query_db(
-            "UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=? AND BookedBy=?",
-            (is_confirmed, slot_id, session['user_id']),
-        )
+        query_db("""
+            UPDATE Schedules
+            SET IsConfirmedByRecruiter=?
+            WHERE ScheduleID=?
+              AND Context='Talent_Recruitment'
+              AND EXISTS (
+                SELECT 1
+                FROM Candidates C
+                WHERE C.CandidateID = Schedules.BookedCandidateID
+                  AND C.SalesAgentID = ?
+              )
+        """, (is_confirmed, schedule_id, session['user_id']))
     else:
-        query_db("UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=?", (is_confirmed, slot_id))
+        query_db("UPDATE Schedules SET IsConfirmedByRecruiter=? WHERE ScheduleID=? AND Context='Talent_Recruitment'", (is_confirmed, schedule_id))
 
     flash('Attendance Status Updated', 'success')
     return redirect(url_for('recruiter_test_schedule'))
