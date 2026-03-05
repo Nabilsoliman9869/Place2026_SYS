@@ -150,4 +150,16 @@ BEGIN
     );
 END
 
+-- ========== 10. جدول TraineeSheetData (بيانات الأوراق لكل متدرب) ==========
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name = 'TraineeSheetData' AND xtype = 'U')
+BEGIN
+    CREATE TABLE TraineeSheetData (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        CandidateID INT NOT NULL,
+        SheetName NVARCHAR(100) NOT NULL,
+        JsonData NVARCHAR(MAX) NULL,
+        UpdatedAt DATETIME DEFAULT GETDATE() NULL
+    );
+END
+
 PRINT 'تم تنفيذ تصحيح الجداول والأعمدة بنجاح.';

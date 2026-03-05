@@ -185,6 +185,31 @@
         </div>
         {% endif %}
 
+        <!-- 2c. كل الحقول من جميع الأوراق (Guide Academy 2025) -->
+        {% if sheet_data_list %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-info"><i class="fas fa-file-excel"></i> بيانات من جميع الأوراق <small class="text-muted fs-6">كل الحقول التي تلامست مع المتدرب</small></h5>
+            </div>
+            <div class="card-body">
+                {% for sheet in sheet_data_list %}
+                <div class="mb-4">
+                    <h6 class="text-secondary border-bottom pb-1">{{ sheet.sheet_name }}</h6>
+                    {% for row in sheet.rows %}
+                    <table class="table table-bordered table-sm small mb-2">
+                        <tbody>
+                            {% for key in row %}
+                            <tr><td class="bg-light" style="width:30%">{{ key }}</td><td>{{ row[key] }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 3. Financial History -->
         <div class="card shadow-sm">
             <div class="card-header bg-white border-bottom-0">

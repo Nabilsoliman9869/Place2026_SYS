@@ -2762,6 +2762,20 @@ def candidate_profile(candidate_id):
     source_channel = cand.get('SourceChannel') if hasattr(cand, 'get') else getattr(cand, 'SourceChannel', None)
     placement_reason = cand.get('PlacementReason') if hasattr(cand, 'get') else getattr(cand, 'PlacementReason', None)
     marketing_assessment = cand.get('MarketingAssessment') if hasattr(cand, 'get') else getattr(cand, 'MarketingAssessment', None)
+    # كل حقول الأوراق (TraineeSheetData) — من Guide Academy 2025
+    sheet_data_list = []
+    try:
+        rows = query_db('SELECT SheetName, JsonData FROM TraineeSheetData WHERE CandidateID=? ORDER BY SheetName', (candidate_id,))
+        if rows:
+            import json
+            for r in rows:
+                try:
+                    data = json.loads(r['JsonData']) if r.get('JsonData') else []
+                    sheet_data_list.append({'sheet_name': r['SheetName'], 'rows': data if isinstance(data, list) else [data]})
+                except Exception:
+                    sheet_data_list.append({'sheet_name': r['SheetName'], 'rows': []})
+    except Exception:
+        pass
     return render_template(
         'profile.html',
         cand=cand,
@@ -2774,6 +2788,7 @@ def candidate_profile(candidate_id):
         source_channel=source_channel,
         placement_reason=placement_reason,
         marketing_assessment=marketing_assessment,
+        sheet_data_list=sheet_data_list,
     )
 
 @app.route('/admin/users')
