@@ -1194,8 +1194,7 @@ def dashboard():
     if role == 'Sales': return redirect(url_for('sales_index'))
     
     # --- 5. Training Department ---
-    if role in ['TrainingManager', 'TrainingLead']: return redirect(url_for('training_index'))
-    if role == 'TrainingCoordinator': return redirect(url_for('training_index')) # Or attendance
+    if role in ['TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']: return redirect(url_for('training_index'))
     if role == 'Trainer': return redirect(url_for('training_attendance'))
     
     # --- 6. Talent Acquisition (Testing) ---

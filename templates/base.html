@@ -353,14 +353,19 @@
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- TRAINING DEPARTMENT -->
+            <!-- TRAINING DEPARTMENT (الهيكل: مدير، رئيس، قائد، منسق، مدرب) -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'Trainer']) %}
-            <div class="sidebar-section-label">Training</div>
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'Trainer']) %}
+            <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
             <a href="{{ url_for('training_index') }}"
-                class="nav-link {{ 'active' if request.endpoint.startswith('training_') else '' }}">
-                <i class="fas fa-chalkboard-teacher"></i>
+                class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
+                <i class="fas fa-graduation-cap"></i>
                 <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
+            </a>
+            <a href="{{ url_for('training_attendance') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
+                <i class="fas fa-clipboard-check"></i>
+                <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
             </a>
             {% endif %}
 

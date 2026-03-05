@@ -74,51 +74,37 @@
             </div>
         </div>
 
-        <!-- SECTOR 2: TRAINING (Orange) -->
+        <!-- SECTOR 2: TRAINING (Orange) - الهيكل: مدير، رئيس، قائد، منسق، مدرب -->
         <div class="col-lg-5">
             <div class="card h-100 border-0 shadow-sm" style="border-top: 5px solid #fd7e14 !important;">
                 <div class="card-header bg-white py-3">
-                    <h5 class="fw-bold text-warning mb-0" style="color: #fd7e14 !important;"><i class="fas fa-chalkboard-teacher me-2"></i> Training Sector</h5>
+                    <h5 class="fw-bold text-warning mb-0" style="color: #fd7e14 !important;"><i class="fas fa-chalkboard-teacher me-2"></i> Training Sector <small class="text-muted">قطاع التدريب</small></h5>
                 </div>
                 <div class="card-body">
-                     <!-- Workflow Flowchart Representation -->
+                     <!-- الهيكل الإداري: 5 مستويات -->
                      <div class="d-flex flex-column gap-3">
                         
-                        <!-- Level 1: Management -->
+                        <!-- المستوى 1: مدير التدريب -->
                         <div class="d-flex justify-content-center">
                             <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark fw-bold w-100 py-3 position-relative" style="border-color: #fd7e14;">
-                                <i class="fas fa-graduation-cap d-block fs-4 mb-2"></i> Training & L&D Manager
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success">
-                                    {{ stats.batches }}
-                                </span>
+                                <i class="fas fa-graduation-cap d-block fs-4 mb-2"></i> TrainingManager <span class="arabic-sub small">مدير التدريب</span>
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success">{{ stats.batches }}</span>
                             </a>
                         </div>
+                        <div class="text-center text-muted small"><i class="fas fa-arrow-down"></i></div>
 
-                        <!-- Level 2: Lead -->
-                        <div class="text-center text-muted"><i class="fas fa-arrow-down"></i></div>
-                        
-                        <div class="d-flex justify-content-center gap-2">
-                            <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark w-100 py-2">
-                                <i class="fas fa-layer-group me-2"></i> Training Lead
-                            </a>
-                            <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark w-100 py-2">
-                                <i class="fas fa-clipboard-list me-2"></i> Coordinator
-                            </a>
+                        <!-- المستوى 2: رئيس القسم + قائد + منسق -->
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark py-2" style="border-color: #fd7e14;"><i class="fas fa-user-tie me-1"></i> TrainingHead</a>
+                            <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark py-2" style="border-color: #fd7e14;"><i class="fas fa-layer-group me-1"></i> TrainingLead</a>
+                            <a href="{{ url_for('training_index') }}" class="btn btn-outline-warning text-dark py-2" style="border-color: #fd7e14;"><i class="fas fa-clipboard-list me-1"></i> TrainingCoordinator</a>
                         </div>
+                        <div class="text-center text-muted small"><i class="fas fa-arrow-down"></i></div>
 
-                        <!-- Level 3: Execution -->
-                        <div class="text-center text-muted"><i class="fas fa-arrow-down"></i></div>
-
-                        <div class="d-flex justify-content-center gap-2">
-                            <a href="{{ url_for('training_index') }}" class="btn btn-warning text-white w-100 py-2" style="background-color: #fd7e14;">
-                                <i class="fas fa-chalkboard me-2"></i> Trainer
-                            </a>
-                            <a href="{{ url_for('talent_dashboard') }}" class="btn btn-secondary w-100 py-2">
-                                <i class="fas fa-user-check me-2"></i> TA - Training
-                            </a>
-                            <a href="{{ url_for('sales_index') }}" class="btn btn-success w-100 py-2">
-                                <i class="fas fa-dollar-sign me-2"></i> Sales
-                            </a>
+                        <!-- المستوى 3: المدرب (تنفيذي — يبدأ من الحضور) -->
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <a href="{{ url_for('training_attendance') }}" class="btn btn-warning text-white py-2" style="background-color: #fd7e14;"><i class="fas fa-chalkboard me-1"></i> Trainer <span class="small">مدرب</span></a>
+                            <a href="{{ url_for('talent_dashboard') }}" class="btn btn-secondary py-2"><i class="fas fa-user-check me-1"></i> TA-Training</a>
                         </div>
 
                     </div>
