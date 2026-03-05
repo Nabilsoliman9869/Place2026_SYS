@@ -2788,8 +2788,19 @@ def training_index():
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_course():
     f = request.form
-    query_db("INSERT INTO Courses (CourseName, DefaultPrice) VALUES (?, ?)", (f['course_name'], f['default_price']))
-    flash('Course Added', 'success')
+    name = (f.get('course_name') or '').strip()
+    if not name:
+        flash('اسم الدورة مطلوب.', 'danger')
+        return redirect(url_for('training_index'))
+    try:
+        price = float(f.get('default_price') or 0)
+    except (TypeError, ValueError):
+        price = 0
+    try:
+        query_db("INSERT INTO Courses (CourseName, DefaultPrice) VALUES (?, ?)", (name, price))
+        flash('تمت إضافة الدورة بنجاح.', 'success')
+    except Exception as e:
+        flash('خطأ عند حفظ الدورة: ' + str(e)[:80], 'danger')
     return redirect(url_for('training_index'))
 
 @app.route('/training/add_trainer', methods=['POST'])
@@ -2797,8 +2808,17 @@ def add_course():
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_trainer():
     f = request.form
-    query_db("INSERT INTO Trainers (FullName, Specialization, Phone) VALUES (?, ?, ?)", (f['full_name'], f['specialization'], f['phone']))
-    flash('Trainer Added', 'success')
+    full_name = (f.get('full_name') or '').strip()
+    if not full_name:
+        flash('اسم المدرب مطلوب.', 'danger')
+        return redirect(url_for('training_index'))
+    spec = (f.get('specialization') or '').strip() or None
+    phone = (f.get('phone') or '').strip() or None
+    try:
+        query_db("INSERT INTO Trainers (FullName, Specialization, Phone) VALUES (?, ?, ?)", (full_name, spec, phone))
+        flash('تمت إضافة المدرب بنجاح.', 'success')
+    except Exception as e:
+        flash('خطأ عند حفظ المدرب: ' + str(e)[:80], 'danger')
     return redirect(url_for('training_index'))
 
 @app.route('/training/add_classroom', methods=['POST'])
@@ -2806,8 +2826,26 @@ def add_trainer():
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_classroom():
     f = request.form
-    query_db("INSERT INTO Classrooms (RoomName, Capacity) VALUES (?, ?)", (f['room_name'], f['capacity']))
-    flash('Classroom Added', 'success')
+    room_name = (f.get('room_name') or '').strip()
+    if not room_name:
+        flash('اسم القاعة مطلوب.', 'danger')
+        return redirect(url_for('training_index'))
+    # منع التكرار: نفس الاسم (بدون تمييز حالة)
+    existing = query_db("SELECT RoomID FROM Classrooms WHERE LTRIM(RTRIM(RoomName)) = ?", (room_name.strip(),), one=True)
+    if existing:
+        flash('قاعة بنفس الاسم مسجلة مسبقاً. اختر اسماً آخر أو استخدم القائمة في تكوين الدفعة.', 'warning')
+        return redirect(url_for('training_index'))
+    try:
+        capacity = int(f.get('capacity') or 20)
+        if capacity < 1:
+            capacity = 20
+    except (TypeError, ValueError):
+        capacity = 20
+    try:
+        query_db("INSERT INTO Classrooms (RoomName, Capacity) VALUES (?, ?)", (room_name, capacity))
+        flash('تمت إضافة القاعة بنجاح. ستظهر في قائمة «تكوين دفعة».', 'success')
+    except Exception as e:
+        flash('خطأ عند حفظ القاعة: ' + str(e)[:80], 'danger')
     return redirect(url_for('training_index'))
 
 @app.route('/training/add_batch', methods=['POST'])
