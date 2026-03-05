@@ -272,17 +272,38 @@
             </a>
 
             <!-- ============================================= -->
-            <!-- RECRUITMENT HIERARCHY -->
+            <!-- التسويق: للمدير ومدير التسويق فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'AccountManager', 'RecruitmentManager']) %}
-            <div class="sidebar-section-label">Account Management</div>
+            {% if check_role_access(['Manager', 'Marketing']) %}
+            <div class="sidebar-section-label">Marketing <span class="arabic-sub">قطاع التسويق</span></div>
+            <a href="{{ url_for('daily_marketing_sheet') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'daily_marketing_sheet' else '' }}">
+                <i class="fas fa-bullhorn"></i>
+                <span class="link-text">Daily Sheet <span class="arabic-sub">الورقة اليومية</span></span>
+            </a>
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- المبيعات: للمدير ومندوب المبيعات فقط -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'Sales']) %}
+            <div class="sidebar-section-label">Sales <span class="arabic-sub">قطاع المبيعات</span></div>
+            <a href="{{ url_for('sales_index') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'sales_index' else '' }}">
+                <i class="fas fa-hand-holding-usd"></i>
+                <span class="link-text">Sales Dashboard <span class="arabic-sub">لوحة المبيعات</span></span>
+            </a>
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- مدير الحسابات: للمدير و Account Manager فقط -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'AccountManager']) %}
+            <div class="sidebar-section-label">Account Management <span class="arabic-sub">إدارة الحسابات</span></div>
             <a href="{{ url_for('manage_clients') }}" class="nav-link">
                 <i class="fas fa-building"></i>
                 <span class="link-text">Define Client <span class="arabic-sub">تعريف عميل</span></span>
             </a>
-            {% endif %}
-
-            {% if check_role_access(['Manager', 'AccountManager']) %}
             <a href="{{ url_for('manage_requests') }}" class="nav-link">
                 <i class="fas fa-file-signature"></i>
                 <span class="link-text">Job Orders <span class="arabic-sub">الطلبات</span></span>
@@ -301,9 +322,13 @@
             </a>
             {% endif %}
 
+            <!-- ============================================= -->
+            <!-- الترشيح (Allocation): للمدير والمسكّن فقط -->
+            <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist']) %}
-            <div class="sidebar-section-label">Allocation</div>
-            <a href="{{ url_for('allocation_matching') }}" class="nav-link">
+            <div class="sidebar-section-label">Allocation <span class="arabic-sub">الترشيح</span></div>
+            <a href="{{ url_for('allocation_matching') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'allocation_matching' else '' }}">
                 <i class="fas fa-random"></i>
                 <span class="link-text">Matching Center <span class="arabic-sub">مركز المطابقة</span></span>
             </a>
@@ -313,18 +338,17 @@
                 <span class="link-text">Manager Dash</span>
             </a>
             {% endif %}
-            {% endif %}
-
-            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist']) %}
-            <div class="sidebar-section-label">Specialist</div>
             <a href="{{ url_for('match_candidates') }}" class="nav-link">
                 <i class="fas fa-people-arrows"></i>
                 <span class="link-text">Matching <span class="arabic-sub">مطابقة</span></span>
             </a>
             {% endif %}
 
-            {% if check_role_access(['Manager', 'Recruiter']) %}
-            <div class="sidebar-section-label">Recruiter</div>
+            <!-- ============================================= -->
+            <!-- التوظيف (Recruiter): للمدير ومسؤول التوظيف فقط -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'Recruiter', 'RecruitmentManager']) %}
+            <div class="sidebar-section-label">Recruitment <span class="arabic-sub">قطاع التوظيف</span></div>
             <a href="{{ url_for('recruiter_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_dashboard' else '' }}">
                 <i class="fas fa-tachometer-alt"></i>
@@ -353,7 +377,7 @@
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- TRAINING DEPARTMENT (الهيكل: مدير، رئيس، قائد، منسق، مدرب) -->
+            <!-- التدريب: مدير/رئيس/قائد/منسق = الأكاديمية فقط؛ المدرب = أكاديمية + الحضور -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'Trainer']) %}
             <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
@@ -362,26 +386,20 @@
                 <i class="fas fa-graduation-cap"></i>
                 <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
             </a>
+            {% if check_role_access(['Manager', 'Trainer']) %}
             <a href="{{ url_for('training_attendance') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
                 <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
             </a>
             {% endif %}
-
-            <!-- TA - Training -->
-            {% if check_role_access(['Manager', 'TA-Training']) %}
-            <a href="{{ url_for('talent_conduct_test') }}" class="nav-link">
-                <i class="fas fa-vial"></i>
-                <span class="link-text">Placement Tests</span>
-            </a>
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- TALENT CENTER -->
+            <!-- المواهب (TA): للمدير ومختبر المواهب فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment']) %}
-            <div class="sidebar-section-label">Talent Center</div>
+            {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment', 'TA-Training']) %}
+            <div class="sidebar-section-label">Talent Center <span class="arabic-sub">المواهب</span></div>
             <a href="{{ url_for('talent_conduct_test') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_conduct_test' else '' }}">
                 <i class="fas fa-vial"></i>
@@ -389,8 +407,23 @@
             </a>
             {% endif %}
 
+            <!-- ============================================= -->
+            <!-- المالية: للمدير و Finance فقط -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'Finance']) %}
+            <div class="sidebar-section-label">Finance <span class="arabic-sub">المالية</span></div>
+            <a href="{{ url_for('finance_index') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="link-text">Finance <span class="arabic-sub">الحسابات</span></span>
+            </a>
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- إدارة المستخدمين: للمدير و Admin فقط -->
+            <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Admin']) %}
-            <div class="sidebar-section-label">Admin</div>
+            <div class="sidebar-section-label">Admin <span class="arabic-sub">الإدارة</span></div>
             <a href="{{ url_for('manage_users') }}" class="nav-link">
                 <i class="fas fa-user-shield"></i>
                 <span class="link-text">Users</span>

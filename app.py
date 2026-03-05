@@ -1193,6 +1193,10 @@ def dashboard():
     # --- 4. Sales ---
     if role == 'Sales': return redirect(url_for('sales_index'))
     
+    # --- 4b. Marketing & Finance (حسب الهيكل) ---
+    if role == 'Marketing': return redirect(url_for('daily_marketing_sheet'))
+    if role == 'Finance': return redirect(url_for('finance_index'))
+    
     # --- 5. Training Department ---
     if role in ['TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']: return redirect(url_for('training_index'))
     if role == 'Trainer': return redirect(url_for('training_attendance'))
@@ -2781,6 +2785,7 @@ def training_index():
 
 @app.route('/training/add_course', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_course():
     f = request.form
     query_db("INSERT INTO Courses (CourseName, DefaultPrice) VALUES (?, ?)", (f['course_name'], f['default_price']))
@@ -2789,6 +2794,7 @@ def add_course():
 
 @app.route('/training/add_trainer', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_trainer():
     f = request.form
     query_db("INSERT INTO Trainers (FullName, Specialization, Phone) VALUES (?, ?, ?)", (f['full_name'], f['specialization'], f['phone']))
@@ -2797,6 +2803,7 @@ def add_trainer():
 
 @app.route('/training/add_classroom', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_classroom():
     f = request.form
     query_db("INSERT INTO Classrooms (RoomName, Capacity) VALUES (?, ?)", (f['room_name'], f['capacity']))

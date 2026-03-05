@@ -11,6 +11,28 @@
     </div>
 </div>
 
+<!-- إعداد الأكاديمية: لمدير/رئيس/قائد/منسق فقط (أول خطوة في التجربة لـ train_mgr) -->
+{% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'] %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="fas fa-cogs text-secondary me-2"></i> إعداد الأكاديمية <span class="text-muted small">(إنشاء دورة ثم دفعة)</span></h6>
+    </div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCourseModal">
+                <i class="fas fa-book me-1"></i> إنشاء دورة
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#addTrainerModal">
+                <i class="fas fa-user-tie me-1"></i> إضافة مدرب
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#addClassroomModal">
+                <i class="fas fa-door-open me-1"></i> إضافة قاعة
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="card shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Active Waves (الدفعات النشطة)</h5>
@@ -102,6 +124,80 @@
                     </div>
                 </div>
                 <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: إنشاء دورة -->
+<div class="modal fade" id="addCourseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('add_course') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">إنشاء دورة <span class="small text-muted">(أول خطوة)</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">اسم الدورة</label>
+                    <input type="text" name="course_name" class="form-control mb-2" required placeholder="مثال: لغة إنجليزية - B1">
+                    <label class="form-label">السعر الافتراضي (EGP)</label>
+                    <input type="number" name="default_price" class="form-control" value="0" min="0" step="1">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: إضافة مدرب -->
+<div class="modal fade" id="addTrainerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('add_trainer') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة مدرب</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">الاسم</label>
+                    <input type="text" name="full_name" class="form-control mb-2" required>
+                    <label class="form-label">التخصص</label>
+                    <input type="text" name="specialization" class="form-control mb-2" placeholder="مثال: لغة إنجليزية">
+                    <label class="form-label">الهاتف</label>
+                    <input type="text" name="phone" class="form-control">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: إضافة قاعة -->
+<div class="modal fade" id="addClassroomModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('add_classroom') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة قاعة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">اسم القاعة</label>
+                    <input type="text" name="room_name" class="form-control mb-2" required placeholder="مثال: قاعة أ">
+                    <label class="form-label">السعة (عدد المقاعد)</label>
+                    <input type="number" name="capacity" class="form-control" value="20" min="1">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                </div>
             </form>
         </div>
     </div>
