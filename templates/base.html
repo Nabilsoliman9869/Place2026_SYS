@@ -432,7 +432,12 @@
 
             <div class="mt-auto">
                 <hr class="border-secondary mx-3">
-                <a href="{{ url_for('global_search') }}" class="nav-link">
+                <!-- ملف المتدرب: متاح لجميع المستخدمين من كل نوافذ النظام -->
+                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ابحث وافتح ملف المتدرب">
+                    <i class="fas fa-folder-open"></i>
+                    <span class="link-text">ملف متدرب <span class="arabic-sub">بحث وفتح الملف</span></span>
+                </a>
+                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}">
                     <i class="fas fa-search"></i>
                     <span class="link-text">Global Search</span>
                 </a>

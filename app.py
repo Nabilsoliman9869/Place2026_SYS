@@ -2707,7 +2707,8 @@ def global_search():
 @login_required
 def candidate_profile(candidate_id):
     cand = query_db("SELECT * FROM Candidates WHERE CandidateID=?", (candidate_id,), one=True)
-    if not cand: return "Candidate not found", 404
+    if not cand:
+        return "Candidate not found", 404
     training = query_db('''
         SELECT E.*, B.BatchName, C.CourseName, B.StartDate, B.EndDate
         FROM Enrollments E
@@ -2728,7 +2729,52 @@ def candidate_profile(candidate_id):
         WHERE M.CandidateID = ?
         ORDER BY M.MatchDate DESC
     ''', (candidate_id,))
-    return render_template('profile.html', cand=cand, training=training or [], payments=payments or [], matches=matches or [])
+    # ملف المتدرب الكامل: مصدر، تقييم أولي، حضور (استعلامات آمنة)
+    recruiter_name = None
+    if cand.get('SalesAgentID'):
+        try:
+            r = query_db('SELECT FullName FROM Users_1 WHERE UserID = ?', (cand['SalesAgentID'],), one=True)
+            if r and r.get('FullName'):
+                recruiter_name = r['FullName']
+        except Exception:
+            pass
+    placement_tests = []
+    try:
+        placement_tests = query_db(
+            'SELECT TestID, TestDate, ResultLevel, TestStatus, PaymentStatus, Notes FROM PlacementTests WHERE CandidateID = ? ORDER BY TestDate DESC',
+            (candidate_id,)
+        ) or []
+    except Exception:
+        pass
+    attendance_list = []
+    try:
+        attendance_list = query_db('''
+            SELECT A.Date, A.Status, B.BatchName
+            FROM Attendance A
+            JOIN Enrollments E ON A.EnrollmentID = E.EnrollmentID
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            WHERE E.CandidateID = ?
+            ORDER BY A.Date DESC
+        ''', (candidate_id,)) or []
+    except Exception:
+        pass
+    # حقول قد لا تكون موجودة في كل قواعد البيانات
+    source_channel = cand.get('SourceChannel') if hasattr(cand, 'get') else getattr(cand, 'SourceChannel', None)
+    placement_reason = cand.get('PlacementReason') if hasattr(cand, 'get') else getattr(cand, 'PlacementReason', None)
+    marketing_assessment = cand.get('MarketingAssessment') if hasattr(cand, 'get') else getattr(cand, 'MarketingAssessment', None)
+    return render_template(
+        'profile.html',
+        cand=cand,
+        training=training or [],
+        payments=payments or [],
+        matches=matches or [],
+        recruiter_name=recruiter_name,
+        placement_tests=placement_tests,
+        attendance_list=attendance_list,
+        source_channel=source_channel,
+        placement_reason=placement_reason,
+        marketing_assessment=marketing_assessment,
+    )
 
 @app.route('/admin/users')
 @login_required

@@ -49,6 +49,45 @@
     <!-- Timeline & Details -->
     <div class="col-md-8">
 
+        <!-- 0. المصدر وقناة الاستقطاب -->
+        {% if recruiter_name or source_channel or placement_reason or marketing_assessment %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-info"><i class="fas fa-user-tag"></i> المصدر وقناة الاستقطاب</h5>
+            </div>
+            <div class="card-body small">
+                {% if recruiter_name %}<p class="mb-1"><strong>المُوظّف / المرشّح:</strong> {{ recruiter_name }}</p>{% endif %}
+                {% if source_channel %}<p class="mb-1"><strong>قناة المصدر:</strong> {{ source_channel }}</p>{% endif %}
+                {% if placement_reason %}<p class="mb-1"><strong>سبب التنسيب:</strong> {{ placement_reason }}</p>{% endif %}
+                {% if marketing_assessment %}<p class="mb-1"><strong>تقييم التسويق:</strong> {{ marketing_assessment }}</p>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 0b. التقييم الأولي (اختبار تحديد المستوى) -->
+        {% if placement_tests %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-secondary"><i class="fas fa-clipboard-check"></i> التقييم الأولي <small class="text-muted fs-6">اختبار تحديد المستوى</small></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>التاريخ</th><th>المستوى / النتيجة</th><th>الحالة</th><th>ملاحظات</th></tr></thead>
+                    <tbody>
+                        {% for pt in placement_tests %}
+                        <tr>
+                            <td>{{ pt.TestDate.strftime('%Y-%m-%d') if pt.TestDate else '-' }}</td>
+                            <td>{{ pt.ResultLevel or '-' }}</td>
+                            <td><span class="badge bg-{{ 'success' if pt.TestStatus == 'Completed' else 'warning' }}">{{ pt.TestStatus or '-' }}</span></td>
+                            <td>{{ pt.Notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 1. Training Journey -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
@@ -122,6 +161,29 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- 2b. الحضور -->
+        {% if attendance_list %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-secondary"><i class="fas fa-calendar-check"></i> الحضور <small class="text-muted fs-6">سجل الحضور والغياب</small></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>التاريخ</th><th>الدفعة</th><th>الحالة</th></tr></thead>
+                    <tbody>
+                        {% for a in attendance_list %}
+                        <tr>
+                            <td>{{ a.Date.strftime('%Y-%m-%d') if a.Date else '-' }}</td>
+                            <td>{{ a.BatchName or '-' }}</td>
+                            <td><span class="badge bg-{{ 'success' if a.Status == 'Present' else 'danger' if a.Status == 'Absent' else 'secondary' }}">{{ a.Status or '-' }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- 3. Financial History -->
         <div class="card shadow-sm">
