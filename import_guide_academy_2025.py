@@ -17,6 +17,10 @@ try:
 except ImportError:
     print("ثبّت openpyxl: pip install openpyxl")
     sys.exit(1)
+try:
+    import pyodbc
+except ImportError:
+    pyodbc = None
 
 # مسار الملف
 BASE = os.path.dirname(os.path.abspath(__file__))

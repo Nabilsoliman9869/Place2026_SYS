@@ -432,6 +432,11 @@
 
             <div class="mt-auto">
                 <hr class="border-secondary mx-3">
+                <!-- استعراض الدورات والمدربين والفصول والدفعات — متاح لجميع المستخدمين -->
+                <a href="{{ url_for('browse_academy') }}" class="nav-link {{ 'active' if request.endpoint == 'browse_academy' else '' }}" title="الدورات، المدربون، الفصول، الدفعات">
+                    <i class="fas fa-th-list"></i>
+                    <span class="link-text">استعراض <span class="arabic-sub">دورات، مدربين، فصول، دفعات</span></span>
+                </a>
                 <!-- ملف المتدرب: متاح لجميع المستخدمين من كل نوافذ النظام -->
                 <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ابحث وافتح ملف المتدرب">
                     <i class="fas fa-folder-open"></i>

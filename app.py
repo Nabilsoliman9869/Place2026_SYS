@@ -2823,6 +2823,25 @@ def delete_user(user_id):
         query_db("DELETE FROM Users_1 WHERE UserID=?", (user_id,))
         flash('User deleted', 'success')
     return redirect(url_for('manage_users'))
+@app.route('/browse')
+@login_required
+def browse_academy():
+    """استعراض الدورات، المدربين، الفصول، الدفعات — متاح لجميع المستخدمين."""
+    courses = query_db("SELECT * FROM Courses ORDER BY CourseName")
+    trainers = query_db("SELECT * FROM Trainers ORDER BY FullName")
+    classrooms = query_db("SELECT * FROM Classrooms ORDER BY RoomName")
+    batches = query_db("""
+        SELECT B.BatchID, B.BatchName, B.StartDate, B.EndDate, B.Status,
+               C.CourseName, T.FullName as TrainerName, R.RoomName
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        ORDER BY B.StartDate DESC, B.BatchName
+    """)
+    return render_template('browse.html', courses=courses or [], trainers=trainers or [], classrooms=classrooms or [], batches=batches or [])
+
+
 @app.route('/training/index')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator'])
