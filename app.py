@@ -2846,14 +2846,14 @@ def browse_academy():
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator'])
 def training_index():
-    # Show active waves (classes)
+    # عرض كل الدفعات (نشطة ومخططة) لاستعراضها وفتح التفاصيل
     waves = query_db("""
         SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName 
         FROM CourseBatches B 
         JOIN Courses C ON B.CourseID = C.CourseID 
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID 
         LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
-        WHERE B.Status='Active'
+        ORDER BY B.StartDate DESC, B.BatchName
     """)
     
     # Also fetch definitions for the tabs
@@ -2953,7 +2953,7 @@ def add_batch():
 
 @app.route('/training/wave/<int:wave_id>')
 @login_required
-@role_required(['Trainer', 'Manager'])
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def wave_details(wave_id):
     wave = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE BatchID=?", (wave_id,), one=True)
     if not wave: return "Wave not found", 404

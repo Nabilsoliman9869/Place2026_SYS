@@ -53,15 +53,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for wave in waves %}
+                {% if not batches %}
+                <tr><td colspan="6" class="text-muted text-center py-4">لا توجد دفعات. أنشئ دفعة من زر <strong>New Wave</strong> أعلاه.</td></tr>
+                {% endif %}
+                {% for wave in batches %}
                 <tr>
                     <td class="fw-bold">{{ wave.BatchName }}</td>
                     <td>{{ wave.CourseName }}</td>
                     <td>{{ wave.TrainerName or '-' }}</td>
                     <td>{{ wave.RoomName or '-' }}</td>
                     <td>
-                        <small class="d-block">{{ wave.StartDate }}</small>
-                        <small class="text-muted">{{ wave.EndDate }}</small>
+                        <small class="d-block">{{ wave.StartDate or '-' }}</small>
+                        <small class="text-muted">{{ wave.EndDate or '-' }}</small>
                     </td>
                     <td>
                         <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">
