@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 from markupsafe import Markup
-import pyodbc
 import functools
 import os
 import sys
@@ -129,11 +128,15 @@ def get_db_connection_string():
         password = config.get("password", "")
         return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=60;'
 
+def _pyodbc():
+    import pyodbc
+    return pyodbc
+
 def get_db():
     if 'db' not in g:
         try:
             # Added Connection Timeout for faster failure on bad networks
-            g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
+            g.db = _pyodbc().connect(get_db_connection_string(), timeout=5)
         except Exception as e:
             g.db_error = str(e)
             g.db = None
@@ -745,7 +748,7 @@ def test_connection():
         conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};UID={temp_config["username"]};PWD={temp_config["password"]}'
         
     try:
-        conn = pyodbc.connect(conn_str, timeout=5)
+        conn = _pyodbc().connect(conn_str, timeout=5)
         conn.close()
         flash('Connection Successful!', 'success')
     except Exception as e:
