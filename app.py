@@ -6,24 +6,17 @@ import sys
 import json
 import time
 import logging
-from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
 app = Flask(__name__)
 
 # --- Performance Logging Setup ---
-# Configure logger to write to 'performance.log'. On read-only FS (e.g. Render), fallback to stderr.
+# Stderr only at load (no file) so Worker can boot on Render; avoid RotatingFileHandler at import.
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-try:
-    handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
-    handler.setFormatter(formatter)
-    perf_logger.addHandler(handler)
-except Exception:
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(formatter)
-    perf_logger.addHandler(handler)
+_h = logging.StreamHandler(sys.stderr)
+_h.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s'))
+perf_logger.addHandler(_h)
 
 @app.before_request
 def start_timer():
