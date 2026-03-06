@@ -164,6 +164,25 @@ def close_connection(exception):
     db = g.pop('db', None)
     if db is not None: db.close()
 
+def ensure_training_users():
+    """إنشاء مستخدمي التدريب (منسق، مدرب، إلخ) إن لم يكونوا موجودين — مفيد بعد النشر."""
+    training_users = [
+        ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
+        ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
+        ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
+        ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
+        ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
+        ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
+        ('trainer1', '123', 'Trainer', 'مدرب'),
+    ]
+    for u in training_users:
+        try:
+            existing = query_db('SELECT UserID FROM Users_1 WHERE Username = ?', (u[0],), one=True)
+            if not existing:
+                query_db("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES (?,?,?,?)", u)
+        except Exception:
+            pass
+
 def query_db(query, args=(), one=False):
     db = get_db()
     if db is None: return None
@@ -642,13 +661,15 @@ def init_system():
 
         # Ensure Training roles exist (for Academy / enroll flow)
         training_users = [
-            ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
-            ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
-            ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
-            ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
-            ('trainer1', '123', 'Trainer', 'مدرب'),
-        ]
-        for u in training_users:
+        ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
+        ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
+        ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
+        ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
+        ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
+        ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
+        ('trainer1', '123', 'Trainer', 'مدرب'),
+    ]
+    for u in training_users:
             cursor.execute("SELECT UserID FROM Users_1 WHERE Username = ?", (u[0],))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES (?,?,?,?)", u)
@@ -744,6 +765,15 @@ def login():
 
         try:
             user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
+            if user is None and username in ('train_coord', 'trainer1', 'train_mgr', 'train_head', 'train_lead', 'train_sales', 'ta_train'):
+                ensure_training_users()
+                user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
+                if user is None and username == 'train_sales':
+                    try:
+                        query_db("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES ('train_sales', '123', 'TrainingSales', N'مبيعات التدريب')")
+                        user = query_db('SELECT * FROM Users_1 WHERE Username = ?', ('train_sales',), one=True)
+                    except Exception:
+                        pass
         except: user = None
         
         if user is None:
@@ -1212,11 +1242,13 @@ def dashboard():
     if role == 'Finance': return redirect(url_for('finance_index'))
     
     # --- 5. Training Department ---
+    if role == 'TrainingSales': return redirect(url_for('training_sales_index'))
     if role in ['TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']: return redirect(url_for('training_index'))
     if role == 'Trainer': return redirect(url_for('training_attendance'))
     
     # --- 6. Talent Acquisition (Testing) ---
-    if role in ['Talent', 'TA-Training', 'Talent_Recruitment']: return redirect(url_for('talent_conduct_test'))
+    if role in ['Talent_Training', 'TA-Training']: return redirect(url_for('talent_dashboard'))
+    if role in ['Talent', 'Talent_Recruitment']: return redirect(url_for('talent_conduct_test'))
 
     # --- 7. Top Management (Fall-through) ---
     # If Manager/Admin, show the Central Command Center
@@ -1651,7 +1683,7 @@ def accounting_issue_invoice():
 
 @app.route('/talent/dashboard')
 @login_required
-@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training'])
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_dashboard():
     if 'role' not in session: return redirect(url_for('login'))
     user_id = session['user_id']
@@ -1678,7 +1710,7 @@ def talent_dashboard():
 
 @app.route('/talent/cancel_slot', methods=['POST'])
 @login_required
-@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training'])
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_cancel_slot():
     slot_id = request.form['slot_id']
     # Reset slot
@@ -1705,7 +1737,7 @@ def talent_evaluate(slot_id):
     # Determine Evaluation Type based on Evaluator Role or Slot Context
     eval_type = 'General'
     if session['role'] == 'Talent_Recruitment': eval_type = 'Recruitment'
-    elif session['role'] == 'Talent_Training': eval_type = 'Training'
+    elif session['role'] in ('Talent_Training', 'TA-Training'): eval_type = 'Training'
     
     if request.method == 'POST':
         f = request.form
@@ -1781,7 +1813,7 @@ def mark_no_show():
     return redirect(url_for('talent_dashboard'))
 @app.route('/talent/block_slot', methods=['POST'])
 @login_required
-@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training'])
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def block_ta_slot():
     # Allow TA to block their own slots
     slot_id = request.form['slot_id']
@@ -2856,9 +2888,96 @@ def browse_academy():
     return render_template('browse.html', courses=courses or [], trainers=trainers or [], classrooms=classrooms or [], batches=batches or [])
 
 
+# --- مبيعات التدريب (محاكاة مبيعات التوظيف): تسجيل مهتم تدريب، حجز موعد اختبار مواهب تدريب ---
+@app.route('/training/sales')
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_index():
+    """لوحة مبيعات التدريب: تسجيل مهتم تدريب، قائمة المهتمين، حجز موعد اختبار مواهب تدريب."""
+    # مهتمو التدريب: مرشحون PrimaryIntent='Training' أو Status='Training_Lead'
+    try:
+        training_leads = query_db("""
+            SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CreatedAt, C.PrimaryIntent
+            FROM Candidates C
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            ORDER BY C.CreatedAt DESC
+        """)
+    except Exception:
+        training_leads = []
+    return render_template('training/sales_index.html', training_leads=training_leads or [])
+
+
+@app.route('/training/sales/register', methods=['POST'])
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_register():
+    """تسجيل مهتم تدريب (تعريف المهتم لأول مرة)."""
+    f = request.form
+    full_name = (f.get('full_name') or '').strip()
+    phone = (f.get('phone') or '').strip()
+    email = (f.get('email') or '').strip() or None
+    if not full_name or not phone:
+        flash('الاسم ورقم الهاتف مطلوبان.', 'danger')
+        return redirect(url_for('training_sales_index'))
+    try:
+        query_db("""
+            INSERT INTO Candidates (FullName, Phone, Email, Status, CreatedAt, PrimaryIntent, SalesAgentID)
+            VALUES (?, ?, ?, 'Training_Lead', GETDATE(), 'Training', ?)
+        """, (full_name, phone, email, session.get('user_id')))
+        flash('تم تسجيل مهتم التدريب بنجاح.', 'success')
+    except Exception:
+        try:
+            query_db("""
+                INSERT INTO Candidates (FullName, Phone, Email, Status, CreatedAt)
+                VALUES (?, ?, ?, 'Training_Lead', GETDATE())
+            """, (full_name, phone, email))
+            flash('تم تسجيل مهتم التدريب بنجاح.', 'success')
+        except Exception as e:
+            flash('خطأ عند التسجيل: ' + str(e)[:80], 'danger')
+    return redirect(url_for('training_sales_index'))
+
+
+@app.route('/training/sales/book/<int:candidate_id>', methods=['GET', 'POST'])
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_book_slot(candidate_id):
+    """حجز موعد اختبار مواهب تدريب لمهتم (عرض شاغر لمختبر مواهب التدريب)."""
+    cand = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE CandidateID = ?", (candidate_id,), one=True)
+    if not cand:
+        flash('المرشح غير موجود.', 'danger')
+        return redirect(url_for('training_sales_index'))
+    if request.method == 'POST':
+        slot_id = request.form.get('slot_id')
+        if slot_id:
+            try:
+                query_db("""
+                    UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType='Training'
+                    WHERE SlotID=? AND Status='Available'
+                """, (candidate_id, session.get('user_id'), int(slot_id)))
+                flash('تم حجز موعد اختبار مواهب التدريب بنجاح.', 'success')
+            except Exception as e:
+                flash('خطأ عند الحجز: ' + str(e)[:80], 'danger')
+        return redirect(url_for('training_sales_index'))
+    # GET: عرض الشاغر المتاحة لمختبري مواهب التدريب (Talent_Training)
+    ta_training_ids = query_db("SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')")
+    if not ta_training_ids:
+        available_slots = []
+    else:
+        ids = [r['UserID'] for r in ta_training_ids]
+        placeholders = ','.join(['?'] * len(ids))
+        available_slots = query_db(f"""
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
+            FROM TASchedules T
+            JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE T.EvaluatorID IN ({placeholders}) AND T.Status = 'Available' AND T.SlotDate >= CAST(GETDATE() AS DATE)
+            ORDER BY T.SlotDate, T.SlotTime
+        """, tuple(ids))
+    return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
+
+
 @app.route('/training/index')
 @login_required
-@role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales'])
 def training_index():
     # عرض كل الدفعات (نشطة ومخططة) لاستعراضها وفتح التفاصيل
     waves = query_db("""

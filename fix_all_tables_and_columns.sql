@@ -24,6 +24,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'Candidate
     ALTER TABLE Candidates ADD AllocatorID INT NULL;
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'Candidates') AND name = 'Rejoiner')
     ALTER TABLE Candidates ADD Rejoiner BIT DEFAULT 0 NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'Candidates') AND name = 'PrimaryIntent')
+    ALTER TABLE Candidates ADD PrimaryIntent NVARCHAR(50) NULL;
 
 -- ========== 3. جدول Schedules (إن لم يكن موجوداً) ==========
 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name = 'Schedules' AND xtype = 'U')

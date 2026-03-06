@@ -379,8 +379,15 @@
             <!-- ============================================= -->
             <!-- التدريب: مدير/رئيس/قائد/منسق = الأكاديمية فقط؛ المدرب = أكاديمية + الحضور -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'Trainer']) %}
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'Trainer']) %}
             <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
+            {% if session.get('role') == 'TrainingSales' %}
+            <a href="{{ url_for('training_sales_index') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_index' or request.endpoint == 'training_sales_book_slot' else '' }}">
+                <i class="fas fa-bullhorn"></i>
+                <span class="link-text">مبيعات التدريب <span class="arabic-sub">تسجيل مهتم، حجز موعد</span></span>
+            </a>
+            {% endif %}
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
@@ -398,13 +405,22 @@
             <!-- ============================================= -->
             <!-- المواهب (TA): للمدير ومختبر المواهب فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment', 'TA-Training']) %}
+            {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment', 'TA-Training', 'Talent_Training']) %}
             <div class="sidebar-section-label">Talent Center <span class="arabic-sub">المواهب</span></div>
+            {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] %}
+            <a href="{{ url_for('talent_dashboard') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' or request.endpoint == 'talent_evaluate' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text">مواعيد اختبار التدريب <span class="arabic-sub">للمختبر</span></span>
+            </a>
+            {% endif %}
+            {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}
             <a href="{{ url_for('talent_conduct_test') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_conduct_test' else '' }}">
                 <i class="fas fa-vial"></i>
-                <span class="link-text">Conduct Tests <span class="arabic-sub">اختبارات</span></span>
+                <span class="link-text">Conduct Tests <span class="arabic-sub">اختبارات توظيف</span></span>
             </a>
+            {% endif %}
             {% endif %}
 
             <!-- ============================================= -->
