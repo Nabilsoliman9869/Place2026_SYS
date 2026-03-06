@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 from markupsafe import Markup
+import pyodbc
 import functools
 import os
 import sys
@@ -11,21 +12,20 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# --- Performance Logging Setup (Fix Axes: no file write at import without try/except; one handler only) ---
-# 1) No RotatingFileHandler outside try/except. 2) Optional file: try writable path (/tmp on Render). 3) Single handler.
+# --- Performance Logging Setup ---
+# On Render/read-only FS, file logging can cause "Worker failed to boot". Use file only when writable.
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
-_formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-_handler = None
+formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
 try:
-    _log_path = '/tmp/performance.log' if os.environ.get('RENDER') else 'performance.log'
-    _handler = RotatingFileHandler(_log_path, maxBytes=1_000_000, backupCount=3)
-    _handler.setFormatter(_formatter)
-    perf_logger.addHandler(_handler)
-except Exception:
-    _handler = logging.StreamHandler(sys.stderr)
-    _handler.setFormatter(_formatter)
-    perf_logger.addHandler(_handler)
+    handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
+    handler.setFormatter(formatter)
+    perf_logger.addHandler(handler)
+except (OSError, PermissionError):
+    # Fallback: log to stderr so Render still captures logs; avoids worker boot failure
+    _stderr = logging.StreamHandler(sys.stderr)
+    _stderr.setFormatter(formatter)
+    perf_logger.addHandler(_stderr)
 
 @app.before_request
 def start_timer():
@@ -126,14 +126,10 @@ def get_db_connection_string():
         password = config.get("password", "")
         return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=60;'
 
-def _pyodbc():
-    import pyodbc as _p
-    return _p
-
 def get_db():
     if 'db' not in g:
         try:
-            g.db = _pyodbc().connect(get_db_connection_string(), timeout=5)
+            g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
         except Exception as e:
             g.db_error = str(e)
             g.db = None
@@ -745,7 +741,7 @@ def test_connection():
         conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};UID={temp_config["username"]};PWD={temp_config["password"]}'
         
     try:
-        conn = _pyodbc().connect(conn_str, timeout=5)
+        conn = pyodbc.connect(conn_str, timeout=5)
         conn.close()
         flash('Connection Successful!', 'success')
     except Exception as e:
