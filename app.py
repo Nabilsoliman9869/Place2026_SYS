@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 from markupsafe import Markup
-import pyodbc
 import functools
 import os
 import sys
@@ -12,20 +11,21 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# --- Performance Logging Setup ---
-# On Render/read-only FS, file logging can cause "Worker failed to boot". Use file only when writable.
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-try:
-    handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
-    handler.setFormatter(formatter)
-    perf_logger.addHandler(handler)
-except (OSError, PermissionError):
-    # Fallback: log to stderr so Render still captures logs; avoids worker boot failure
-    _stderr = logging.StreamHandler(sys.stderr)
-    _stderr.setFormatter(formatter)
-    perf_logger.addHandler(_stderr)
+perf_logger.propagate = False
+_stderr = logging.StreamHandler(sys.stderr)
+_stderr.setFormatter(formatter)
+perf_logger.addHandler(_stderr)
+_perf_log_path = os.environ.get('PERF_LOG_PATH')
+if _perf_log_path:
+    try:
+        _fh = RotatingFileHandler(_perf_log_path, maxBytes=1_000_000, backupCount=3)
+        _fh.setFormatter(formatter)
+        perf_logger.addHandler(_fh)
+    except (OSError, PermissionError):
+        pass
 
 @app.before_request
 def start_timer():
@@ -130,7 +130,11 @@ def get_db():
     if 'db' not in g:
         try:
             # Added Connection Timeout for faster failure on bad networks
+            import pyodbc
             g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
+        except ImportError as e:
+            g.db_error = str(e)
+            g.db = None
         except Exception as e:
             g.db_error = str(e)
             g.db = None
@@ -666,15 +670,15 @@ def init_system():
 
         # Ensure Training roles exist (for Academy / enroll flow)
         training_users = [
-        ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
-        ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
-        ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
-        ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
-        ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
-        ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
-        ('trainer1', '123', 'Trainer', 'مدرب'),
-    ]
-    for u in training_users:
+            ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
+            ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
+            ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
+            ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
+            ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
+            ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
+            ('trainer1', '123', 'Trainer', 'مدرب'),
+        ]
+        for u in training_users:
             cursor.execute("SELECT UserID FROM Users_1 WHERE Username = ?", (u[0],))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES (?,?,?,?)", u)
@@ -742,6 +746,7 @@ def test_connection():
         conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};UID={temp_config["username"]};PWD={temp_config["password"]}'
         
     try:
+        import pyodbc
         conn = pyodbc.connect(conn_str, timeout=5)
         conn.close()
         flash('Connection Successful!', 'success')
