@@ -640,6 +640,20 @@ def init_system():
             cursor.execute("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES ('dev', '123', 'Manager', 'Developer')")
             created_tables.append(">>> تم استعادة المستخدم dev")
 
+        # Ensure Training roles exist (for Academy / enroll flow)
+        training_users = [
+            ('train_mgr', '123', 'TrainingManager', 'مدير التدريب'),
+            ('train_head', '123', 'TrainingHead', 'رئيس قسم التدريب'),
+            ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
+            ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
+            ('trainer1', '123', 'Trainer', 'مدرب'),
+        ]
+        for u in training_users:
+            cursor.execute("SELECT UserID FROM Users_1 WHERE Username = ?", (u[0],))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO Users_1 (Username, Password, Role, FullName) VALUES (?,?,?,?)", u)
+                created_tables.append(f">>> تم إضافة المستخدم {u[0]} ({u[2]})")
+
         db.commit()
         print(">>> SYSTEM INITIALIZED <<<")
         return created_tables
@@ -3108,6 +3122,7 @@ def graduate_student():
 
 @app.route('/training/batch/<int:batch_id>')
 @login_required
+@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
 def batch_details(batch_id):
     batch = query_db("SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID JOIN Trainers T ON B.TrainerID = T.TrainerID JOIN Classrooms R ON B.RoomID = R.RoomID WHERE B.BatchID = ?", (batch_id,), one=True)
     if not batch: return redirect(url_for('training_index'))
@@ -3117,6 +3132,7 @@ def batch_details(batch_id):
 
 @app.route('/training/enroll_student', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
 def enroll_student():
     f = request.form
     batch_id = f.get('batch_id')

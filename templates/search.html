@@ -71,7 +71,7 @@
             {% if batches %}
             <div class="list-group list-group-flush">
                 {% for b in batches %}
-                <a href="{{ url_for('batch_details', batch_id=b.BatchID) }}"
+                <a href="{{ url_for('wave_details', wave_id=b.BatchID) }}"
                     class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                     <div>
                         <strong>{{ b.BatchName }}</strong>

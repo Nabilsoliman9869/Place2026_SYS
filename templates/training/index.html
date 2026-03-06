@@ -70,6 +70,11 @@
                         <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">
                             <i class="fas fa-eye"></i> Manage
                         </a>
+                        {% if session.get('role') in ['TrainingCoordinator', 'Trainer', 'TrainingLead'] %}
+                        <a href="{{ url_for('batch_details', batch_id=wave.BatchID) }}" class="btn btn-sm btn-success ms-1" title="تسجيل طالب في الدفعة">
+                            <i class="fas fa-user-plus"></i> تسجيل طلاب
+                        </a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
