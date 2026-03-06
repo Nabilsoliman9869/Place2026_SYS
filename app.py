@@ -12,22 +12,24 @@ from datetime import datetime
 app = Flask(__name__)
 
 # --- Performance Logging Setup ---
-# On Render (and any read-only FS), file logging causes "Worker failed to boot" (exit 3). Use stderr only there.
+# Never write to file when on Render or when run by Gunicorn (avoids "Worker failed to boot" exit 3).
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-_use_file_log = not os.environ.get('RENDER')  # Render sets RENDER=true
-if _use_file_log:
+_gunicorn_or_render = bool(os.environ.get('RENDER')) or ('gunicorn' in (os.environ.get('GUNICORN_CMD', '') + ' '.join(sys.argv)).lower())
+if _gunicorn_or_render:
+    _h = logging.StreamHandler(sys.stderr)
+    _h.setFormatter(formatter)
+    perf_logger.addHandler(_h)
+else:
     try:
-        handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
-        handler.setFormatter(formatter)
-        perf_logger.addHandler(handler)
+        _h = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
+        _h.setFormatter(formatter)
+        perf_logger.addHandler(_h)
     except Exception:
-        _use_file_log = False
-if not _use_file_log:
-    _stderr = logging.StreamHandler(sys.stderr)
-    _stderr.setFormatter(formatter)
-    perf_logger.addHandler(_stderr)
+        _h = logging.StreamHandler(sys.stderr)
+        _h.setFormatter(formatter)
+        perf_logger.addHandler(_h)
 
 @app.before_request
 def start_timer():

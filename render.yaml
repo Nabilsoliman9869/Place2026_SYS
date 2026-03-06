@@ -1,0 +1,6 @@
+# Render.com: use this start command so Worker boot errors show the real Python traceback in Logs.
+# In Dashboard: Service > Settings > Build & Deploy > Start Command set to:
+#   gunicorn wsgi:app
+#
+# Optional full example (adjust workers/port as needed):
+#   gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1
