@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 from markupsafe import Markup
+import pyodbc
 import functools
 import os
 import sys
@@ -12,24 +13,18 @@ from datetime import datetime
 app = Flask(__name__)
 
 # --- Performance Logging Setup ---
-# Never write to file when on Render or when run by Gunicorn (avoids "Worker failed to boot" exit 3).
+# Configure logger to write to 'performance.log'. On read-only FS (e.g. Render), fallback to stderr.
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-_gunicorn_or_render = bool(os.environ.get('RENDER')) or ('gunicorn' in (os.environ.get('GUNICORN_CMD', '') + ' '.join(sys.argv)).lower())
-if _gunicorn_or_render:
-    _h = logging.StreamHandler(sys.stderr)
-    _h.setFormatter(formatter)
-    perf_logger.addHandler(_h)
-else:
-    try:
-        _h = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
-        _h.setFormatter(formatter)
-        perf_logger.addHandler(_h)
-    except Exception:
-        _h = logging.StreamHandler(sys.stderr)
-        _h.setFormatter(formatter)
-        perf_logger.addHandler(_h)
+try:
+    handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
+    handler.setFormatter(formatter)
+    perf_logger.addHandler(handler)
+except Exception:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(formatter)
+    perf_logger.addHandler(handler)
 
 @app.before_request
 def start_timer():
@@ -130,15 +125,10 @@ def get_db_connection_string():
         password = config.get("password", "")
         return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=60;'
 
-def _pyodbc():
-    import pyodbc
-    return pyodbc
-
 def get_db():
     if 'db' not in g:
         try:
-            # Added Connection Timeout for faster failure on bad networks
-            g.db = _pyodbc().connect(get_db_connection_string(), timeout=5)
+            g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
         except Exception as e:
             g.db_error = str(e)
             g.db = None
@@ -750,7 +740,7 @@ def test_connection():
         conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};UID={temp_config["username"]};PWD={temp_config["password"]}'
         
     try:
-        conn = _pyodbc().connect(conn_str, timeout=5)
+        conn = pyodbc.connect(conn_str, timeout=5)
         conn.close()
         flash('Connection Successful!', 'success')
     except Exception as e:
