@@ -1242,7 +1242,7 @@ def dashboard():
     if role == 'Finance': return redirect(url_for('finance_index'))
     
     # --- 5. Training Department ---
-    if role == 'TrainingSales': return redirect(url_for('training_sales_index'))
+    if role == 'TrainingSales': return redirect(url_for('training_sales_dashboard'))
     if role in ['TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']: return redirect(url_for('training_index'))
     if role == 'Trainer': return redirect(url_for('training_attendance'))
     
@@ -2888,8 +2888,39 @@ def browse_academy():
     return render_template('browse.html', courses=courses or [], trainers=trainers or [], classrooms=classrooms or [], batches=batches or [])
 
 
-# --- مبيعات التدريب (محاكاة مبيعات التوظيف): تسجيل مهتم تدريب، حجز موعد اختبار مواهب تدريب ---
+# --- مبيعات التدريب (محاكاة مبيعات التوظيف): نوافذ مثل التوظيف — Dashboard, Workbench, Scheduling, متابعة ---
 @app.route('/training/sales')
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_dashboard():
+    """لوحة مبيعات التدريب — محاكاة لوحة التوظيف (إحصائيات + اختصارات المسار)."""
+    user_id = session.get('user_id')
+    today = datetime.today().strftime('%Y-%m-%d')
+    try:
+        metrics = {
+            'my_leads': query_db("SELECT COUNT(*) as c FROM Candidates WHERE (PrimaryIntent='Training' OR Status='Training_Lead') AND (SalesAgentID=? OR SalesAgentID IS NULL)", (user_id,), one=True)['c'],
+            'booked_today': query_db("""
+                SELECT COUNT(*) as c FROM TASchedules T
+                JOIN Candidates C ON T.CandidateID = C.CandidateID
+                WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead') AND T.SlotDate = ? AND T.Status = 'Booked'
+            """, (today,), one=True)['c'],
+            'pending_slots': query_db("""
+                SELECT COUNT(*) as c FROM TASchedules T
+                JOIN Candidates C ON T.CandidateID = C.CandidateID
+                WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead') AND T.Status = 'Booked' AND T.SlotDate >= ?
+            """, (today,), one=True)['c'],
+            'no_slot_yet': query_db("""
+                SELECT COUNT(*) as c FROM Candidates C
+                WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead')
+                AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
+            """, one=True)['c'],
+        }
+    except Exception:
+        metrics = {'my_leads': 0, 'booked_today': 0, 'pending_slots': 0, 'no_slot_yet': 0}
+    return render_template('training/sales_dashboard.html', metrics=metrics)
+
+
+@app.route('/training/sales/workbench')
 @login_required
 @role_required(['TrainingSales', 'Manager'])
 def training_sales_index():
@@ -2957,7 +2988,7 @@ def training_sales_book_slot(candidate_id):
                 flash('تم حجز موعد اختبار مواهب التدريب بنجاح.', 'success')
             except Exception as e:
                 flash('خطأ عند الحجز: ' + str(e)[:80], 'danger')
-        return redirect(url_for('training_sales_index'))
+        return redirect(url_for('training_sales_scheduling'))
     # GET: عرض الشاغر المتاحة لمختبري مواهب التدريب (Talent_Training)
     ta_training_ids = query_db("SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')")
     if not ta_training_ids:
@@ -2973,6 +3004,53 @@ def training_sales_book_slot(candidate_id):
             ORDER BY T.SlotDate, T.SlotTime
         """, tuple(ids))
     return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
+
+
+@app.route('/training/sales/scheduling')
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_scheduling():
+    """جدولة اختبار التدريب — من لم يُحجز لهم موعد بعد + روابط الحجز (محاكاة Scheduling للتوظيف)."""
+    try:
+        needs_slot = query_db("""
+            SELECT C.CandidateID, C.FullName, C.Phone, C.Status, C.CreatedAt
+            FROM Candidates C
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
+            ORDER BY C.CreatedAt DESC
+        """)
+    except Exception:
+        needs_slot = []
+    return render_template('training/sales_scheduling.html', needs_slot=needs_slot or [])
+
+
+@app.route('/training/sales/followup')
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_followup():
+    """متابعة المواعيد — من حُجز لهم موعد (اليوم والقادم) لمتابعة وصول المهتم (محاكاة متابعة التوظيف)."""
+    today = datetime.today().strftime('%Y-%m-%d')
+    try:
+        booked_today = query_db("""
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+            FROM TASchedules T
+            JOIN Candidates C ON T.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead') AND T.Status = 'Booked' AND T.SlotDate = ?
+            ORDER BY T.SlotTime
+        """, (today,))
+        booked_upcoming = query_db("""
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+            FROM TASchedules T
+            JOIN Candidates C ON T.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead') AND T.Status = 'Booked' AND T.SlotDate > ?
+            ORDER BY T.SlotDate, T.SlotTime
+        """, (today,))
+    except Exception:
+        booked_today = []
+        booked_upcoming = []
+    return render_template('training/sales_followup.html', booked_today=booked_today or [], booked_upcoming=booked_upcoming or [], today=today)
 
 
 @app.route('/training/index')

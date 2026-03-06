@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}">لوحة مبيعات التدريب</a></li>
+                <li class="breadcrumb-item active">متابعة المواعيد</li>
+            </ol>
+        </nav>
+        <h2><i class="fas fa-calendar-day text-info"></i> متابعة المواعيد</h2>
+        <p class="text-muted">مواعيد اختبار مواهب التدريب — اليوم والقادمة لمتابعة وصول المهتم وتأكيد الحضور.</p>
+    </div>
+</div>
+
+<!-- مواعيد اليوم -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="fas fa-calendar-day me-2"></i> مواعيد اليوم ({{ today }}) <span class="badge bg-dark">{{ booked_today|length }}</span></h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>الوقت</th>
+                    <th>الاسم</th>
+                    <th>الهاتف</th>
+                    <th>المختبر</th>
+                    <th>إجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if not booked_today %}
+                <tr><td colspan="5" class="text-muted text-center py-3">لا توجد مواعيد محجوزة لليوم.</td></tr>
+                {% endif %}
+                {% for row in booked_today %}
+                <tr>
+                    <td><strong>{{ row.SlotTime or '-' }}</strong></td>
+                    <td class="fw-bold">{{ row.FullName }}</td>
+                    <td>{{ row.Phone }}</td>
+                    <td><small>{{ row.EvaluatorName or '-' }}</small></td>
+                    <td>
+                        <a href="{{ url_for('candidate_profile', candidate_id=row.CandidateID) }}" class="btn btn-sm btn-outline-secondary">ملف</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- مواعيد قادمة -->
+<div class="card shadow-sm">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="fas fa-calendar-week me-2"></i> مواعيد قادمة <span class="badge bg-light text-dark">{{ booked_upcoming|length }}</span></h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>التاريخ</th>
+                    <th>الوقت</th>
+                    <th>الاسم</th>
+                    <th>الهاتف</th>
+                    <th>المختبر</th>
+                    <th>إجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if not booked_upcoming %}
+                <tr><td colspan="6" class="text-muted text-center py-3">لا توجد مواعيد قادمة.</td></tr>
+                {% endif %}
+                {% for row in booked_upcoming %}
+                <tr>
+                    <td><small>{{ row.SlotDate.strftime('%Y-%m-%d') if row.SlotDate else '-' }}</small></td>
+                    <td>{{ row.SlotTime or '-' }}</td>
+                    <td class="fw-bold">{{ row.FullName }}</td>
+                    <td>{{ row.Phone }}</td>
+                    <td><small>{{ row.EvaluatorName or '-' }}</small></td>
+                    <td>
+                        <a href="{{ url_for('candidate_profile', candidate_id=row.CandidateID) }}" class="btn btn-sm btn-outline-secondary">ملف</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('training_sales_dashboard') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-right me-1"></i> العودة للوحة</a>
+</div>
+{% endblock %}
