@@ -129,6 +129,7 @@ def get_db_connection_string():
 def get_db():
     if 'db' not in g:
         try:
+            # Added Connection Timeout for faster failure on bad networks
             g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
         except Exception as e:
             g.db_error = str(e)
