@@ -13,14 +13,19 @@ from datetime import datetime
 app = Flask(__name__)
 
 # --- Performance Logging Setup ---
-# Configure logger to write to 'performance.log'
+# On Render/read-only FS, file logging can cause "Worker failed to boot". Use file only when writable.
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
-# Rotate log file after 1MB, keep 3 backups
-handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-handler.setFormatter(formatter)
-perf_logger.addHandler(handler)
+try:
+    handler = RotatingFileHandler('performance.log', maxBytes=1_000_000, backupCount=3)
+    handler.setFormatter(formatter)
+    perf_logger.addHandler(handler)
+except (OSError, PermissionError):
+    # Fallback: log to stderr so Render still captures logs; avoids worker boot failure
+    _stderr = logging.StreamHandler(sys.stderr)
+    _stderr.setFormatter(formatter)
+    perf_logger.addHandler(_stderr)
 
 @app.before_request
 def start_timer():
