@@ -103,7 +103,6 @@
             text-decoration: none;
             transition: all 0.2s;
             border-left: 4px solid transparent;
-            white-space: nowrap;
         }
 
         .nav-link:hover {
@@ -126,6 +125,10 @@
 
         .link-text {
             transition: opacity 0.3s;
+            white-space: normal;
+            word-wrap: break-word;
+            line-height: 1.35;
+            min-width: 0;
         }
 
         .sidebar.collapsed .link-text,
@@ -464,22 +467,22 @@
             <div class="mt-auto">
                 <hr class="border-secondary mx-3">
                 <!-- استعراض الدورات والمدربين والفصول والدفعات — متاح لجميع المستخدمين -->
-                <a href="{{ url_for('browse_academy') }}" class="nav-link {{ 'active' if request.endpoint == 'browse_academy' else '' }}" title="الدورات، المدربون، الفصول، الدفعات">
+                <a href="{{ url_for('browse_academy') }}" class="nav-link {{ 'active' if request.endpoint == 'browse_academy' else '' }}" title="Browse courses, trainers, classes, batches / استعراض دورات، مدربين، فصول، دفعات">
                     <i class="fas fa-th-list"></i>
-                    <span class="link-text">استعراض <span class="arabic-sub">دورات، مدربين، فصول، دفعات</span></span>
+                    <span class="link-text">Browse <span class="arabic-sub">استعراض دورات، مدربين، فصول، دفعات</span></span>
                 </a>
                 <!-- ملف المتدرب: متاح لجميع المستخدمين من كل نوافذ النظام -->
-                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ابحث وافتح ملف المتدرب">
+                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="Trainee file search / ابحث وافتح ملف المتدرب">
                     <i class="fas fa-folder-open"></i>
-                    <span class="link-text">ملف متدرب <span class="arabic-sub">بحث وفتح الملف</span></span>
+                    <span class="link-text">Trainee File <span class="arabic-sub">ملف متدرب — بحث وفتح الملف</span></span>
                 </a>
-                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}">
+                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="Global Search / بحث عام">
                     <i class="fas fa-search"></i>
-                    <span class="link-text">Global Search</span>
+                    <span class="link-text">Global Search <span class="arabic-sub">بحث عام</span></span>
                 </a>
-                <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false">
+                <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false" title="Logout / خروج">
                     <i class="fas fa-sign-out-alt"></i>
-                    <span class="link-text">Logout</span>
+                    <span class="link-text">Logout <span class="arabic-sub">خروج</span></span>
                 </a>
             </div>
         </div>
