@@ -67,6 +67,18 @@ CONFIG_FILE = os.path.join(application_path, 'db_config.json')
 DEV_USERNAME = "dev"
 DEV_PASSWORD = "123"
 
+def _safe_time_str(t):
+    """Return HH:MM string for template; avoids strftime on string/None."""
+    if t is None: return ''
+    if hasattr(t, 'strftime'): return t.strftime('%H:%M')
+    return str(t)[:5] if t else ''
+
+def _safe_date_str(d, fmt='%Y-%m-%d'):
+    """Return date string for template; works for date/datetime/string."""
+    if d is None: return '-'
+    if hasattr(d, 'strftime'): return d.strftime(fmt)
+    return str(d)[:10] if d else '-'
+
 @app.route('/version')
 def show_version():
     return "V1.0 - Stable", 200
@@ -3485,13 +3497,16 @@ def trainer_notes(enrollment_id):
         except Exception as e:
             flash(f'خطأ في الحفظ: {e}', 'danger')
         return redirect(url_for('trainer_notes', enrollment_id=enrollment_id))
-    notes_list = query_db("""
-        SELECT N.NoteID, N.NoteDate, N.Notes, N.CreatedAt, U.FullName as TrainerName
-        FROM TrainerDailyNotes N
-        LEFT JOIN Users_1 U ON N.TrainerID = U.UserID
-        WHERE N.EnrollmentID = ?
-        ORDER BY N.NoteDate DESC, N.CreatedAt DESC
-    """, (enrollment_id,)) or []
+    try:
+        notes_list = query_db("""
+            SELECT N.NoteID, N.NoteDate, N.Notes, N.CreatedAt, U.FullName as TrainerName
+            FROM TrainerDailyNotes N
+            LEFT JOIN Users_1 U ON N.TrainerID = U.UserID
+            WHERE N.EnrollmentID = ?
+            ORDER BY N.NoteDate DESC, N.CreatedAt DESC
+        """, (enrollment_id,)) or []
+    except Exception:
+        notes_list = []
     return render_template('training/trainer_notes.html', student=student, notes_list=notes_list)
 
 @app.route('/training/enroll_student', methods=['POST'])
@@ -3661,8 +3676,7 @@ def training_attendance():
         selected_batch = query_db("SELECT * FROM CourseBatches WHERE BatchID=?", (selected_batch_id,), one=True)
         if selected_batch:
             # Fetch students and their attendance for the SPECIFIC DATE
-            # 'Date' column is confirmed by schema check.
-            students = query_db('''
+            raw = query_db('''
                 SELECT E.EnrollmentID, E.CandidateID, C.FullName,
                         A.Status, A.CheckInTime, A.CheckOutTime, A.AssignmentDone, A.AttendanceID
                 FROM Enrollments E
@@ -3670,6 +3684,19 @@ def training_attendance():
                 LEFT JOIN Attendance A ON E.EnrollmentID = A.EnrollmentID AND A.Date = ?
                 WHERE E.BatchID = ? AND E.Status = 'Active'
             ''', (selected_date, selected_batch_id))
+            # Normalize time for template (DB may return time or string)
+            students = []
+            cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'AssignmentDone', 'AttendanceID']
+            for row in (raw or []):
+                r = {}
+                for k in cols:
+                    try:
+                        r[k] = row[k]
+                    except Exception:
+                        r[k] = None
+                r['CheckInTimeStr'] = _safe_time_str(r.get('CheckInTime'))
+                r['CheckOutTimeStr'] = _safe_time_str(r.get('CheckOutTime'))
+                students.append(r)
             
     return render_template('training/attendance_grid.html', 
                            batches=batches or [], 

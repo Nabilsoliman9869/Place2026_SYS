@@ -80,13 +80,13 @@
                             <!-- Time In -->
                             <td>
                                 <input type="time" name="in_{{ s.EnrollmentID }}" class="form-control form-control-sm time-in"
-                                       value="{{ s.CheckInTime.strftime('%H:%M') if s.CheckInTime else '' }}">
+                                       value="{{ s.CheckInTimeStr or '' }}">
                             </td>
 
                             <!-- Time Out -->
                             <td>
                                 <input type="time" name="out_{{ s.EnrollmentID }}" class="form-control form-control-sm time-out"
-                                       value="{{ s.CheckOutTime.strftime('%H:%M') if s.CheckOutTime else '' }}">
+                                       value="{{ s.CheckOutTimeStr or '' }}">
                             </td>
 
                             <!-- Assignment -->

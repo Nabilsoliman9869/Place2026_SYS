@@ -59,10 +59,10 @@
                         <tbody>
                             {% for n in notes_list %}
                             <tr>
-                                <td>{{ n.NoteDate.strftime('%Y-%m-%d') if n.NoteDate else '-' }}</td>
+                                <td>{{ (n.NoteDate | string)[:10] if n.NoteDate else '-' }}</td>
                                 <td><span class="text-break">{{ n.Notes }}</span></td>
                                 <td class="text-muted small">{{ n.TrainerName or '-' }}</td>
-                                <td class="small text-muted">{{ n.CreatedAt.strftime('%Y-%m-%d %H:%M') if n.CreatedAt else '-' }}</td>
+                                <td class="small text-muted">{{ (n.CreatedAt | string)[:16] if n.CreatedAt else '-' }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
