@@ -3178,6 +3178,45 @@ def training_sales_book_slot(candidate_id):
             WHERE T.EvaluatorID IN ({placeholders}) AND T.Status = 'Available' AND T.SlotDate >= CAST(GETDATE() AS DATE)
             ORDER BY T.SlotDate, T.SlotTime
         """, tuple(ids))
+        # إن لم توجد أي شاغر، إنشاء مواعيد تلقائياً: 10 ص–9 م كل 15 دقيقة لمدة 14 يوماً
+        if not available_slots:
+            try:
+                from datetime import timedelta
+                slot_times = []
+                for hour in range(10, 22):
+                    for minute in (0, 15, 30, 45):
+                        if hour == 21 and minute != 0:
+                            continue
+                        slot_times.append(f"{hour:02d}:{minute:02d}")
+                today = datetime.today().date()
+                db = get_db()
+                cur = db.cursor()
+                try:
+                    for uid in ids:
+                        for d in range(14):
+                            slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
+                            for st in slot_times:
+                                cur.execute(
+                                    "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?",
+                                    (uid, slot_date, st)
+                                )
+                                if cur.fetchone() is None:
+                                    cur.execute(
+                                        "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?,?,N'Available',?)",
+                                        (slot_date, st, uid)
+                                    )
+                    db.commit()
+                    available_slots = query_db(f"""
+                        SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
+                        FROM TASchedules T
+                        JOIN Users_1 U ON T.EvaluatorID = U.UserID
+                        WHERE T.EvaluatorID IN ({placeholders}) AND T.Status = 'Available' AND T.SlotDate >= CAST(GETDATE() AS DATE)
+                        ORDER BY T.SlotDate, T.SlotTime
+                    """, tuple(ids))
+                finally:
+                    cur.close()
+            except Exception:
+                pass
     return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
 
 
