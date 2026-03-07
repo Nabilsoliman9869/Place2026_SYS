@@ -124,6 +124,39 @@
             </div>
         </div>
 
+        <!-- 1b. سجل ملاحظات المدرب اليومية (ليطلع عليه الإدارة) -->
+        {% if trainer_notes_list %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-info"><i class="fas fa-sticky-note"></i> سجل ملاحظات المدرب <small class="text-muted fs-6">ملاحظات يومية عن أداء المتدرب</small></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>الدورة / الدفعة</th>
+                            <th>الملاحظة</th>
+                            <th>المدرب</th>
+                            <th>وقت التسجيل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for n in trainer_notes_list %}
+                        <tr>
+                            <td>{{ n.NoteDate.strftime('%Y-%m-%d') if n.NoteDate else '-' }}</td>
+                            <td><small>{{ n.CourseName }} — {{ n.BatchName }}</small></td>
+                            <td class="text-break">{{ n.Notes }}</td>
+                            <td class="text-muted small">{{ n.TrainerName or '-' }}</td>
+                            <td class="small text-muted">{{ n.CreatedAt.strftime('%Y-%m-%d %H:%M') if n.CreatedAt else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 2. Employment Journey -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
@@ -186,12 +219,16 @@
         {% endif %}
 
         <!-- 2c. كل الحقول من جميع الأوراق (Guide Academy 2025) -->
-        {% if sheet_data_list %}
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white border-bottom-0">
+            <div class="card-header bg-white border-bottom-0 d-flex justify-content-between align-items-center flex-wrap">
                 <h5 class="mb-0 text-info"><i class="fas fa-file-excel"></i> بيانات من جميع الأوراق <small class="text-muted fs-6">كل الحقول التي تلامست مع المتدرب</small></h5>
+                <div>
+                    <a href="{{ url_for('add_sheet_booking', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info me-1"><i class="fas fa-calendar-plus"></i> إضافة سجل حجز</a>
+                    <a href="{{ url_for('add_sheet_ga', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-clipboard-list"></i> إضافة سجل مقابلة GA</a>
+                </div>
             </div>
             <div class="card-body">
+                {% if sheet_data_list %}
                 {% for sheet in sheet_data_list %}
                 <div class="mb-4">
                     <h6 class="text-secondary border-bottom pb-1">{{ sheet.sheet_name }}</h6>
@@ -206,9 +243,11 @@
                     {% endfor %}
                 </div>
                 {% endfor %}
+                {% else %}
+                <p class="text-muted small mb-0">لا توجد سجلات أوراق بعد. استخدم «إضافة سجل حجز» أو «إضافة سجل مقابلة GA» أعلاه للتشغيل اليومي.</p>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
         <!-- 3. Financial History -->
         <div class="card shadow-sm">

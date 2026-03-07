@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}">ملف المتدرب</a></li>
+            <li class="breadcrumb-item active">إضافة سجل حجز (Booking)</li>
+        </ol>
+    </nav>
+    <h5 class="mb-4"><i class="fas fa-calendar-plus text-info"></i> إضافة سجل ورقة حجز — للتشغيل اليومي</h5>
+    <p class="text-muted small">البيانات ستظهر في قسم «بيانات من جميع الأوراق» في ملف المتدرب.</p>
+    <form method="POST" class="card shadow-sm p-4">
+        <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">الاسم</label><input type="text" name="name" class="form-control" value="{{ cand.FullName or '' }}" placeholder="Candidate's Name"></div>
+            <div class="col-md-4"><label class="form-label">الهاتف (Pri #)</label><input type="text" name="phone" class="form-control" value="{{ cand.Phone or '' }}" placeholder="Phone No."></div>
+            <div class="col-md-4"><label class="form-label">البريد</label><input type="email" name="email" class="form-control" value="{{ cand.Email or '' }}" placeholder="Email"></div>
+            <div class="col-md-4"><label class="form-label">Booked for</label><input type="text" name="booked_for" class="form-control" placeholder="مثل: Paid Training"></div>
+            <div class="col-md-4"><label class="form-label">Recruiter</label><select name="recruiter" class="form-select"><option value="">—</option>{% for u in recruiters %}<option value="{{ u.FullName or u.Username }}">{{ u.FullName or u.Username }}</option>{% endfor %}</select></div>
+            <div class="col-md-4"><label class="form-label">Venue</label><input type="text" name="venue" class="form-control" placeholder="مثل: Online"></div>
+            <div class="col-md-4"><label class="form-label">Source</label><input type="text" name="source" class="form-control" placeholder="مثل: Marketing"></div>
+            <div class="col-md-4"><label class="form-label">Placement reason</label><input type="text" name="placement_reason" class="form-control" placeholder="مثل: Course"></div>
+            <div class="col-md-4"><label class="form-label">Pay Status</label><input type="text" name="pay_status" class="form-control" placeholder="مثل: paid online"></div>
+        </div>
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ السجل</button>
+            <a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}" class="btn btn-outline-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

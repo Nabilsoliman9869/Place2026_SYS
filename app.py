@@ -513,7 +513,20 @@ def init_system():
             )
         """)
         created_tables.append("Attendance (الغياب)")
-        
+
+        cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TrainerDailyNotes' AND xtype='U')
+            CREATE TABLE TrainerDailyNotes (
+                NoteID INT IDENTITY(1,1) PRIMARY KEY,
+                EnrollmentID INT NOT NULL,
+                NoteDate DATE NOT NULL,
+                Notes NVARCHAR(MAX) NOT NULL,
+                TrainerID INT NULL,
+                CreatedAt DATETIME DEFAULT GETDATE()
+            )
+        """)
+        created_tables.append("TrainerDailyNotes (ملاحظات المدرب اليومية)")
+
         cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='PlacementTests' AND xtype='U')
             CREATE TABLE PlacementTests (
@@ -2832,6 +2845,21 @@ def candidate_profile(candidate_id):
                     sheet_data_list.append({'sheet_name': r['SheetName'], 'rows': []})
     except Exception:
         pass
+    # سجل ملاحظات المدرب اليومية (ليطلع عليه الإدارة)
+    trainer_notes_list = []
+    try:
+        trainer_notes_list = query_db('''
+            SELECT N.NoteDate, N.Notes, N.CreatedAt, U.FullName AS TrainerName, B.BatchName, Cr.CourseName
+            FROM TrainerDailyNotes N
+            JOIN Enrollments E ON N.EnrollmentID = E.EnrollmentID
+            LEFT JOIN Users_1 U ON N.TrainerID = U.UserID
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            WHERE E.CandidateID = ?
+            ORDER BY N.NoteDate DESC, N.CreatedAt DESC
+        ''', (candidate_id,)) or []
+    except Exception:
+        pass
     return render_template(
         'profile.html',
         cand=cand,
@@ -2845,7 +2873,95 @@ def candidate_profile(candidate_id):
         placement_reason=placement_reason,
         marketing_assessment=marketing_assessment,
         sheet_data_list=sheet_data_list,
+        trainer_notes_list=trainer_notes_list,
     )
+
+def _append_sheet_row(candidate_id, sheet_name, new_row):
+    """إضافة سجل واحد لجدول TraineeSheetData (للتشغيل اليومي)."""
+    existing = query_db('SELECT Id, JsonData FROM TraineeSheetData WHERE CandidateID=? AND SheetName=?', (candidate_id, sheet_name), one=True)
+    import json
+    row_str = json.dumps(new_row, ensure_ascii=False, default=str)
+    if existing and existing.get('JsonData'):
+        try:
+            data = json.loads(existing['JsonData'])
+            if not isinstance(data, list):
+                data = [data]
+            data.append(new_row)
+            query_db('UPDATE TraineeSheetData SET JsonData=?, UpdatedAt=GETDATE() WHERE Id=?', (json.dumps(data, ensure_ascii=False, default=str), existing['Id']))
+        except Exception:
+            query_db('INSERT INTO TraineeSheetData (CandidateID, SheetName, JsonData) VALUES (?, ?, ?)', (candidate_id, sheet_name, json.dumps([new_row], ensure_ascii=False, default=str)))
+    else:
+        query_db('INSERT INTO TraineeSheetData (CandidateID, SheetName, JsonData) VALUES (?, ?, ?)', (candidate_id, sheet_name, json.dumps([new_row], ensure_ascii=False, default=str)))
+
+@app.route('/profile/<int:candidate_id>/add-booking', methods=['GET', 'POST'])
+@login_required
+def add_sheet_booking(candidate_id):
+    """نافذة إدخال: تسجيل سجل ورقة حجز (Booking Placements) — للتشغيل اليومي."""
+    cand = query_db('SELECT CandidateID, FullName, Phone, Email FROM Candidates WHERE CandidateID=?', (candidate_id,), one=True)
+    if not cand:
+        return 'Candidate not found', 404
+    if request.method == 'POST':
+        f = request.form
+        row = {
+            "Candidate's Name": f.get('name') or cand.get('FullName'),
+            "Phone No.": f.get('phone') or cand.get('Phone'),
+            "Email": f.get('email') or cand.get('Email'),
+            "Booked for": f.get('booked_for'),
+            "Recruiter": f.get('recruiter'),
+            "Venue": f.get('venue'),
+            "Source": f.get('source'),
+            "Placement reason": f.get('placement_reason'),
+            "Pay Status": f.get('pay_status'),
+        }
+        row = {k: (v.strip() if v else None) for k, v in row.items() if v}
+        try:
+            _append_sheet_row(candidate_id, 'Booking Placements Sheet', row)
+            flash('تم تسجيل سجل الحجز.', 'success')
+        except Exception as e:
+            flash('خطأ: ' + str(e)[:80], 'danger')
+        return redirect(url_for('candidate_profile', candidate_id=candidate_id))
+    recruiters = query_db("SELECT UserID, FullName, Username FROM Users_1 WHERE Role IN ('Recruiter', 'Sales')")
+    return render_template('profile/add_booking_sheet.html', cand=cand, recruiters=recruiters or [])
+
+@app.route('/profile/<int:candidate_id>/add-ga', methods=['GET', 'POST'])
+@login_required
+def add_sheet_ga(candidate_id):
+    """نافذة إدخال: تسجيل سجل مقابلة GA (GA Interviews) — للتشغيل اليومي."""
+    cand = query_db('SELECT CandidateID, FullName, Phone, Email FROM Candidates WHERE CandidateID=?', (candidate_id,), one=True)
+    if not cand:
+        return 'Candidate not found', 404
+    if request.method == 'POST':
+        f = request.form
+        row = {
+            "Date": f.get('date'),
+            "Time": f.get('time'),
+            "Candidate Name": f.get('name') or cand.get('FullName'),
+            "Pri #": f.get('phone') or cand.get('Phone'),
+            "Email": f.get('email') or cand.get('Email'),
+            "Recruiter": f.get('recruiter'),
+            "Source": f.get('source'),
+            "Venue": f.get('venue'),
+            "Placement reason": f.get('placement_reason'),
+            "Location": f.get('location'),
+            "C": f.get('c'), "F": f.get('f'), "P": f.get('p'), "G": f.get('g'), "V": f.get('v'),
+            "Language comments": f.get('language_comments'),
+            "Grad Stat": f.get('grad_stat'),
+            "CEFR": f.get('cefr'),
+            "Recording link": f.get('recording_link'),
+            "Status": f.get('status'),
+            "Rec. Project": f.get('rec_project'),
+            "Interviewer": f.get('interviewer'),
+        }
+        row = {k: (v.strip() if v else None) for k, v in row.items() if v}
+        try:
+            _append_sheet_row(candidate_id, 'GA Interviews', row)
+            flash('تم تسجيل سجل مقابلة GA.', 'success')
+        except Exception as e:
+            flash('خطأ: ' + str(e)[:80], 'danger')
+        return redirect(url_for('candidate_profile', candidate_id=candidate_id))
+    evaluators = query_db("SELECT UserID, FullName, Username FROM Users_1 WHERE Role IN ('Talent', 'Talent_Recruitment', 'Talent_Training', 'TA-Training')")
+    recruiters = query_db("SELECT UserID, FullName, Username FROM Users_1 WHERE Role IN ('Recruiter', 'Sales')")
+    return render_template('profile/add_ga_sheet.html', cand=cand, evaluators=evaluators or [], recruiters=recruiters or [])
 
 @app.route('/admin/users')
 @login_required
@@ -3277,6 +3393,7 @@ def attendance_matrix(wave_id):
 
 @app.route('/training/mark_matrix', methods=['POST'])
 @login_required
+@role_required(['Trainer', 'Manager'])
 def mark_matrix():
     f = request.form
     wave_id = f['wave_id']
@@ -3336,6 +3453,46 @@ def batch_details(batch_id):
     students = query_db("SELECT E.*, C.FullName, C.Phone FROM Enrollments E JOIN Candidates C ON E.CandidateID = C.CandidateID WHERE E.BatchID = ?", (batch_id,))
     candidates = query_db('SELECT * FROM Candidates')
     return render_template('training/batch_details.html', batch=batch, students=students or [], candidates=candidates or [])
+
+@app.route('/training/notes/<int:enrollment_id>', methods=['GET', 'POST'])
+@login_required
+@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
+def trainer_notes(enrollment_id):
+    """نافذة ملاحظات المدرب اليومية لطالب معيّن (حسب التسجيل في دفعة)."""
+    student = query_db("""
+        SELECT E.EnrollmentID, E.BatchID, C.CandidateID, C.FullName, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+    """, (enrollment_id,), one=True)
+    if not student:
+        flash('تسجيل الطالب غير موجود', 'danger')
+        return redirect(url_for('training_index'))
+    if request.method == 'POST':
+        note_date = request.form.get('note_date')
+        notes_text = request.form.get('notes', '').strip()
+        if not note_date or not notes_text:
+            flash('أدخل التاريخ ونص الملاحظة', 'warning')
+            return redirect(url_for('trainer_notes', enrollment_id=enrollment_id))
+        try:
+            query_db("""
+                INSERT INTO TrainerDailyNotes (EnrollmentID, NoteDate, Notes, TrainerID)
+                VALUES (?, ?, ?, ?)
+            """, (enrollment_id, note_date, notes_text, session.get('user_id')))
+            flash('تم حفظ الملاحظة', 'success')
+        except Exception as e:
+            flash(f'خطأ في الحفظ: {e}', 'danger')
+        return redirect(url_for('trainer_notes', enrollment_id=enrollment_id))
+    notes_list = query_db("""
+        SELECT N.NoteID, N.NoteDate, N.Notes, N.CreatedAt, U.FullName as TrainerName
+        FROM TrainerDailyNotes N
+        LEFT JOIN Users_1 U ON N.TrainerID = U.UserID
+        WHERE N.EnrollmentID = ?
+        ORDER BY N.NoteDate DESC, N.CreatedAt DESC
+    """, (enrollment_id,)) or []
+    return render_template('training/trainer_notes.html', student=student, notes_list=notes_list)
 
 @app.route('/training/enroll_student', methods=['POST'])
 @login_required
@@ -3491,6 +3648,7 @@ def add_student_direct():
 
 @app.route('/training/attendance', methods=['GET'])
 @login_required
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingLead'])
 def training_attendance():
     batches = query_db("SELECT * FROM CourseBatches WHERE Status='Active'")
     selected_batch_id = request.args.get('batch_id')
@@ -3522,6 +3680,7 @@ def training_attendance():
 
 @app.route('/training/save_attendance_grid', methods=['POST'])
 @login_required
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingLead'])
 def save_attendance_grid():
     batch_id = request.form['batch_id']
     date = request.form['date']
@@ -3573,6 +3732,7 @@ def save_attendance_grid():
 
 @app.route('/training/student_finance/<int:enrollment_id>')
 @login_required
+@role_required(['Finance', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
 def student_finance(enrollment_id):
     enrollment = query_db("SELECT E.*, C.FullName, B.BatchName, Co.CourseName FROM Enrollments E JOIN Candidates C ON E.CandidateID = C.CandidateID JOIN CourseBatches B ON E.BatchID = B.BatchID JOIN Courses Co ON B.CourseID = Co.CourseID WHERE E.EnrollmentID = ?", (enrollment_id,), one=True)
     if not enrollment: return redirect(url_for('training_index'))
@@ -3581,12 +3741,14 @@ def student_finance(enrollment_id):
 
 @app.route('/training/add_payment', methods=('POST',))
 @login_required
+@role_required(['Finance', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
 def add_payment():
     query_db('INSERT INTO StudentPayments (EnrollmentID, Amount, Notes, ReceivedBy) VALUES (?,?,?,?)', (request.form['enrollment_id'], request.form['amount'], request.form['notes'], session.get('user_id')))
     return redirect(url_for('student_finance', enrollment_id=request.form['enrollment_id']))
 
 @app.route('/training/print_invoice/<int:enrollment_id>')
 @login_required
+@role_required(['Finance', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
 def print_invoice(enrollment_id):
     enrollment = query_db("SELECT E.*, C.FullName, C.Phone, B.BatchName, Co.CourseName FROM Enrollments E JOIN Candidates C ON E.CandidateID = C.CandidateID JOIN CourseBatches B ON E.BatchID = B.BatchID JOIN Courses Co ON B.CourseID = Co.CourseID WHERE E.EnrollmentID = ?", (enrollment_id,), one=True)
     payments = query_db('SELECT * FROM StudentPayments WHERE EnrollmentID = ? ORDER BY PaymentDate DESC', (enrollment_id,))

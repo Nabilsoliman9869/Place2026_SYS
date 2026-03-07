@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('training_index') }}">التدريب</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('batch_details', batch_id=student.BatchID) }}">{{ student.BatchName }}</a></li>
+        <li class="breadcrumb-item active">ملاحظات المدرب — {{ student.FullName }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="fas fa-sticky-note text-info"></i> ملاحظات المدرب اليومية</h2>
+        <p class="text-muted mb-0">{{ student.FullName }} — {{ student.CourseName }} / {{ student.BatchName }}</p>
+    </div>
+    <a href="{{ url_for('batch_details', batch_id=student.BatchID) }}" class="btn btn-outline-secondary">عودة للدفعة</a>
+</div>
+
+<div class="row">
+    <div class="col-lg-5 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">إضافة ملاحظة يومية</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('trainer_notes', enrollment_id=student.EnrollmentID) }}">
+                    <div class="mb-3">
+                        <label class="form-label">تاريخ الملاحظة</label>
+                        <input type="date" name="note_date" class="form-control" value="{{ request.args.get('date', '') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">نص الملاحظة (أداء المتدرب / ملاحظات)</label>
+                        <textarea name="notes" class="form-control" rows="4" placeholder="سجّل ملاحظاتك اليومية عن الطالب..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">سجل الملاحظات</h5>
+                <a href="{{ url_for('candidate_profile', candidate_id=student.CandidateID) }}" class="btn btn-sm btn-outline-info">ملف المتدرب</a>
+            </div>
+            <div class="card-body">
+                {% if notes_list %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>الملاحظة</th>
+                                <th>المدرب</th>
+                                <th>وقت التسجيل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for n in notes_list %}
+                            <tr>
+                                <td>{{ n.NoteDate.strftime('%Y-%m-%d') if n.NoteDate else '-' }}</td>
+                                <td><span class="text-break">{{ n.Notes }}</span></td>
+                                <td class="text-muted small">{{ n.TrainerName or '-' }}</td>
+                                <td class="small text-muted">{{ n.CreatedAt.strftime('%Y-%m-%d %H:%M') if n.CreatedAt else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">لا توجد ملاحظات مسجّلة بعد. استخدم النموذج على اليسار لإضافة ملاحظة يومية.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

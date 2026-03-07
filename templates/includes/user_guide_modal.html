@@ -21,6 +21,29 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+
+                <!-- لجميع المستخدمين (مؤقتاً): ملف المتدرب ونوافذ إدخال الأوراق -->
+                <div class="guide-section border-bottom pb-3 mb-3">
+                    <h6 class="text-info fw-bold"><i class="fas fa-file-alt"></i> ملف المتدرب — إدخال بيانات الأوراق (متاح للجميع مؤقتاً)</h6>
+                    <p class="small text-muted mb-2">ملف المتدرب يعرض بيانات من جداول النظام. للتشغيل اليومي يمكن إضافة سجلات من الواجهة بدلاً من السكربتات فقط.</p>
+                    <ul class="list-group list-group-flush mb-2">
+                        <li class="list-group-item py-2">
+                            <i class="fas fa-user-circle text-primary"></i> من القائمة الجانبية: <strong>ملف متدرب</strong> (بحث وفتح الملف).
+                        </li>
+                        <li class="list-group-item py-2">
+                            <i class="fas fa-folder-open"></i> بعد فتح ملف المتدرب، في قسم <strong>«بيانات من جميع الأوراق»</strong> ستجد زِرّين:
+                        </li>
+                        <li class="list-group-item py-2">
+                            <i class="fas fa-calendar-plus text-success"></i> <strong>إضافة سجل حجز</strong> — لتسجيل بيانات ورقة الحجز (الاسم، الهاتف، Booked for، Recruiter، Venue، Source، Placement reason، Pay Status). تُحفظ في نفس المصدر الذي يقرأ منه الملف وتظهر فوراً في الصفحة.
+                        </li>
+                        <li class="list-group-item py-2">
+                            <i class="fas fa-clipboard-list text-success"></i> <strong>إضافة سجل مقابلة GA</strong> — لتسجيل نتيجة مقابلة GA (التاريخ، الوقت، الدرجات C/F/P/G/V، CEFR، تعليقات اللغة، رابط التسجيل، الحالة، المقابِل، إلخ). تُحفظ وتظهر في قسم «بيانات من جميع الأوراق».
+                        </li>
+                        <li class="list-group-item py-2 text-muted small">
+                            <i class="fas fa-info-circle"></i> هاتان النافذتان متاحتان مؤقتاً لجميع المستخدمين المسجّلين. يمكن تقييدهما لاحقاً بدور معيّن إذا رُغب.
+                        </li>
+                    </ul>
+                </div>
                 
                 <!-- RECRUITER GUIDE -->
                 {% if session['role'] in ['Recruiter', 'Manager'] %}

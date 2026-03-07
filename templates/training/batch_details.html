@@ -49,7 +49,10 @@
                             </td>
                             <td>{{ student.FinalGrade or '-' }}</td>
                             <td>
-                                <a href="{{ url_for('student_finance', enrollment_id=student.EnrollmentID) }}" class="btn btn-sm btn-outline-success" title="الماليات">
+                                <a href="{{ url_for('trainer_notes', enrollment_id=student.EnrollmentID) }}" class="btn btn-sm btn-outline-info me-1" title="ملاحظات المدرب">
+                                    <i class="fas fa-sticky-note"></i> ملاحظات
+                                </a>
+                                <a href="{{ url_for('student_finance', enrollment_id=student.EnrollmentID) }}" class="btn btn-sm btn-outline-success me-1" title="الماليات">
                                     <i class="fas fa-money-bill-wave"></i>
                                 </a>
                                 <button class="btn btn-sm btn-outline-danger" title="إلغاء التسجيل"><i class="fas fa-times"></i></button>
