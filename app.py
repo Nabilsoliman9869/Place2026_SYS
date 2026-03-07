@@ -530,6 +530,7 @@ def init_system():
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TrainerDailyNotes' AND xtype='U')
             CREATE TABLE TrainerDailyNotes (
                 NoteID INT IDENTITY(1,1) PRIMARY KEY,
+                CandidateID INT NOT NULL,
                 EnrollmentID INT NOT NULL,
                 NoteDate DATE NOT NULL,
                 Notes NVARCHAR(MAX) NOT NULL,
@@ -2857,17 +2858,17 @@ def candidate_profile(candidate_id):
                     sheet_data_list.append({'sheet_name': r['SheetName'], 'rows': []})
     except Exception:
         pass
-    # سجل ملاحظات المدرب اليومية (ليطلع عليه الإدارة)
+    # سجل ملاحظات المدرب اليومية (جدول تفاصيل — فيه حقل المتدرب CandidateID)
     trainer_notes_list = []
     try:
         trainer_notes_list = query_db('''
             SELECT N.NoteDate, N.Notes, N.CreatedAt, U.FullName AS TrainerName, B.BatchName, Cr.CourseName
             FROM TrainerDailyNotes N
-            JOIN Enrollments E ON N.EnrollmentID = E.EnrollmentID
+            LEFT JOIN Enrollments E ON N.EnrollmentID = E.EnrollmentID
             LEFT JOIN Users_1 U ON N.TrainerID = U.UserID
-            JOIN CourseBatches B ON E.BatchID = B.BatchID
-            JOIN Courses Cr ON B.CourseID = Cr.CourseID
-            WHERE E.CandidateID = ?
+            LEFT JOIN CourseBatches B ON E.BatchID = B.BatchID
+            LEFT JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            WHERE N.CandidateID = ?
             ORDER BY N.NoteDate DESC, N.CreatedAt DESC
         ''', (candidate_id,)) or []
     except Exception:
@@ -3489,10 +3490,11 @@ def trainer_notes(enrollment_id):
             flash('أدخل التاريخ ونص الملاحظة', 'warning')
             return redirect(url_for('trainer_notes', enrollment_id=enrollment_id))
         try:
+            candidate_id = student.get('CandidateID')
             query_db("""
-                INSERT INTO TrainerDailyNotes (EnrollmentID, NoteDate, Notes, TrainerID)
-                VALUES (?, ?, ?, ?)
-            """, (enrollment_id, note_date, notes_text, session.get('user_id')))
+                INSERT INTO TrainerDailyNotes (CandidateID, EnrollmentID, NoteDate, Notes, TrainerID)
+                VALUES (?, ?, ?, ?, ?)
+            """, (candidate_id, enrollment_id, note_date, notes_text, session.get('user_id')))
             flash('تم حفظ الملاحظة', 'success')
         except Exception as e:
             flash(f'خطأ في الحفظ: {e}', 'danger')
