@@ -66,7 +66,17 @@ END
 ELSE
     PRINT 'train_lead موجود مسبقاً';
 
--- 7) trainer1 — مدرب
+-- 7) trainer — مدرب رئيسي
+IF NOT EXISTS (SELECT 1 FROM Users_1 WHERE Username = N'trainer')
+BEGIN
+    INSERT INTO Users_1 (Username, Password, Role, FullName)
+    VALUES (N'trainer', N'123', N'Trainer', N'مدرب رئيسي');
+    PRINT 'تم إضافة trainer';
+END
+ELSE
+    PRINT 'trainer موجود مسبقاً';
+
+-- 8) trainer1 — مدرب
 IF NOT EXISTS (SELECT 1 FROM Users_1 WHERE Username = N'trainer1')
 BEGIN
     INSERT INTO Users_1 (Username, Password, Role, FullName)
@@ -75,6 +85,17 @@ BEGIN
 END
 ELSE
     PRINT 'trainer1 موجود مسبقاً';
+
+-- ========== يوزرات التدريب كاملة (مرتبة من الأعلى إدارياً) ==========
+-- train_mgr    | TrainingManager     | مدير التدريب
+-- train_head   | TrainingHead        | رئيس قسم التدريب
+-- train_lead   | TrainingLead        | قائد التدريب
+-- train_coord  | TrainingCoordinator | منسق التدريب
+-- train_sales  | TrainingSales      | مبيعات التدريب
+-- ta_train     | Talent_Training     | مختبر مواهب التدريب
+-- trainer      | Trainer             | مدرب رئيسي
+-- trainer1     | Trainer             | مدرب
+-- كلمة المرور الافتراضية لجميعهم: 123
 
 -- التحقق: عرض كل المستخدمين في Users_1
 SELECT UserID, Username, Role, FullName FROM Users_1 ORDER BY UserID;

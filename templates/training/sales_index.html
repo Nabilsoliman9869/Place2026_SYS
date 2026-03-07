@@ -40,10 +40,10 @@
     </div>
 </div>
 
-<!-- قائمة مهتمي التدريب -->
+<!-- قائمة مهتمي التدريب (من لم يُحجز لهم موعد — بعد الحجز ينتقلون لمتابعة المواعيد) -->
 <div class="card shadow-sm">
     <div class="card-header bg-white">
-        <h5 class="mb-0">مهتمو التدريب <span class="badge bg-secondary">{{ training_leads|length }}</span></h5>
+        <h5 class="mb-0">مهتمو التدريب <span class="badge bg-secondary">{{ training_leads|length }}</span> <small class="text-muted fw-normal">(من لم يُحجز لهم موعد — بعد الحجز ينتقلون لقائمة متابعة المواعيد)</small></h5>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">

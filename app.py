@@ -2064,6 +2064,75 @@ def add_corporate_payment():
     flash('تم تسجيل الدفعة', 'success')
     return redirect(url_for('corporate_finance', client_id=client_id))
 
+
+# --- خريطة المواد: رصيد أول/آخر المدة (TBL007, TBL020, TBL022, TBL023) ---
+PRODUCT_BALANCE_SQL = """
+;WITH أول AS (
+    SELECT ISNULL(SUM(
+        CASE WHEN ty.BillKind = 2 THEN ISNULL(t.Quantity, 0) ELSE -ISNULL(t.Quantity, 0) END
+    ), 0) AS رصيد
+    FROM TBL023 t
+    INNER JOIN TBL022 b ON b.CardGuide = t.MainGuide
+    LEFT JOIN TBL020 ty ON ty.CardGuide = b.MainGuide
+    WHERE t.ProductGuide = ? AND CAST(b.BillDate AS DATE) < ?
+),
+حركات AS (
+    SELECT ISNULL(SUM(
+        CASE WHEN ty.BillKind = 2 THEN ISNULL(t.Quantity, 0) ELSE -ISNULL(t.Quantity, 0) END
+    ), 0) AS صافي
+    FROM TBL023 t
+    INNER JOIN TBL022 b ON b.CardGuide = t.MainGuide
+    LEFT JOIN TBL020 ty ON ty.CardGuide = b.MainGuide
+    WHERE t.ProductGuide = ? AND CAST(b.BillDate AS DATE) >= ? AND CAST(b.BillDate AS DATE) <= ?
+)
+SELECT (SELECT رصيد FROM أول) AS رصيد_أول_المدة,
+       (SELECT رصيد FROM أول) + (SELECT صافي FROM حركات) AS رصيد_آخر_المدة
+"""
+
+
+@app.route('/corporate/materials_map', methods=['GET', 'POST'])
+@login_required
+def materials_map():
+    """شريحة خريطة المواد — التعتيق — عرض رصيد أول المدة ورصيد آخر المدة للصنف (حقل المعتق / Bulk Liquid Sources)."""
+    products = []
+    balance_row = None
+    product_guide = request.args.get('product_guide') or (request.form.get('product_guide') if request.method == 'POST' else None)
+    from_date = request.args.get('from_date') or (request.form.get('from_date') if request.method == 'POST' else None) or datetime.now().replace(month=1, day=1).strftime('%Y-%m-%d')
+    to_date = request.args.get('to_date') or (request.form.get('to_date') if request.method == 'POST' else None) or datetime.now().strftime('%Y-%m-%d')
+
+    try:
+        products = query_db("SELECT CardGuide, ProductName, LatinName FROM TBL007 ORDER BY ProductName") or []
+    except Exception:
+        products = []
+
+    if product_guide and from_date and to_date:
+        try:
+            balance_row = query_db(
+                PRODUCT_BALANCE_SQL,
+                (product_guide, from_date, product_guide, from_date, to_date),
+                one=True
+            )
+        except Exception:
+            balance_row = None
+
+    selected_product_name = None
+    if product_guide and products:
+        for p in products:
+            if str(p.get('CardGuide')) == str(product_guide):
+                selected_product_name = p.get('ProductName') or p.get('LatinName') or product_guide
+                break
+
+    return render_template(
+        'corporate/materials_map.html',
+        products=products,
+        product_guide=product_guide,
+        from_date=from_date,
+        to_date=to_date,
+        balance_row=balance_row,
+        selected_product_name=selected_product_name,
+    )
+
+
 @app.route('/recruiter/dashboard')
 @login_required
 def recruiter_dashboard():
@@ -3099,13 +3168,14 @@ def training_sales_dashboard():
 @login_required
 @role_required(['TrainingSales', 'Manager'])
 def training_sales_index():
-    """لوحة مبيعات التدريب: تسجيل مهتم تدريب، قائمة المهتمين، حجز موعد اختبار مواهب تدريب."""
-    # مهتمو التدريب: مرشحون PrimaryIntent='Training' أو Status='Training_Lead'
+    """لوحة مبيعات التدريب: تسجيل مهتم تدريب، قائمة المهتمين (من لم يُحجز لهم موعد بعد)، حجز موعد اختبار مواهب تدريب. بعد الحجز ينتقلون لقائمة متابعة المواعيد."""
+    # مهتمو التدريب: من لم يُحجز لهم موعد بعد (بعد الحجز يختفون من هنا ويظهرون في متابعة المواعيد)
     try:
         training_leads = query_db("""
             SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CreatedAt, C.PrimaryIntent
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
             ORDER BY C.CreatedAt DESC
         """)
     except Exception:

@@ -44,27 +44,27 @@
                             </select>
                         </div>
 
-                        <!-- Full TA Fields -->
-                        <div class="row">
-                            <div class="col-md-2 mb-3">
-                                <label>C (Comprehension)</label>
-                                <input type="number" name="score_c" class="form-control" step="0.5" min="0" max="10">
+                        <!-- Full TA Fields — C, F, P, G, V على نفس السطر -->
+                        <div class="row g-2 mb-3 flex-nowrap">
+                            <div class="col">
+                                <label class="form-label small">C (Comprehension)</label>
+                                <input type="number" name="score_c" class="form-control form-control-sm" step="0.5" min="0" max="10">
                             </div>
-                            <div class="col-md-2 mb-3">
-                                <label>F (Fluency)</label>
-                                <input type="number" name="score_f" class="form-control" step="0.5" min="0" max="10">
+                            <div class="col">
+                                <label class="form-label small">F (Fluency)</label>
+                                <input type="number" name="score_f" class="form-control form-control-sm" step="0.5" min="0" max="10">
                             </div>
-                            <div class="col-md-2 mb-3">
-                                <label>P (Pronunciation)</label>
-                                <input type="number" name="score_p" class="form-control" step="0.5" min="0" max="10">
+                            <div class="col">
+                                <label class="form-label small">P (Pronunciation)</label>
+                                <input type="number" name="score_p" class="form-control form-control-sm" step="0.5" min="0" max="10">
                             </div>
-                            <div class="col-md-2 mb-3">
-                                <label>G (Grammar)</label>
-                                <input type="number" name="score_g" class="form-control" step="0.5" min="0" max="10">
+                            <div class="col">
+                                <label class="form-label small">G (Grammar)</label>
+                                <input type="number" name="score_g" class="form-control form-control-sm" step="0.5" min="0" max="10">
                             </div>
-                            <div class="col-md-2 mb-3">
-                                <label>V (Vocabulary)</label>
-                                <input type="number" name="score_v" class="form-control" step="0.5" min="0" max="10">
+                            <div class="col">
+                                <label class="form-label small">V (Vocabulary)</label>
+                                <input type="number" name="score_v" class="form-control form-control-sm" step="0.5" min="0" max="10">
                             </div>
                         </div>
 
@@ -92,9 +92,14 @@
                                 <input type="radio" class="btn-check" name="decision" id="dec2" value="Training">
                                 <label class="btn btn-outline-warning" for="dec2">Training</label>
 
+                                {% if eval_type != 'Training' %}
                                 <input type="radio" class="btn-check" name="decision" id="dec3" value="Rejected">
                                 <label class="btn btn-outline-danger" for="dec3">Rejected</label>
+                                {% endif %}
                             </div>
+                            {% if eval_type == 'Training' %}
+                            <small class="text-muted">في تقييم التدريب لا يُرفض أحد — الخياران: Accepted أو Training.</small>
+                            {% endif %}
                         </div>
 
                         <div class="d-grid gap-2">
