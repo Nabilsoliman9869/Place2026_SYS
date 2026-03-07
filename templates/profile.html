@@ -224,7 +224,8 @@
                 <h5 class="mb-0 text-info"><i class="fas fa-file-excel"></i> بيانات من جميع الأوراق <small class="text-muted fs-6">كل الحقول التي تلامست مع المتدرب</small></h5>
                 <div>
                     <a href="{{ url_for('add_sheet_booking', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info me-1"><i class="fas fa-calendar-plus"></i> إضافة سجل حجز</a>
-                    <a href="{{ url_for('add_sheet_ga', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-clipboard-list"></i> إضافة سجل مقابلة GA</a>
+                    <a href="{{ url_for('add_sheet_ga', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info me-1"><i class="fas fa-clipboard-list"></i> إضافة سجل مقابلة GA</a>
+                    <a href="{{ url_for('add_sheet_exit_makeup', candidate_id=cand.CandidateID) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-door-open"></i> إضافة سجل Exit Make-Up</a>
                 </div>
             </div>
             <div class="card-body">
@@ -244,7 +245,7 @@
                 </div>
                 {% endfor %}
                 {% else %}
-                <p class="text-muted small mb-0">لا توجد سجلات أوراق بعد. استخدم «إضافة سجل حجز» أو «إضافة سجل مقابلة GA» أعلاه للتشغيل اليومي.</p>
+                <p class="text-muted small mb-0">لا توجد سجلات أوراق بعد. استخدم أزرة «إضافة سجل حجز» أو «إضافة سجل مقابلة GA» أو «إضافة سجل Exit Make-Up» أعلاه للتشغيل اليومي.</p>
                 {% endif %}
             </div>
         </div>

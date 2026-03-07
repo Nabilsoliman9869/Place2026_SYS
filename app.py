@@ -2976,6 +2976,42 @@ def add_sheet_ga(candidate_id):
     recruiters = query_db("SELECT UserID, FullName, Username FROM Users_1 WHERE Role IN ('Recruiter', 'Sales')")
     return render_template('profile/add_ga_sheet.html', cand=cand, evaluators=evaluators or [], recruiters=recruiters or [])
 
+@app.route('/profile/<int:candidate_id>/add-exit-makeup', methods=['GET', 'POST'])
+@login_required
+def add_sheet_exit_makeup(candidate_id):
+    """نافذة إدخال: تسجيل سجل Exit Make-Up — للتشغيل اليومي."""
+    cand = query_db('SELECT CandidateID, FullName, Phone, Email FROM Candidates WHERE CandidateID=?', (candidate_id,), one=True)
+    if not cand:
+        return 'Candidate not found', 404
+    if request.method == 'POST':
+        f = request.form
+        row = {
+            "Time": f.get('time'),
+            "Candidate Name": f.get('name') or cand.get('FullName'),
+            "Pri #": f.get('phone') or cand.get('Phone'),
+            "Wave": f.get('wave'),
+            "Venue": f.get('venue'),
+            "C": f.get('c'), "F": f.get('f'), "P": f.get('p'), "G": f.get('g'), "V": f.get('v'),
+            "Language comments": f.get('language_comments'),
+            "CEFR": f.get('cefr'),
+            "Recording Link": f.get('recording_link'),
+            "Status": f.get('status'),
+            "Rec. Project": f.get('rec_project'),
+            "Interviewer": f.get('interviewer'),
+            "Closer": f.get('closer'),
+            "Language Feedback": f.get('language_feedback'),
+            "Closing Status": f.get('closing_status'),
+        }
+        row = {k: (v.strip() if isinstance(v, str) and v else v) for k, v in row.items() if v is not None and v != ''}
+        try:
+            _append_sheet_row(candidate_id, 'Exit Make-Up', row)
+            flash('تم تسجيل سجل Exit Make-Up.', 'success')
+        except Exception as e:
+            flash('خطأ: ' + str(e)[:80], 'danger')
+        return redirect(url_for('candidate_profile', candidate_id=candidate_id))
+    evaluators = query_db("SELECT UserID, FullName, Username FROM Users_1 WHERE Role IN ('Talent', 'Talent_Recruitment', 'Talent_Training', 'TA-Training', 'Trainer')")
+    return render_template('profile/add_exit_makeup_sheet.html', cand=cand, evaluators=evaluators or [])
+
 @app.route('/admin/users')
 @login_required
 @role_required(['Manager'])

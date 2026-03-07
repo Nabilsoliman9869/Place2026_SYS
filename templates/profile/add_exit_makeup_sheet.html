@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}">ملف المتدرب</a></li>
+            <li class="breadcrumb-item active">إضافة سجل Exit Make-Up</li>
+        </ol>
+    </nav>
+    <h5 class="mb-4"><i class="fas fa-door-open text-info"></i> إضافة سجل Exit Make-Up — للتشغيل اليومي</h5>
+    <p class="text-muted small">البيانات ستظهر في قسم «بيانات من جميع الأوراق» في ملف المتدرب.</p>
+    <form method="POST" class="card shadow-sm p-4">
+        <div class="row g-3">
+            <div class="col-md-3"><label class="form-label">Time</label><input type="text" name="time" class="form-control" placeholder="04:30:00"></div>
+            <div class="col-md-4"><label class="form-label">Candidate Name</label><input type="text" name="name" class="form-control" value="{{ cand.FullName or '' }}"></div>
+            <div class="col-md-3"><label class="form-label">Pri #</label><input type="text" name="phone" class="form-control" value="{{ cand.Phone or '' }}" placeholder="رقم الهاتف"></div>
+            <div class="col-md-4"><label class="form-label">Wave</label><input type="text" name="wave" class="form-control" placeholder="A1.1W3 Online"></div>
+            <div class="col-md-4"><label class="form-label">Venue</label><input type="text" name="venue" class="form-control" placeholder="Online"></div>
+            <div class="col-md-1"><label class="form-label">C</label><input type="text" name="c" class="form-control" placeholder="3"></div>
+            <div class="col-md-1"><label class="form-label">F</label><input type="text" name="f" class="form-control" placeholder="2"></div>
+            <div class="col-md-1"><label class="form-label">P</label><input type="text" name="p" class="form-control" placeholder="2"></div>
+            <div class="col-md-1"><label class="form-label">G</label><input type="text" name="g" class="form-control" placeholder="1.5"></div>
+            <div class="col-md-1"><label class="form-label">V</label><input type="text" name="v" class="form-control" placeholder="3"></div>
+            <div class="col-md-2"><label class="form-label">CEFR</label><input type="text" name="cefr" class="form-control" placeholder="A1"></div>
+            <div class="col-md-2"><label class="form-label">Status</label><input type="text" name="status" class="form-control" placeholder="Passed"></div>
+            <div class="col-md-2"><label class="form-label">Rec. Project</label><input type="text" name="rec_project" class="form-control" placeholder="A1.2"></div>
+            <div class="col-md-3"><label class="form-label">Interviewer</label><select name="interviewer" class="form-select"><option value="">—</option>{% for u in evaluators %}<option value="{{ u.FullName or u.Username }}">{{ u.FullName or u.Username }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label">Closer</label><input type="text" name="closer" class="form-control" placeholder="اسم المُغلق"></div>
+            <div class="col-md-2"><label class="form-label">Language Feedback</label><input type="text" name="language_feedback" class="form-control" placeholder="Done"></div>
+            <div class="col-md-2"><label class="form-label">Closing Status</label><input type="text" name="closing_status" class="form-control" placeholder="Hired"></div>
+            <div class="col-12"><label class="form-label">Language comments</label><textarea name="language_comments" class="form-control" rows="4" placeholder="ملاحظات التقييم اللغوي / التعليقات"></textarea></div>
+            <div class="col-12"><label class="form-label">Recording Link</label><input type="url" name="recording_link" class="form-control" placeholder="https://drive.google.com/..."></div>
+        </div>
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ السجل</button>
+            <a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}" class="btn btn-outline-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
