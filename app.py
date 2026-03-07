@@ -3663,7 +3663,7 @@ def training_attendance():
             # Fetch students and their attendance for the SPECIFIC DATE
             # 'Date' column is confirmed by schema check.
             students = query_db('''
-                SELECT E.EnrollmentID, C.FullName,
+                SELECT E.EnrollmentID, E.CandidateID, C.FullName,
                         A.Status, A.CheckInTime, A.CheckOutTime, A.AssignmentDone, A.AttendanceID
                 FROM Enrollments E
                 JOIN Candidates C ON E.CandidateID = C.CandidateID

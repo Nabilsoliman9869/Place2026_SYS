@@ -31,6 +31,11 @@
     </div>
 
     {% if selected_batch %}
+    <div class="mb-2">
+        <a href="{{ url_for('batch_details', batch_id=selected_batch.BatchID) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-list me-1"></i> تفاصيل الدفعة (ملاحظات المدرب / الماليات من هنا)
+        </a>
+    </div>
     <form method="POST" action="{{ url_for('save_attendance_grid') }}">
         <input type="hidden" name="batch_id" value="{{ selected_batch.BatchID }}">
         <input type="hidden" name="date" value="{{ selected_date }}">
@@ -93,13 +98,14 @@
                             </td>
 
                             <td>
-                                <span class="badge bg-light text-dark border">
-                                    {% if s.CheckInTime and s.CheckOutTime %}
-                                        Auto Calc
-                                    {% else %}
-                                        --:--
-                                    {% endif %}
-                                </span>
+                                <a href="{{ url_for('trainer_notes', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-info me-1" title="ملاحظات المدرب">
+                                    <i class="fas fa-sticky-note"></i>
+                                </a>
+                                {% if s.CandidateID %}
+                                <a href="{{ url_for('candidate_profile', candidate_id=s.CandidateID) }}" class="btn btn-sm btn-outline-secondary" title="ملف المتدرب">
+                                    <i class="fas fa-user-file"></i>
+                                </a>
+                                {% endif %}
                             </td>
                         </tr>
                         {% else %}
