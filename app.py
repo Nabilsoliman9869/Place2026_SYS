@@ -3531,7 +3531,7 @@ def training_sales_exam_fee_print(invoice_id):
     if not inv:
         abort(404)
     items = query_db("SELECT * FROM InvoiceItems WHERE InvoiceID = ?", (invoice_id,)) or []
-    if not items or not any((item.get('Description') or '').startswith(EXAM_FEE_DESCRIPTION) for item in items):
+    if not items or not any(EXAM_FEE_DESCRIPTION in (item.get('Description') or '') for item in items):
         abort(404)
     payment_method = ''
     for it in items:
@@ -3658,7 +3658,7 @@ def training_sales_course_fee_print(invoice_id):
     if not inv:
         abort(404)
     items = query_db("SELECT * FROM InvoiceItems WHERE InvoiceID = ?", (invoice_id,)) or []
-    if not items or not any((item.get('Description') or '').startswith(TRAINING_FEE_DESCRIPTION) for item in items):
+    if not items or not any(TRAINING_FEE_DESCRIPTION in (item.get('Description') or '') for item in items):
         abort(404)
     payment_method = ''
     for it in items:
