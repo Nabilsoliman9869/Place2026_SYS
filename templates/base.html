@@ -380,11 +380,11 @@
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- التدريب: مدير/رئيس/قائد/منسق = الأكاديمية فقط؛ المدرب = أكاديمية + الحضور -->
+            <!-- التدريب: كل دور يرى نوافذه فقط — بدون تضارب أو تكرار -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'Trainer']) %}
             <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
-            {% if session.get('role') == 'TrainingSales' %}
+            {% if session.get('role') in ['TrainingSales', 'Manager'] %}
             <a href="{{ url_for('training_sales_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_dashboard' else '' }}">
                 <i class="fas fa-tachometer-alt"></i>
@@ -420,10 +420,13 @@
             <a href="{{ url_for('training_sales_scheduling') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_scheduling' or request.endpoint == 'training_sales_book_slot' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text">جدولة اختبار التدريب <span class="arabic-sub">حجز مواعيد من مختبري مواهب</span></span>
+                <span class="link-text">جدولة اختبار التدريب <span class="arabic-sub">حجز من مختبري مواهب</span></span>
             </a>
-            {% endif %}
-            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingCoordinator'] %}
+            <a href="{{ url_for('training_index') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
+                <i class="fas fa-graduation-cap"></i>
+                <span class="link-text">Academy <span class="arabic-sub">الأكاديمية — إلحاق مهتمين</span></span>
+            </a>
             <a href="{{ url_for('training_sales_exam_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
@@ -434,17 +437,34 @@
                 <i class="fas fa-file-invoice"></i>
                 <span class="link-text">فاتورة التدريب — ايراد دورات</span>
             </a>
+            <a href="{{ url_for('training_attendance') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
+                <i class="fas fa-clipboard-check"></i>
+                <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
+            </a>
             {% endif %}
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'Trainer'] %}
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
                 <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
             </a>
-            {% if check_role_access(['Manager', 'Trainer', 'TrainingLead', 'TrainingCoordinator']) %}
             <a href="{{ url_for('training_attendance') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
                 <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
+            </a>
+            {% endif %}
+            {% if session.get('role') == 'TrainingManager' %}
+            <a href="{{ url_for('training_sales_exam_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="link-text">تحصيل رسوم امتحان</span>
+            </a>
+            <a href="{{ url_for('training_sales_course_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
+                <i class="fas fa-file-invoice"></i>
+                <span class="link-text">فاتورة التدريب — ايراد دورات</span>
             </a>
             {% endif %}
             {% endif %}
@@ -505,14 +525,10 @@
                     <i class="fas fa-th-list"></i>
                     <span class="link-text">Browse <span class="arabic-sub">استعراض دورات، مدربين، فصول، دفعات</span></span>
                 </a>
-                <!-- ملف المتدرب: متاح لجميع المستخدمين من كل نوافذ النظام -->
-                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="Trainee file search / ابحث وافتح ملف المتدرب">
+                <!-- ملف المتدرب / بحث عام — متاح لجميع المستخدمين -->
+                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ملف متدرب — بحث وفتح الملف">
                     <i class="fas fa-folder-open"></i>
-                    <span class="link-text">Trainee File <span class="arabic-sub">ملف متدرب — بحث وفتح الملف</span></span>
-                </a>
-                <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="Global Search / بحث عام">
-                    <i class="fas fa-search"></i>
-                    <span class="link-text">Global Search <span class="arabic-sub">بحث عام</span></span>
+                    <span class="link-text">Trainee File <span class="arabic-sub">ملف متدرب — بحث عام</span></span>
                 </a>
                 <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false" title="Logout / خروج">
                     <i class="fas fa-sign-out-alt"></i>
