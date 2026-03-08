@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort
 from markupsafe import Markup
 import functools
 import os
@@ -3394,11 +3394,13 @@ def _create_training_fee_invoice_tbl022_023(cursor, amount, notes):
 @login_required
 @role_required(['TrainingSales', 'Manager'])
 def training_sales_exam_fee():
-    """نافذة إدخال فاتورة تحصيل قيمة خدمة امتحان — نفس بنية الفاتورة (رأس + بند) كما للمنسق."""
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
         amount = request.form.get('amount')
-        notes = (request.form.get('notes') or '').strip()
+        notes = (request.form.get('notes') or '').strip() or EXAM_FEE_DESCRIPTION
+        payment_method = (request.form.get('payment_method') or '').strip()
+        if payment_method:
+            notes = notes + ' | الدفع: ' + payment_method
         if not candidate_id or not amount:
             flash('الرجاء اختيار المهتم وإدخال المبلغ.', 'danger')
             return redirect(url_for('training_sales_exam_fee'))
@@ -3413,12 +3415,11 @@ def training_sales_exam_fee():
             return redirect(url_for('training_sales_exam_fee'))
         cursor = db.cursor()
         try:
-            notes = (request.form.get('notes') or '').strip() or EXAM_FEE_DESCRIPTION
             saved = False
             try:
                 if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes):
                     db.commit()
-                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان (TBL022/TBL023) بنجاح.', 'success')
+                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان بنجاح.', 'success')
                     saved = True
                 else:
                     db.rollback()
@@ -3426,6 +3427,7 @@ def training_sales_exam_fee():
                 db.rollback()
             if not saved:
                 try:
+                    desc = EXAM_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
                     cursor.execute("""
                         INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
                         OUTPUT INSERTED.InvoiceID
@@ -3437,9 +3439,9 @@ def training_sales_exam_fee():
                         cursor.execute("""
                             INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
                             VALUES (?, ?, 1, ?, ?)
-                        """, (invoice_id, EXAM_FEE_DESCRIPTION, amount_f, amount_f))
+                        """, (invoice_id, desc, amount_f, amount_f))
                     db.commit()
-                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان تحديد المستوى بنجاح.', 'success')
+                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان بنجاح.', 'success')
                 except Exception as e:
                     db.rollback()
                     flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
@@ -3463,23 +3465,47 @@ def training_sales_exam_fee():
             SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
             FROM InvoiceHeaders I
             LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
-            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description = ?)
+            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
-        """, (EXAM_FEE_DESCRIPTION,)) or []
+        """, (EXAM_FEE_DESCRIPTION + '%',)) or []
     except Exception:
         recent_invoices = []
     return render_template('training/exam_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
+
+
+@app.route('/training/sales/exam-fee/<int:invoice_id>/print')
+@login_required
+@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+def training_sales_exam_fee_print(invoice_id):
+    inv = query_db("""
+        SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I
+        LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID WHERE I.InvoiceID = ?
+    """, (invoice_id,), one=True)
+    if not inv:
+        abort(404)
+    items = query_db("SELECT * FROM InvoiceItems WHERE InvoiceID = ?", (invoice_id,)) or []
+    if not items or not any((item.get('Description') or '').startswith(EXAM_FEE_DESCRIPTION) for item in items):
+        abort(404)
+    payment_method = ''
+    for it in items:
+        d = (it.get('Description') or '')
+        if 'الدفع:' in d:
+            payment_method = d.split('الدفع:')[1].strip()
+            break
+    return render_template('training/invoice_print.html', invoice=inv, items=items, title='فاتورة تحصيل رسوم امتحان تحديد المستوى', payment_method=payment_method)
 
 
 @app.route('/training/sales/course-fee', methods=['GET', 'POST'])
 @login_required
 @role_required(['TrainingSales', 'Manager'])
 def training_sales_course_fee():
-    """فاتورة التدريب — ايراد دورات (نفس آلية فاتورة الامتحان، TBL020 ايراد دورات تدريب، TBL007 ايرادات دورات)."""
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
         amount = request.form.get('amount')
         notes = (request.form.get('notes') or '').strip() or TRAINING_FEE_DESCRIPTION
+        payment_method = (request.form.get('payment_method') or '').strip()
+        if payment_method:
+            notes = notes + ' | الدفع: ' + payment_method
         if not candidate_id or not amount:
             flash('الرجاء اختيار المهتم وإدخال المبلغ.', 'danger')
             return redirect(url_for('training_sales_course_fee'))
@@ -3498,7 +3524,7 @@ def training_sales_course_fee():
             try:
                 if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes):
                     db.commit()
-                    flash('تم تسجيل فاتورة ايراد دورات تدريب (TBL022/TBL023) بنجاح.', 'success')
+                    flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
                     saved = True
                 else:
                     db.rollback()
@@ -3506,6 +3532,7 @@ def training_sales_course_fee():
                 db.rollback()
             if not saved:
                 try:
+                    desc = TRAINING_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
                     cursor.execute("""
                         INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
                         OUTPUT INSERTED.InvoiceID
@@ -3517,7 +3544,7 @@ def training_sales_course_fee():
                         cursor.execute("""
                             INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
                             VALUES (?, ?, 1, ?, ?)
-                        """, (invoice_id, TRAINING_FEE_DESCRIPTION, amount_f, amount_f))
+                        """, (invoice_id, desc, amount_f, amount_f))
                     db.commit()
                     flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
                 except Exception as e:
@@ -3541,12 +3568,34 @@ def training_sales_course_fee():
             SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
             FROM InvoiceHeaders I
             LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
-            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description = ?)
+            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
-        """, (TRAINING_FEE_DESCRIPTION,)) or []
+        """, (TRAINING_FEE_DESCRIPTION + '%',)) or []
     except Exception:
         recent_invoices = []
     return render_template('training/course_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
+
+
+@app.route('/training/sales/course-fee/<int:invoice_id>/print')
+@login_required
+@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+def training_sales_course_fee_print(invoice_id):
+    inv = query_db("""
+        SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I
+        LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID WHERE I.InvoiceID = ?
+    """, (invoice_id,), one=True)
+    if not inv:
+        abort(404)
+    items = query_db("SELECT * FROM InvoiceItems WHERE InvoiceID = ?", (invoice_id,)) or []
+    if not items or not any((item.get('Description') or '').startswith(TRAINING_FEE_DESCRIPTION) for item in items):
+        abort(404)
+    payment_method = ''
+    for it in items:
+        d = (it.get('Description') or '')
+        if 'الدفع:' in d:
+            payment_method = d.split('الدفع:')[1].strip()
+            break
+    return render_template('training/invoice_print.html', invoice=inv, items=items, title='فاتورة ايراد دورات تدريب', payment_method=payment_method)
 
 
 @app.route('/training/index')

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        h1 { font-size: 1.25rem; border-bottom: 1px solid #333; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: right; }
+        th { background: #f5f5f5; }
+        .info { margin: 8px 0; }
+        .no-print { margin-top: 16px; }
+        @media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    <div class="info"><strong>رقم الفاتورة:</strong> {{ invoice.InvoiceID }}</div>
+    <div class="info"><strong>التاريخ:</strong> {{ invoice.InvoiceDate.strftime('%Y-%m-%d %H:%M') if invoice.InvoiceDate else '-' }}</div>
+    <div class="info"><strong>العميل:</strong> {{ invoice.FullName or '-' }}</div>
+    <div class="info"><strong>الهاتف:</strong> {{ invoice.Phone or '-' }}</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>البيان</th>
+                <th>الكمية</th>
+                <th>سعر الوحدة</th>
+                <th>الإجمالي</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for it in items %}
+            <tr>
+                <td>{{ it.Description or '-' }}</td>
+                <td>{{ it.Quantity or 1 }}</td>
+                <td>{{ it.UnitPrice or 0 }} EGP</td>
+                <td>{{ it.LineTotal or it.UnitPrice or 0 }} EGP</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="info"><strong>إجمالي المبلغ:</strong> {{ invoice.TotalAmount or 0 }} EGP</div>
+    <div class="info"><strong>طريقة الدفع:</strong> {{ payment_method or '-' }}</div>
+
+    <div class="no-print">
+        <button type="button" onclick="window.print();" class="btn btn-primary">طباعة</button>
+        <button type="button" onclick="window.close();">إغلاق</button>
+    </div>
+</body>
+</html>
