@@ -3168,6 +3168,29 @@ def delete_user(user_id):
         query_db("DELETE FROM Users_1 WHERE UserID=?", (user_id,))
         flash('User deleted', 'success')
     return redirect(url_for('manage_users'))
+@app.route('/training/batch/<int:batch_id>/set-status', methods=['POST'])
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+def set_batch_status(batch_id):
+    """تغيير حالة الدفعة من Active إلى Completed (غير منشطة) أو العكس."""
+    new_status = (request.form.get('status') or '').strip()
+    if new_status not in ('Active', 'Completed', 'Inactive'):
+        flash('الحالة غير صالحة. استخدم Active أو Completed.', 'warning')
+        return redirect(request.referrer or url_for('browse_academy'))
+    if new_status == 'Inactive':
+        new_status = 'Completed'  # توحيد: غير منشطة = Completed
+    batch = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID = ?", (batch_id,), one=True)
+    if not batch:
+        flash('الدفعة غير موجودة.', 'danger')
+        return redirect(request.referrer or url_for('browse_academy'))
+    try:
+        query_db("UPDATE CourseBatches SET Status = ? WHERE BatchID = ?", (new_status, batch_id))
+        flash(f'تم تغيير حالة الدفعة إلى «{new_status}».', 'success')
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:80], 'danger')
+    return redirect(request.referrer or url_for('browse_academy'))
+
+
 @app.route('/browse')
 @login_required
 def browse_academy():

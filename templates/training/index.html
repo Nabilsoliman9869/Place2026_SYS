@@ -49,12 +49,13 @@
                     <th>Trainer</th>
                     <th>Room</th>
                     <th>Dates</th>
+                    <th>Status</th>
                     <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% if not batches %}
-                <tr><td colspan="6" class="text-muted text-center py-4">لا توجد دفعات. أنشئ دفعة من زر <strong>New Wave</strong> أعلاه.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center py-4">لا توجد دفعات. أنشئ دفعة من زر <strong>New Wave</strong> أعلاه.</td></tr>
                 {% endif %}
                 {% for wave in batches %}
                 <tr>
@@ -65,6 +66,21 @@
                     <td>
                         <small class="d-block">{{ wave.StartDate or '-' }}</small>
                         <small class="text-muted">{{ wave.EndDate or '-' }}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if wave.Status == 'Active' else 'secondary' }}">{{ wave.Status or '-' }}</span>
+                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                        <form action="{{ url_for('set_batch_status', batch_id=wave.BatchID) }}" method="POST" class="d-inline ms-1" data-turbo="false">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                            {% if wave.Status == 'Active' %}
+                            <input type="hidden" name="status" value="Completed">
+                            <button type="submit" class="btn btn-link text-warning p-0 small" title="تحويل إلى غير منشطة">غير منشطة</button>
+                            {% else %}
+                            <input type="hidden" name="status" value="Active">
+                            <button type="submit" class="btn btn-link text-success p-0 small" title="تفعيل">تفعيل</button>
+                            {% endif %}
+                        </form>
+                        {% endif %}
                     </td>
                     <td>
                         <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">

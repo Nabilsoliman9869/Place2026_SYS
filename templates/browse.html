@@ -92,7 +92,7 @@
                     {% if batches %}
                     <div class="table-responsive">
                         <table class="table table-hover table-sm mb-0">
-                            <thead class="table-light"><tr><th>الدفعة</th><th>الدورة</th><th>مدرب</th><th>قاعة</th><th>الحالة</th></tr></thead>
+                            <thead class="table-light"><tr><th>الدفعة</th><th>الدورة</th><th>مدرب</th><th>قاعة</th><th>الحالة</th><th>إجراء</th></tr></thead>
                             <tbody>
                                 {% for b in batches %}
                                 <tr>
@@ -101,6 +101,22 @@
                                     <td>{{ b.TrainerName or '-' }}</td>
                                     <td>{{ b.RoomName or '-' }}</td>
                                     <td><span class="badge bg-{{ 'success' if b.Status == 'Active' else 'secondary' }}">{{ b.Status or '-' }}</span></td>
+                                    <td>
+                                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                                        <form action="{{ url_for('set_batch_status', batch_id=b.BatchID) }}" method="POST" class="d-inline" data-turbo="false">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                                            {% if b.Status == 'Active' %}
+                                            <input type="hidden" name="status" value="Completed">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="تحويل إلى غير منشطة">غير منشطة</button>
+                                            {% else %}
+                                            <input type="hidden" name="status" value="Active">
+                                            <button type="submit" class="btn btn-sm btn-outline-success" title="تفعيل">تفعيل</button>
+                                            {% endif %}
+                                        </form>
+                                        {% else %}
+                                        <span class="text-muted small">—</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
