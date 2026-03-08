@@ -3337,6 +3337,216 @@ def training_sales_followup():
     return render_template('training/sales_followup.html', booked_today=booked_today or [], booked_upcoming=booked_upcoming or [], today=today)
 
 
+EXAM_FEE_DESCRIPTION = 'رسوم امتحان تحديد المستوى'
+
+# فاتورة رسوم امتحان تدريب — TBL022/TBL023 (TBL020 نوع الفاتورة، TBL007 الصنف)
+EXAM_FEE_BILL_TYPE = '4590AFCC-3215-4213-9625-A59BD4EFAA3E'   # MainGuide = رسوم امتحان تدريب
+EXAM_FEE_PRODUCT = 'F6776237-EFD0-48C1-B906-013B118B592E'     # TBL007 الصنف
+EXAM_FEE_STORE = '6F058E4B-69B5-43E9-9873-697091C98591'      # جايد المخزن
+EXAM_FEE_CURRENCY = 'F128EEE5-B7EA-4C47-A804-CFD3E6ABEE8E'   # جايد العملة
+
+# فاتورة التدريب — ايراد دورات (جدول 20 + جدول 7)
+TRAINING_BILL_TYPE = 'AA290AC4-ECD8-4EC0-851B-FC34DC65C9C7'   # TBL020: ايراد دورات تدريب
+TRAINING_PRODUCT = '4F08EC42-70EB-418F-A7C0-9D4C6447E345'     # TBL007: ايرادات دورات
+TRAINING_FEE_DESCRIPTION = 'ايراد دورات تدريب'
+
+
+def _create_invoice_tbl022_023(cursor, amount, notes, bill_type_guid, product_guid, default_notes):
+    """إنشاء فاتورة في TBL022 + TBL023 (نمط Nuit). يُرجع True عند النجاح."""
+    import uuid
+    try:
+        cursor.execute("""
+            SELECT ISNULL(MAX(BillNumber), 0) + 1 FROM TBL022 WHERE MainGuide = ?
+        """, (bill_type_guid,))
+        row = cursor.fetchone()
+        bill_num = (row[0] if row else 0) or 1
+        bill_guid = str(uuid.uuid4())
+        row_guid = str(uuid.uuid4())
+        notes_str = (notes or default_notes or '')[:255]
+        cursor.execute("""
+            INSERT INTO TBL022 (CardGuide, BillNumber, BillDate, MainGuide, StoreGuide, Notes,
+                InsertedIn, DoneIn, CurrencyGuide, PayMethod, BillNumber2, OrderNumber, Rate,
+                Discount, LocalAdministrativeTax, TaxValue, DownPayment, ChangeValue, Paid, RoundValue, LockRelations, Security, Posted)
+            VALUES (?, ?, GETDATE(), ?, ?, ?, GETDATE(), GETDATE(), ?, 1, 0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+        """, (bill_guid, bill_num, bill_type_guid, EXAM_FEE_STORE, notes_str, EXAM_FEE_CURRENCY))
+        cursor.execute("""
+            INSERT INTO TBL023 (RowGuide, MainGuide, ProductGuide, Quantity, ExtraQuantity, Unit,
+                TotalValue, TotalValue2, TotalCost, DiscountValue, Discount0, Discount1, Discount2, Discount3,
+                ExtraValue, TaxValue, BillTax, Weight, Value, Length, Width, Hieght, UnitQuantity, SalesPrice, Quantity2, UnitQuantity2, InsertedIn, RecordSecurity)
+            VALUES (?, ?, ?, 1, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, ?, 0, 0, GETDATE(), 0)
+        """, (row_guid, bill_guid, product_guid, amount, amount, amount))
+        return True
+    except Exception:
+        return False
+
+
+def _create_exam_fee_invoice_tbl022_023(cursor, amount, notes):
+    """إنشاء فاتورة رسوم امتحان في TBL022 + TBL023."""
+    return _create_invoice_tbl022_023(cursor, amount, notes, EXAM_FEE_BILL_TYPE, EXAM_FEE_PRODUCT, EXAM_FEE_DESCRIPTION)
+
+
+def _create_training_fee_invoice_tbl022_023(cursor, amount, notes):
+    """إنشاء فاتورة التدريب (ايراد دورات) في TBL022 + TBL023 — TBL020 ايراد دورات تدريب، TBL007 ايرادات دورات."""
+    return _create_invoice_tbl022_023(cursor, amount, notes, TRAINING_BILL_TYPE, TRAINING_PRODUCT, TRAINING_FEE_DESCRIPTION)
+
+
+@app.route('/training/sales/exam-fee', methods=['GET', 'POST'])
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_exam_fee():
+    """نافذة إدخال فاتورة تحصيل قيمة خدمة امتحان — نفس بنية الفاتورة (رأس + بند) كما للمنسق."""
+    if request.method == 'POST':
+        candidate_id = request.form.get('candidate_id')
+        amount = request.form.get('amount')
+        notes = (request.form.get('notes') or '').strip()
+        if not candidate_id or not amount:
+            flash('الرجاء اختيار المهتم وإدخال المبلغ.', 'danger')
+            return redirect(url_for('training_sales_exam_fee'))
+        try:
+            amount_f = float(amount)
+        except ValueError:
+            flash('المبلغ غير صالح.', 'danger')
+            return redirect(url_for('training_sales_exam_fee'))
+        db = get_db()
+        if not db:
+            flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
+            return redirect(url_for('training_sales_exam_fee'))
+        cursor = db.cursor()
+        notes = (request.form.get('notes') or '').strip() or EXAM_FEE_DESCRIPTION
+        saved = False
+        try:
+            if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                db.commit()
+                flash('تم تسجيل فاتورة تحصيل رسوم امتحان (TBL022/TBL023) بنجاح.', 'success')
+                saved = True
+            else:
+                db.rollback()
+        except Exception:
+            db.rollback()
+        if not saved:
+            try:
+                cursor.execute("""
+                    INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                    OUTPUT INSERTED.InvoiceID
+                    VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                row = cursor.fetchone()
+                invoice_id = row[0] if row else None
+                if invoice_id:
+                    cursor.execute("""
+                        INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                        VALUES (?, ?, 1, ?, ?)
+                    """, (invoice_id, EXAM_FEE_DESCRIPTION, amount_f, amount_f))
+                db.commit()
+                flash('تم تسجيل فاتورة تحصيل رسوم امتحان تحديد المستوى بنجاح.', 'success')
+            except Exception as e:
+                db.rollback()
+                flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
+        finally:
+            cursor.close()
+        return redirect(url_for('training_sales_exam_fee'))
+
+    # GET: عرض قائمة المهتمين بالتدريب ونموذج إدخال الفاتورة
+    try:
+        leads = query_db("""
+            SELECT C.CandidateID, C.FullName, C.Phone, C.Email
+            FROM Candidates C
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            ORDER BY C.CreatedAt DESC
+        """) or []
+    except Exception:
+        leads = []
+    # آخر فواتير امتحان مسجلة (للاطلاع)
+    try:
+        recent_invoices = query_db("""
+            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
+            FROM InvoiceHeaders I
+            LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description = ?)
+            ORDER BY I.InvoiceDate DESC
+        """, (EXAM_FEE_DESCRIPTION,)) or []
+    except Exception:
+        recent_invoices = []
+    return render_template('training/exam_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
+
+
+@app.route('/training/sales/course-fee', methods=['GET', 'POST'])
+@login_required
+@role_required(['TrainingSales', 'Manager'])
+def training_sales_course_fee():
+    """فاتورة التدريب — ايراد دورات (نفس آلية فاتورة الامتحان، TBL020 ايراد دورات تدريب، TBL007 ايرادات دورات)."""
+    if request.method == 'POST':
+        candidate_id = request.form.get('candidate_id')
+        amount = request.form.get('amount')
+        notes = (request.form.get('notes') or '').strip() or TRAINING_FEE_DESCRIPTION
+        if not candidate_id or not amount:
+            flash('الرجاء اختيار المهتم وإدخال المبلغ.', 'danger')
+            return redirect(url_for('training_sales_course_fee'))
+        try:
+            amount_f = float(amount)
+        except ValueError:
+            flash('المبلغ غير صالح.', 'danger')
+            return redirect(url_for('training_sales_course_fee'))
+        db = get_db()
+        if not db:
+            flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
+            return redirect(url_for('training_sales_course_fee'))
+        cursor = db.cursor()
+        saved = False
+        try:
+            if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                db.commit()
+                flash('تم تسجيل فاتورة ايراد دورات تدريب (TBL022/TBL023) بنجاح.', 'success')
+                saved = True
+            else:
+                db.rollback()
+        except Exception:
+            db.rollback()
+        if not saved:
+            try:
+                cursor.execute("""
+                    INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                    OUTPUT INSERTED.InvoiceID
+                    VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                row = cursor.fetchone()
+                invoice_id = row[0] if row else None
+                if invoice_id:
+                    cursor.execute("""
+                        INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                        VALUES (?, ?, 1, ?, ?)
+                    """, (invoice_id, TRAINING_FEE_DESCRIPTION, amount_f, amount_f))
+                db.commit()
+                flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
+            except Exception as e:
+                db.rollback()
+                flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
+        finally:
+            cursor.close()
+        return redirect(url_for('training_sales_course_fee'))
+
+    try:
+        leads = query_db("""
+            SELECT C.CandidateID, C.FullName, C.Phone, C.Email
+            FROM Candidates C
+            WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            ORDER BY C.CreatedAt DESC
+        """) or []
+    except Exception:
+        leads = []
+    try:
+        recent_invoices = query_db("""
+            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
+            FROM InvoiceHeaders I
+            LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+            WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description = ?)
+            ORDER BY I.InvoiceDate DESC
+        """, (TRAINING_FEE_DESCRIPTION,)) or []
+    except Exception:
+        recent_invoices = []
+    return render_template('training/course_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
+
+
 @app.route('/training/index')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales'])

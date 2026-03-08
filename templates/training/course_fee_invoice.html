@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}">لوحة مبيعات التدريب</a></li>
+                <li class="breadcrumb-item active">فاتورة التدريب — ايراد دورات</li>
+            </ol>
+        </nav>
+        <h2><i class="fas fa-file-invoice-dollar text-primary"></i> فاتورة التدريب — ايراد دورات</h2>
+        <p class="text-muted mb-0">نفس آلية فاتورة الامتحان — TBL020: ايراد دورات تدريب، TBL007: ايرادات دورات.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0"><i class="fas fa-plus-circle me-2"></i> تسجيل فاتورة جديدة</h6>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('training_sales_course_fee') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                    <div class="mb-3">
+                        <label class="form-label">المهتم (المتدرب)</label>
+                        <select name="candidate_id" class="form-select" required>
+                            <option value="">-- اختر المهتم --</option>
+                            {% for l in leads %}
+                            <option value="{{ l.CandidateID }}">{{ l.FullName }} — {{ l.Phone or '-' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">المبلغ (EGP)</label>
+                        <input type="number" name="amount" class="form-control" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ملاحظات</label>
+                        <input type="text" name="notes" class="form-control" placeholder="ايراد دورات تدريب">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-1"></i> تسجيل الفاتورة</button>
+                </form>
+                {% if not leads %}
+                <p class="text-warning small mt-2 mb-0">لا يوجد مهتمون مسجلون. سجّل مهتم تدريب من صفحة «تسجيل مهتم تدريب» أولاً.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">آخر فواتير ايراد دورات المسجلة</div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>التاريخ</th>
+                            <th>المهتم</th>
+                            <th>المبلغ</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in recent_invoices %}
+                        <tr>
+                            <td>{{ inv.InvoiceID }}</td>
+                            <td><small>{{ inv.InvoiceDate.strftime('%Y-%m-%d %H:%M') if inv.InvoiceDate else '-' }}</small></td>
+                            <td>{{ inv.FullName or '-' }}</td>
+                            <td class="text-success fw-bold">{{ inv.TotalAmount }} EGP</td>
+                            <td><span class="badge bg-{{ 'success' if inv.Status == 'Paid' else 'secondary' }}">{{ inv.Status or '-' }}</span></td>
+                        </tr>
+                        {% endfor %}
+                        {% if not recent_invoices %}
+                        <tr><td colspan="5" class="text-center text-muted py-4">لا توجد فواتير مسجلة بعد.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
