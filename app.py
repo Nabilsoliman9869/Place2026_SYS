@@ -3412,36 +3412,37 @@ def training_sales_exam_fee():
             flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
             return redirect(url_for('training_sales_exam_fee'))
         cursor = db.cursor()
-        notes = (request.form.get('notes') or '').strip() or EXAM_FEE_DESCRIPTION
-        saved = False
         try:
-            if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes):
-                db.commit()
-                flash('تم تسجيل فاتورة تحصيل رسوم امتحان (TBL022/TBL023) بنجاح.', 'success')
-                saved = True
-            else:
-                db.rollback()
-        except Exception:
-            db.rollback()
-        if not saved:
+            notes = (request.form.get('notes') or '').strip() or EXAM_FEE_DESCRIPTION
+            saved = False
             try:
-                cursor.execute("""
-                    INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
-                    OUTPUT INSERTED.InvoiceID
-                    VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
-                """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
-                row = cursor.fetchone()
-                invoice_id = row[0] if row else None
-                if invoice_id:
-                    cursor.execute("""
-                        INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
-                        VALUES (?, ?, 1, ?, ?)
-                    """, (invoice_id, EXAM_FEE_DESCRIPTION, amount_f, amount_f))
-                db.commit()
-                flash('تم تسجيل فاتورة تحصيل رسوم امتحان تحديد المستوى بنجاح.', 'success')
-            except Exception as e:
+                if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                    db.commit()
+                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان (TBL022/TBL023) بنجاح.', 'success')
+                    saved = True
+                else:
+                    db.rollback()
+            except Exception:
                 db.rollback()
-                flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
+            if not saved:
+                try:
+                    cursor.execute("""
+                        INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                        OUTPUT INSERTED.InvoiceID
+                        VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                    """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                    row = cursor.fetchone()
+                    invoice_id = row[0] if row else None
+                    if invoice_id:
+                        cursor.execute("""
+                            INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                            VALUES (?, ?, 1, ?, ?)
+                        """, (invoice_id, EXAM_FEE_DESCRIPTION, amount_f, amount_f))
+                    db.commit()
+                    flash('تم تسجيل فاتورة تحصيل رسوم امتحان تحديد المستوى بنجاح.', 'success')
+                except Exception as e:
+                    db.rollback()
+                    flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
         finally:
             cursor.close()
         return redirect(url_for('training_sales_exam_fee'))
@@ -3492,35 +3493,36 @@ def training_sales_course_fee():
             flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
             return redirect(url_for('training_sales_course_fee'))
         cursor = db.cursor()
-        saved = False
         try:
-            if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes):
-                db.commit()
-                flash('تم تسجيل فاتورة ايراد دورات تدريب (TBL022/TBL023) بنجاح.', 'success')
-                saved = True
-            else:
-                db.rollback()
-        except Exception:
-            db.rollback()
-        if not saved:
+            saved = False
             try:
-                cursor.execute("""
-                    INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
-                    OUTPUT INSERTED.InvoiceID
-                    VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
-                """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
-                row = cursor.fetchone()
-                invoice_id = row[0] if row else None
-                if invoice_id:
-                    cursor.execute("""
-                        INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
-                        VALUES (?, ?, 1, ?, ?)
-                    """, (invoice_id, TRAINING_FEE_DESCRIPTION, amount_f, amount_f))
-                db.commit()
-                flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
-            except Exception as e:
+                if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                    db.commit()
+                    flash('تم تسجيل فاتورة ايراد دورات تدريب (TBL022/TBL023) بنجاح.', 'success')
+                    saved = True
+                else:
+                    db.rollback()
+            except Exception:
                 db.rollback()
-                flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
+            if not saved:
+                try:
+                    cursor.execute("""
+                        INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                        OUTPUT INSERTED.InvoiceID
+                        VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                    """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                    row = cursor.fetchone()
+                    invoice_id = row[0] if row else None
+                    if invoice_id:
+                        cursor.execute("""
+                            INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                            VALUES (?, ?, 1, ?, ?)
+                        """, (invoice_id, TRAINING_FEE_DESCRIPTION, amount_f, amount_f))
+                    db.commit()
+                    flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
+                except Exception as e:
+                    db.rollback()
+                    flash('خطأ عند الحفظ: ' + str(e)[:80], 'danger')
         finally:
             cursor.close()
         return redirect(url_for('training_sales_course_fee'))
