@@ -416,6 +416,18 @@
                 <span class="link-text">فاتورة التدريب — ايراد دورات</span>
             </a>
             {% endif %}
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingCoordinator'] %}
+            <a href="{{ url_for('training_sales_exam_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="link-text">تحصيل رسوم امتحان</span>
+            </a>
+            <a href="{{ url_for('training_sales_course_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
+                <i class="fas fa-file-invoice"></i>
+                <span class="link-text">فاتورة التدريب — ايراد دورات</span>
+            </a>
+            {% endif %}
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
