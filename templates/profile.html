@@ -251,7 +251,7 @@
         </div>
 
         <!-- 3. Financial History -->
-        <div class="card shadow-sm">
+        <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
                 <h5 class="mb-0 text-success"><i class="fas fa-money-bill-wave"></i> Financial History <small
                         class="text-muted fs-6">السجل المالي</small></h5>
@@ -278,6 +278,54 @@
                 </table>
                 {% else %}
                 <p class="text-muted">No payments recorded. <small>لا توجد مدفوعات مسجلة.</small></p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 4. معلومات الفوترة للمتدرب — الفواتير المسجلة له (رسوم امتحان، ايراد دورات) -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-primary"><i class="fas fa-file-invoice-dollar"></i> معلومات الفوترة للمتدرب</h5>
+                <p class="small text-muted mb-0 mt-1">الفواتير التي تُنشأ من تحصيل رسوم الامتحان أو ايراد الدورات لهذا المتدرب.</p>
+            </div>
+            <div class="card-body">
+                {% if candidate_invoices %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>التاريخ</th>
+                                <th>البيان / نوع الفاتورة</th>
+                                <th>المبلغ</th>
+                                <th>الحالة</th>
+                                <th>طباعة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inv in candidate_invoices %}
+                            <tr>
+                                <td>{{ inv.InvoiceID }}</td>
+                                <td>{{ inv.InvoiceDate.strftime('%Y-%m-%d %H:%M') if inv.InvoiceDate else '-' }}</td>
+                                <td><small>{{ (inv.FirstItemDescription or '-')[:60] }}{% if (inv.FirstItemDescription or '')|length > 60 %}...{% endif %}</small></td>
+                                <td class="text-success fw-bold">{{ inv.TotalAmount }} EGP</td>
+                                <td><span class="badge bg-{{ 'success' if inv.Status == 'Paid' else 'secondary' }}">{{ inv.Status or '-' }}</span></td>
+                                <td>
+                                    {% if 'رسوم امتحان' in (inv.FirstItemDescription or '') %}
+                                    <a href="{{ url_for('training_sales_exam_fee_print', invoice_id=inv.InvoiceID) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-print"></i></a>
+                                    {% elif 'ايراد دورات' in (inv.FirstItemDescription or '') %}
+                                    <a href="{{ url_for('training_sales_course_fee_print', invoice_id=inv.InvoiceID) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-print"></i></a>
+                                    {% else %}
+                                    <a href="{{ url_for('training_sales_exam_fee_print', invoice_id=inv.InvoiceID) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-print"></i></a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">لا توجد فواتير مسجلة لهذا المتدرب بعد. <small>(رسوم امتحان أو ايراد دورات من نوافذ التحصيل)</small></p>
                 {% endif %}
             </div>
         </div>

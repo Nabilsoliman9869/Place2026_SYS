@@ -21,28 +21,33 @@
                 <h6 class="mb-0"><i class="fas fa-plus-circle me-2"></i> تسجيل فاتورة جديدة</h6>
             </div>
             <div class="card-body">
+                <p class="small text-muted mb-3"><strong>الحساب:</strong> {% if g.user %}{{ g.user.Username or g.user.FullName or '—' }}{% else %}—{% endif %} (المدخل بواسطته)</p>
                 <form action="{{ url_for('training_sales_exam_fee') }}" method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
                     <div class="mb-3">
-                        <label class="form-label">المهتم (المتدرب)</label>
+                        <label class="form-label"><strong>اسم العميل</strong></label>
                         <select name="candidate_id" class="form-select" required>
-                            <option value="">-- اختر المهتم --</option>
+                            <option value="">-- اختر اسم العميل --</option>
                             {% for l in leads %}
-                            <option value="{{ l.CandidateID }}">{{ l.FullName }} — {{ l.Phone or '-' }}</option>
+                            <option value="{{ l.CandidateID }}">{{ l.FullName }} — {{ l.Phone or '-' }}{% if l.Email %} — {{ l.Email }}{% endif %}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">المبلغ (EGP)</label>
-                        <input type="number" name="amount" class="form-control" step="0.01" min="0" required placeholder="0.00">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">طريقة الدفع</label>
-                        <select name="payment_method" class="form-select">
-                            <option value="نقدي">نقدي</option>
-                            <option value="بطاقة">بطاقة</option>
-                            <option value="تحويل">تحويل</option>
-                        </select>
+                    <div class="border rounded p-3 bg-light mb-3">
+                        <h6 class="mb-3"><i class="fas fa-money-bill-wave me-1"></i> تسجيل الدفع</h6>
+                        <div class="mb-3">
+                            <label class="form-label">المبلغ (EGP)</label>
+                            <input type="number" name="amount" class="form-control" step="0.01" min="0" required placeholder="0.00">
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label">طريقة الدفع</label>
+                            <select name="payment_method" class="form-select">
+                                <option value="نقدي">نقدي</option>
+                                <option value="بطاقة">بطاقة</option>
+                                <option value="تحويل">تحويل</option>
+                            </select>
+                        </div>
+                        <p class="small text-muted mt-2 mb-0">يُسجّل الدفع على الفاتورة ويظهر عند الطباعة.</p>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
@@ -65,9 +70,10 @@
                         <tr>
                             <th>#</th>
                             <th>التاريخ</th>
-                            <th>المهتم</th>
+                            <th>اسم العميل</th>
                             <th>المبلغ</th>
                             <th>الحالة</th>
+                            <th>الحساب</th>
                             <th>طباعة</th>
                         </tr>
                     </thead>
@@ -79,11 +85,12 @@
                             <td>{{ inv.FullName or '-' }}</td>
                             <td class="text-success fw-bold">{{ inv.TotalAmount }} EGP</td>
                             <td><span class="badge bg-{{ 'success' if inv.Status == 'Paid' else 'secondary' }}">{{ inv.Status or '-' }}</span></td>
+                            <td><small>{{ inv.CreatedByUsername or '-' }}</small></td>
                             <td><a href="{{ url_for('training_sales_exam_fee_print', invoice_id=inv.InvoiceID) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-print"></i></a></td>
                         </tr>
                         {% endfor %}
                         {% if not recent_invoices %}
-                        <tr><td colspan="6" class="text-center text-muted py-4">لا توجد فواتير مسجلة بعد.</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-4">لا توجد فواتير مسجلة بعد.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>

@@ -2942,6 +2942,18 @@ def candidate_profile(candidate_id):
         ''', (candidate_id,)) or []
     except Exception:
         pass
+    # معلومات الفوترة للمتدرب — الفواتير المسجلة له (رسوم امتحان، ايراد دورات، إلخ) من InvoiceHeaders
+    candidate_invoices = []
+    try:
+        candidate_invoices = query_db('''
+            SELECT I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status,
+                   (SELECT TOP 1 II.Description FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID) AS FirstItemDescription
+            FROM InvoiceHeaders I
+            WHERE I.CandidateID = ?
+            ORDER BY I.InvoiceDate DESC
+        ''', (candidate_id,)) or []
+    except Exception:
+        pass
     return render_template(
         'profile.html',
         cand=cand,
@@ -2956,6 +2968,7 @@ def candidate_profile(candidate_id):
         marketing_assessment=marketing_assessment,
         sheet_data_list=sheet_data_list,
         trainer_notes_list=trainer_notes_list,
+        candidate_invoices=candidate_invoices,
     )
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):
@@ -3351,9 +3364,12 @@ TRAINING_PRODUCT = '4F08EC42-70EB-418F-A7C0-9D4C6447E345'     # TBL007: ايرا
 TRAINING_FEE_DESCRIPTION = 'ايراد دورات تدريب'
 
 
-def _create_invoice_tbl022_023(cursor, amount, notes, bill_type_guid, product_guid, default_notes):
-    """إنشاء فاتورة في TBL022 + TBL023 (نمط Nuit). يُرجع True عند النجاح."""
+def _create_invoice_tbl022_023(cursor, amount, notes, bill_type_guid, product_guid, default_notes,
+                               store_guid=None, currency_guid=None, agent_guide=None, pay_method=1):
+    """إنشاء فاتورة في TBL022 + TBL023 (نمط أكسترا ويب). قيمة الدفعة = amount تُسجّل في TBL022.Paid و TBL023.TotalValue."""
     import uuid
+    store_guid = store_guid or EXAM_FEE_STORE
+    currency_guid = currency_guid or EXAM_FEE_CURRENCY
     try:
         cursor.execute("""
             SELECT ISNULL(MAX(BillNumber), 0) + 1 FROM TBL022 WHERE MainGuide = ?
@@ -3363,31 +3379,39 @@ def _create_invoice_tbl022_023(cursor, amount, notes, bill_type_guid, product_gu
         bill_guid = str(uuid.uuid4())
         row_guid = str(uuid.uuid4())
         notes_str = (notes or default_notes or '')[:255]
+        # TBL022 — نمط أكسترا: CardGuide, MainGuide, BillNumber, BillDate, DoneIn, AgentGuide, Notes, ..., Paid (قيمة الدفعة), PayMethod
         cursor.execute("""
-            INSERT INTO TBL022 (CardGuide, BillNumber, BillDate, MainGuide, StoreGuide, Notes,
-                InsertedIn, DoneIn, CurrencyGuide, PayMethod, BillNumber2, OrderNumber, Rate,
-                Discount, LocalAdministrativeTax, TaxValue, DownPayment, ChangeValue, Paid, RoundValue, LockRelations, Security, Posted)
-            VALUES (?, ?, GETDATE(), ?, ?, ?, GETDATE(), GETDATE(), ?, 1, 0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
-        """, (bill_guid, bill_num, bill_type_guid, EXAM_FEE_STORE, notes_str, EXAM_FEE_CURRENCY))
+            INSERT INTO TBL022 (CardGuide, MainGuide, BillNumber, BillDate, DoneIn, AgentGuide, Notes,
+                Discount, TaxValue, LocalAdministrativeTax, LockRelations, InsertedIn, Paid, PayMethod, StoreGuide, CurrencyGuide)
+            VALUES (?, ?, ?, GETDATE(), GETDATE(), ?, ?, 0, 0, 0, 0, GETDATE(), ?, ?, ?, ?)
+        """, (bill_guid, bill_type_guid, bill_num, agent_guide, notes_str, amount, pay_method, store_guid, currency_guid))
+        # TBL023 — نمط أكسترا: MainGuide, ProductGuide, Quantity, Unit, TotalValue, InsertedIn, RelatedAgent (قيمة البند = قيمة الدفعة)
         cursor.execute("""
-            INSERT INTO TBL023 (RowGuide, MainGuide, ProductGuide, Quantity, ExtraQuantity, Unit,
-                TotalValue, TotalValue2, TotalCost, DiscountValue, Discount0, Discount1, Discount2, Discount3,
-                ExtraValue, TaxValue, BillTax, Weight, Value, Length, Width, Hieght, UnitQuantity, SalesPrice, Quantity2, UnitQuantity2, InsertedIn, RecordSecurity)
-            VALUES (?, ?, ?, 1, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, ?, 0, 0, GETDATE(), 0)
-        """, (row_guid, bill_guid, product_guid, amount, amount, amount))
+            INSERT INTO TBL023 (RowGuide, MainGuide, ProductGuide, Quantity, Unit, TotalValue, InsertedIn, RelatedAgent)
+            VALUES (?, ?, ?, 1, 0, ?, GETDATE(), ?)
+        """, (row_guid, bill_guid, product_guid, amount, agent_guide))
         return True
     except Exception:
         return False
 
 
-def _create_exam_fee_invoice_tbl022_023(cursor, amount, notes):
-    """إنشاء فاتورة رسوم امتحان في TBL022 + TBL023."""
-    return _create_invoice_tbl022_023(cursor, amount, notes, EXAM_FEE_BILL_TYPE, EXAM_FEE_PRODUCT, EXAM_FEE_DESCRIPTION)
+def _pay_method_to_int(method):
+    """تحويل طريقة الدفع من النص إلى رقم (نمط أكسترا)."""
+    return {'نقدي': 0, 'بطاقة': 1, 'تحويل': 2}.get((method or '').strip(), 0)
 
 
-def _create_training_fee_invoice_tbl022_023(cursor, amount, notes):
-    """إنشاء فاتورة التدريب (ايراد دورات) في TBL022 + TBL023 — TBL020 ايراد دورات تدريب، TBL007 ايرادات دورات."""
-    return _create_invoice_tbl022_023(cursor, amount, notes, TRAINING_BILL_TYPE, TRAINING_PRODUCT, TRAINING_FEE_DESCRIPTION)
+def _create_exam_fee_invoice_tbl022_023(cursor, amount, notes, pay_method=0):
+    """إنشاء فاتورة رسوم امتحان في TBL022 + TBL023. قيمة الدفعة = amount في Paid و TotalValue."""
+    return _create_invoice_tbl022_023(
+        cursor, amount, notes, EXAM_FEE_BILL_TYPE, EXAM_FEE_PRODUCT, EXAM_FEE_DESCRIPTION,
+        store_guid=EXAM_FEE_STORE, currency_guid=EXAM_FEE_CURRENCY, pay_method=pay_method)
+
+
+def _create_training_fee_invoice_tbl022_023(cursor, amount, notes, pay_method=0):
+    """إنشاء فاتورة ايراد دورات في TBL022 + TBL023. قيمة الدفعة = amount في Paid و TotalValue."""
+    return _create_invoice_tbl022_023(
+        cursor, amount, notes, TRAINING_BILL_TYPE, TRAINING_PRODUCT, TRAINING_FEE_DESCRIPTION,
+        store_guid=EXAM_FEE_STORE, currency_guid=EXAM_FEE_CURRENCY, pay_method=pay_method)
 
 
 @app.route('/training/sales/exam-fee', methods=['GET', 'POST'])
@@ -3409,6 +3433,11 @@ def training_sales_exam_fee():
         except ValueError:
             flash('المبلغ غير صالح.', 'danger')
             return redirect(url_for('training_sales_exam_fee'))
+        cand = query_db('SELECT FullName FROM Candidates WHERE CandidateID = ?', (int(candidate_id),), one=True)
+        customer_name = (cand.get('FullName') or '').strip() if cand else ''
+        if customer_name:
+            notes = 'اسم العميل: ' + customer_name + ' | ' + notes
+        pay_method_num = _pay_method_to_int(payment_method)
         db = get_db()
         if not db:
             flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
@@ -3417,7 +3446,22 @@ def training_sales_exam_fee():
         try:
             saved = False
             try:
-                if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                if _create_exam_fee_invoice_tbl022_023(cursor, amount_f, notes, pay_method=pay_method_num):
+                    desc = EXAM_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
+                    if customer_name:
+                        desc = 'اسم العميل: ' + customer_name + ' | ' + desc
+                    cursor.execute("""
+                        INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                        OUTPUT INSERTED.InvoiceID
+                        VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                    """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                    row = cursor.fetchone()
+                    invoice_id = row[0] if row else None
+                    if invoice_id:
+                        cursor.execute("""
+                            INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                            VALUES (?, ?, 1, ?, ?)
+                        """, (invoice_id, desc, amount_f, amount_f))
                     db.commit()
                     flash('تم تسجيل فاتورة تحصيل رسوم امتحان بنجاح.', 'success')
                     saved = True
@@ -3428,6 +3472,8 @@ def training_sales_exam_fee():
             if not saved:
                 try:
                     desc = EXAM_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
+                    if customer_name:
+                        desc = 'اسم العميل: ' + customer_name + ' | ' + desc
                     cursor.execute("""
                         INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
                         OUTPUT INSERTED.InvoiceID
@@ -3459,12 +3505,13 @@ def training_sales_exam_fee():
         """) or []
     except Exception:
         leads = []
-    # آخر فواتير امتحان مسجلة (للاطلاع)
     try:
         recent_invoices = query_db("""
-            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
+            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName,
+                   U.Username AS CreatedByUsername
             FROM InvoiceHeaders I
             LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON I.CreatedBy = U.UserID
             WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
         """, (EXAM_FEE_DESCRIPTION + '%',)) or []
@@ -3514,6 +3561,11 @@ def training_sales_course_fee():
         except ValueError:
             flash('المبلغ غير صالح.', 'danger')
             return redirect(url_for('training_sales_course_fee'))
+        cand = query_db('SELECT FullName FROM Candidates WHERE CandidateID = ?', (int(candidate_id),), one=True)
+        customer_name = (cand.get('FullName') or '').strip() if cand else ''
+        if customer_name:
+            notes = 'اسم العميل: ' + customer_name + ' | ' + notes
+        pay_method_num = _pay_method_to_int(payment_method)
         db = get_db()
         if not db:
             flash('خطأ في الاتصال بقاعدة البيانات.', 'danger')
@@ -3522,7 +3574,22 @@ def training_sales_course_fee():
         try:
             saved = False
             try:
-                if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes):
+                if _create_training_fee_invoice_tbl022_023(cursor, amount_f, notes, pay_method=pay_method_num):
+                    desc = TRAINING_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
+                    if customer_name:
+                        desc = 'اسم العميل: ' + customer_name + ' | ' + desc
+                    cursor.execute("""
+                        INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
+                        OUTPUT INSERTED.InvoiceID
+                        VALUES (?, GETDATE(), ?, ?, 'Paid', ?)
+                    """, (int(candidate_id), amount_f, amount_f, session.get('user_id')))
+                    row = cursor.fetchone()
+                    invoice_id = row[0] if row else None
+                    if invoice_id:
+                        cursor.execute("""
+                            INSERT INTO InvoiceItems (InvoiceID, Description, Quantity, UnitPrice, LineTotal)
+                            VALUES (?, ?, 1, ?, ?)
+                        """, (invoice_id, desc, amount_f, amount_f))
                     db.commit()
                     flash('تم تسجيل فاتورة ايراد دورات تدريب بنجاح.', 'success')
                     saved = True
@@ -3533,6 +3600,8 @@ def training_sales_course_fee():
             if not saved:
                 try:
                     desc = TRAINING_FEE_DESCRIPTION + (' | الدفع: ' + payment_method if payment_method else '')
+                    if customer_name:
+                        desc = 'اسم العميل: ' + customer_name + ' | ' + desc
                     cursor.execute("""
                         INSERT INTO InvoiceHeaders (CandidateID, InvoiceDate, SubTotal, TotalAmount, Status, CreatedBy)
                         OUTPUT INSERTED.InvoiceID
@@ -3565,9 +3634,11 @@ def training_sales_course_fee():
         leads = []
     try:
         recent_invoices = query_db("""
-            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName
+            SELECT TOP 20 I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName,
+                   U.Username AS CreatedByUsername
             FROM InvoiceHeaders I
             LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON I.CreatedBy = U.UserID
             WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
         """, (TRAINING_FEE_DESCRIPTION + '%',)) or []
