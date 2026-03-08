@@ -3556,7 +3556,7 @@ def training_sales_exam_fee():
             LEFT JOIN Users_1 U ON I.CreatedBy = U.UserID
             WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
-        """, (EXAM_FEE_DESCRIPTION + '%',)) or []
+        """, ('%' + EXAM_FEE_DESCRIPTION + '%',)) or []
     except Exception:
         recent_invoices = []
     return render_template('training/exam_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
@@ -3683,7 +3683,7 @@ def training_sales_course_fee():
             LEFT JOIN Users_1 U ON I.CreatedBy = U.UserID
             WHERE EXISTS (SELECT 1 FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID AND II.Description LIKE ?)
             ORDER BY I.InvoiceDate DESC
-        """, (TRAINING_FEE_DESCRIPTION + '%',)) or []
+        """, ('%' + TRAINING_FEE_DESCRIPTION + '%',)) or []
     except Exception:
         recent_invoices = []
     return render_template('training/course_fee_invoice.html', leads=leads, recent_invoices=recent_invoices)
