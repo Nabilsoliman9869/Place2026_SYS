@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2 class="mb-4">
+        <i class="fas fa-chart-bar text-primary"></i> نتائج التقييمات للشهر
+        <small class="text-muted d-block fs-6">استعراض النتائج للشهر</small>
+    </h2>
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>التاريخ</th>
+                        <th>الوقت</th>
+                        <th>المرشح</th>
+                        <th>المستوى</th>
+                        <th>القرار</th>
+                        <th>النوع</th>
+                        <th>ملاحظات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr>
+                        <td>{{ r.SlotDate | default('-') }}</td>
+                        <td>{{ r.SlotTime | default('-') }}</td>
+                        <td>
+                            <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" target="_blank">{{ r.FullName }}</a>
+                        </td>
+                        <td><span class="badge bg-info">{{ r.CEFR_Level or '-' }}</span></td>
+                        <td><span class="badge bg-{{ 'success' if r.Decision == 'Accepted' else 'warning' if r.Decision == 'Training' else 'secondary' }}">{{ r.Decision or '-' }}</span></td>
+                        <td>{{ r.EvaluationType or '-' }}</td>
+                        <td class="small text-muted">{{ (r.Comments or '')[:80] }}{% if (r.Comments or '')|length > 80 %}...{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">لا توجد نتائج مسجّلة لهذا الشهر.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

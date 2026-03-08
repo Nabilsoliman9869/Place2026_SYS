@@ -416,6 +416,13 @@
                 <span class="link-text">فاتورة التدريب — ايراد دورات</span>
             </a>
             {% endif %}
+            {% if session.get('role') == 'TrainingCoordinator' %}
+            <a href="{{ url_for('training_sales_scheduling') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_scheduling' or request.endpoint == 'training_sales_book_slot' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text">جدولة اختبار التدريب <span class="arabic-sub">حجز مواعيد من مختبري مواهب</span></span>
+            </a>
+            {% endif %}
             {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingCoordinator'] %}
             <a href="{{ url_for('training_sales_exam_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
@@ -433,7 +440,7 @@
                 <i class="fas fa-graduation-cap"></i>
                 <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
             </a>
-            {% if check_role_access(['Manager', 'Trainer']) %}
+            {% if check_role_access(['Manager', 'Trainer', 'TrainingLead', 'TrainingCoordinator']) %}
             <a href="{{ url_for('training_attendance') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
@@ -453,6 +460,11 @@
                 <i class="fas fa-calendar-alt"></i>
                 <span class="link-text">مواعيد اختبار التدريب <span class="arabic-sub">للمختبر</span></span>
             </a>
+            <a href="{{ url_for('talent_monthly_results') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_monthly_results' else '' }}">
+                <i class="fas fa-chart-bar"></i>
+                <span class="link-text">نتائج الشهر <span class="arabic-sub">استعراض النتائج</span></span>
+            </a>
             {% endif %}
             {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}
             <a href="{{ url_for('talent_conduct_test') }}"
@@ -464,9 +476,9 @@
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- المالية: للمدير و Finance فقط -->
+            <!-- المالية: للمدير و Finance ومدير التدريب (احصائية الماليات والفواتير) -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Finance']) %}
+            {% if check_role_access(['Manager', 'Finance', 'TrainingManager']) %}
             <div class="sidebar-section-label">Finance <span class="arabic-sub">المالية</span></div>
             <a href="{{ url_for('finance_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">

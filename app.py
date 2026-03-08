@@ -1758,44 +1758,68 @@ def talent_cancel_slot():
     flash('Slot Released (Cancelled) Successfully', 'success')
     return redirect(url_for('talent_dashboard'))
 
+def _safe_int(val, default=0):
+    """Coerce form value to int for DB; empty string causes SQL error otherwise."""
+    if val is None or val == '':
+        return default
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
+
 @app.route('/talent/evaluate/<int:slot_id>', methods=['GET', 'POST'])
 @login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_evaluate(slot_id):
     slot = query_db("""
-        SELECT T.*, C.* 
+        SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CurrentCEFR
         FROM TASchedules T 
         JOIN Candidates C ON T.CandidateID = C.CandidateID 
         WHERE T.SlotID = ?
     """, (slot_id,), one=True)
     
-    if not slot: return "Slot not found", 404
+    if not slot:
+        flash('Slot not found', 'danger')
+        return redirect(url_for('talent_dashboard'))
     
-    # Determine Evaluation Type based on Evaluator Role or Slot Context
     eval_type = 'General'
-    if session['role'] == 'Talent_Recruitment': eval_type = 'Recruitment'
-    elif session['role'] in ('Talent_Training', 'TA-Training'): eval_type = 'Training'
+    if session.get('role') == 'Talent_Recruitment':
+        eval_type = 'Recruitment'
+    elif session.get('role') in ('Talent_Training', 'TA-Training'):
+        eval_type = 'Training'
     
     if request.method == 'POST':
         f = request.form
-        cefr = f['cefr_level']
-        decision = f['decision']
+        cefr = (f.get('cefr_level') or '').strip()
+        decision = (f.get('decision') or '').strip()
+        if not cefr or not decision:
+            flash('CEFR Level and Decision are required', 'warning')
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
         
-        # Save Evaluation Logic (Different fields for Rec vs Training)
-        # For now, generic save
-        query_db('''
-            INSERT INTO Evaluations (CandidateID, SlotID, Score_Comprehension, Score_Fluency, Score_Pronunciation, 
-                                     Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ''', (slot['CandidateID'], slot_id, f.get('score_c',0), f.get('score_f',0), f.get('score_p',0), f.get('score_s',0), f.get('score_v',0),
-              cefr, decision, f.get('recommended_level'), f['comments'], session['user_id'], eval_type, f.get('recording_link')))
+        score_c = _safe_int(f.get('score_c'))
+        score_f = _safe_int(f.get('score_f'))
+        score_p = _safe_int(f.get('score_p'))
+        score_s = _safe_int(f.get('score_g'))  # Form uses score_g (Grammar) -> DB Score_Structure
+        score_v = _safe_int(f.get('score_v'))
+        comments = (f.get('comments') or '')[:4000]
+        recommended_level = (f.get('recommended_level') or '').strip() or None
+        recording_link = (f.get('recording_link') or '').strip() or None
         
-        # Update Slot & Candidate
-        query_db("UPDATE TASchedules SET Status='Completed' WHERE SlotID=?", (slot_id,))
-        query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', slot['CandidateID']))
-        
-        flash('Evaluation Saved Successfully', 'success')
-        return redirect(url_for('talent_dashboard'))
-        
+        try:
+            query_db('''
+                INSERT INTO Evaluations (CandidateID, SlotID, Score_Comprehension, Score_Fluency, Score_Pronunciation,
+                                         Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
+            ''', (slot['CandidateID'], slot_id, score_c, score_f, score_p, score_s, score_v,
+                  cefr, decision, recommended_level, comments, session['user_id'], eval_type, recording_link))
+            query_db("UPDATE TASchedules SET Status='Completed' WHERE SlotID=?", (slot_id,))
+            query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', slot['CandidateID']))
+            flash('تم حفظ التقييم بنجاح', 'success')
+            return redirect(url_for('talent_dashboard'))
+        except Exception as e:
+            flash(f'خطأ عند حفظ التقييم: {str(e)}', 'danger')
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
+    
     return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
 
 @app.route('/sales/book_slot', methods=['POST'])
@@ -1856,6 +1880,24 @@ def block_ta_slot():
     query_db("UPDATE TASchedules SET Status='Blocked' WHERE SlotID=? AND EvaluatorID=?", (slot_id, session['user_id']))
     flash('Slot Blocked', 'warning')
     return redirect(url_for('talent_dashboard'))
+
+@app.route('/talent/monthly_results')
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_monthly_results():
+    """استعراض نتائج التقييمات للشهر الحالي (للمختبر)."""
+    user_id = session['user_id']
+    results = query_db("""
+        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.Comments, E.EvaluationType,
+               C.FullName, T.SlotDate, T.SlotTime
+        FROM Evaluations E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN TASchedules T ON E.SlotID = T.SlotID
+        WHERE E.EvaluatorID = ?
+        AND (T.SlotDate >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) OR T.SlotDate IS NULL)
+        ORDER BY T.SlotDate DESC, T.SlotTime DESC
+    """, (user_id,))
+    return render_template('talent/monthly_results.html', results=results or [])
 
 # --- CORPORATE ---
 @app.route('/corporate/dashboard')
@@ -3228,7 +3270,7 @@ def training_sales_register():
 
 @app.route('/training/sales/book/<int:candidate_id>', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator'])
 def training_sales_book_slot(candidate_id):
     """حجز موعد اختبار مواهب تدريب لمهتم (عرض شاغر لمختبر مواهب التدريب)."""
     cand = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE CandidateID = ?", (candidate_id,), one=True)
