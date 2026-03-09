@@ -4053,20 +4053,46 @@ def add_batch():
 @login_required
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def update_batch_schedule(batch_id):
-    """تحديث إعدادات الدفعة: وقت من-إلى، أيام الأسبوع."""
+    """تحديث كل بيانات الدفعة: الاسم، الدورة، المدرب، القاعة، التواريخ، الأوقات، الأيام."""
     f = request.form
-    start_time = (f.get('start_time') or '').strip() or None
-    end_time = (f.get('end_time') or '').strip() or None
-    week_days = (f.get('week_days') or '').strip() or None
     b = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
     if not b:
         flash('الدفعة غير موجودة.', 'danger')
         return redirect(url_for('training_index'))
+    batch_name = (f.get('batch_name') or '').strip()
+    course_id = f.get('course_id')
+    trainer_id = f.get('trainer_id') or None
+    if trainer_id == '': trainer_id = None
+    room_id = f.get('room_id') or None
+    if room_id == '': room_id = None
+    start_date = f.get('start_date') or None
+    end_date = f.get('end_date') or None
+    start_time = (f.get('start_time') or '').strip() or None
+    end_time = (f.get('end_time') or '').strip() or None
+    week_days = (f.get('week_days') or '').strip() or None
+    if not batch_name:
+        batch_name = query_db("SELECT BatchName FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
+        batch_name = batch_name['BatchName'] if batch_name else ''
+    if not course_id:
+        flash('الدورة مطلوبة.', 'warning')
+        return redirect(url_for('wave_details', wave_id=batch_id))
     try:
-        query_db("UPDATE CourseBatches SET StartTime=?, EndTime=?, WeekDays=? WHERE BatchID=?", (start_time, end_time, week_days, batch_id))
-        flash('تم تحديث إعدادات الدفعة.', 'success')
+        query_db("""
+            UPDATE CourseBatches SET BatchName=?, CourseID=?, TrainerID=?, RoomID=?,
+                   StartDate=?, EndDate=?, StartTime=?, EndTime=?, WeekDays=?
+            WHERE BatchID=?
+        """, (batch_name, course_id, trainer_id, room_id, start_date, end_date, start_time, end_time, week_days, batch_id))
+        flash('تم تحديث بيانات الدفعة بنجاح.', 'success')
     except Exception as e:
-        flash('خطأ: ' + str(e)[:60], 'danger')
+        try:
+            query_db("""
+                UPDATE CourseBatches SET BatchName=?, CourseID=?, TrainerID=?, RoomID=?,
+                       StartDate=?, EndDate=?
+                WHERE BatchID=?
+            """, (batch_name, course_id, trainer_id, room_id, start_date, end_date, batch_id))
+            flash('تم تحديث البيانات الأساسية. (وقت/أيام تتطلب تحديث الجدول)', 'success')
+        except Exception as e2:
+            flash('خطأ: ' + str(e2)[:60], 'danger')
     return redirect(url_for('wave_details', wave_id=batch_id))
 
 @app.route('/training/batch/<int:batch_id>/add_exam_date', methods=['POST'])
@@ -4103,7 +4129,15 @@ def delete_batch_exam_date(batch_id, exam_date_id):
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def wave_details(wave_id):
-    wave = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE BatchID=?", (wave_id,), one=True)
+    wave = query_db("""
+        SELECT B.*, C.CourseName,
+               T.FullName AS TrainerName, R.RoomName
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        WHERE B.BatchID = ?
+    """, (wave_id,), one=True)
     if not wave: return "Wave not found", 404
 
     wave['StartTimeStr'] = _safe_time_str(wave.get('StartTime'))
@@ -4133,7 +4167,10 @@ def wave_details(wave_id):
     except Exception:
         reports = []
 
-    return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [], exam_dates=exam_dates)
+    courses = query_db("SELECT * FROM Courses ORDER BY CourseName")
+    trainers = query_db("SELECT * FROM Trainers ORDER BY FullName")
+    rooms = query_db("SELECT * FROM Classrooms ORDER BY RoomName")
+    return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [], exam_dates=exam_dates, courses=courses or [], trainers=trainers or [], rooms=rooms or [])
 
 @app.route('/training/add_report', methods=['POST'])
 @login_required

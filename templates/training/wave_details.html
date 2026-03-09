@@ -91,7 +91,7 @@
         <div class="card shadow-sm mb-3">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Wave Info</h5>
-                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator']) %}
                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editScheduleModal">
                     <i class="fas fa-cog"></i> إعدادات
                 </button>
@@ -110,7 +110,7 @@
         <div class="card shadow-sm">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">أيام الامتحانات الدورية</h5>
-                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator']) %}
                 <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#addExamDateModal">
                     <i class="fas fa-plus"></i> إضافة
                 </button>
@@ -122,7 +122,7 @@
                     {% for ed in exam_dates %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span>{{ ed.ExamDate }} — {{ ed.ExamLabel or 'امتحان' }}</span>
-                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator']) %}
                         <form action="{{ url_for('delete_batch_exam_date', batch_id=wave.BatchID, exam_date_id=ed.ExamDateID) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف؟');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
@@ -139,31 +139,77 @@
     </div>
 </div>
 
-<!-- Modal: تعديل إعدادات الدفعة (وقت، أيام) -->
+<!-- Modal: إعدادات — تعديل كل بيانات الدفعة -->
 <div class="modal fade" id="editScheduleModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form action="{{ url_for('update_batch_schedule', batch_id=wave.BatchID) }}" method="POST" data-turbo="false">
                 <div class="modal-header">
-                    <h5 class="modal-title">تعديل إعدادات الدفعة</h5>
+                    <h5 class="modal-title"><i class="fas fa-cog"></i> إعدادات الدفعة — تعديل كل البيانات</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row mb-2">
-                        <div class="col">
-                            <label>وقت البداية (من)</label>
+                        <div class="col-md-6">
+                            <label class="form-label">اسم الدفعة</label>
+                            <input type="text" name="batch_name" class="form-control" value="{{ wave.BatchName or '' }}" required placeholder="مثال: Wave 34">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">الدورة</label>
+                            <select name="course_id" class="form-select" required>
+                                {% for c in courses %}
+                                <option value="{{ c.CourseID }}" {% if wave.CourseID == c.CourseID %}selected{% endif %}>{{ c.CourseName }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">المدرب</label>
+                            <select name="trainer_id" class="form-select">
+                                <option value="" {% if not wave.TrainerID %}selected{% endif %}>-- بدون مدرب --</option>
+                                {% for t in trainers %}
+                                <option value="{{ t.TrainerID }}" {% if wave.TrainerID and wave.TrainerID == t.TrainerID %}selected{% endif %}>{{ t.FullName }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">القاعة</label>
+                            <select name="room_id" class="form-select">
+                                <option value="" {% if not wave.RoomID %}selected{% endif %}>-- بدون قاعة --</option>
+                                {% for r in rooms %}
+                                <option value="{{ r.RoomID }}" {% if wave.RoomID and wave.RoomID == r.RoomID %}selected{% endif %}>{{ r.RoomName }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">تاريخ البداية</label>
+                            <input type="date" name="start_date" class="form-control" value="{{ (wave.StartDate|string)[:10] if wave.StartDate else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">تاريخ الانتهاء</label>
+                            <input type="date" name="end_date" class="form-control" value="{{ (wave.EndDate|string)[:10] if wave.EndDate else '' }}">
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">وقت البداية (من)</label>
                             <input type="time" name="start_time" class="form-control" value="{{ wave.StartTimeStr or '' }}">
                         </div>
-                        <div class="col">
-                            <label>وقت الانتهاء (إلى)</label>
+                        <div class="col-md-6">
+                            <label class="form-label">وقت الانتهاء (إلى)</label>
                             <input type="time" name="end_time" class="form-control" value="{{ wave.EndTimeStr or '' }}">
                         </div>
                     </div>
-                    <label>أيام الأسبوع</label>
-                    <input type="text" name="week_days" class="form-control" value="{{ wave.WeekDays or '' }}" placeholder="سبت,أحد,إثنين...">
+                    <div class="mb-2">
+                        <label class="form-label">أيام الأسبوع</label>
+                        <input type="text" name="week_days" class="form-control" value="{{ wave.WeekDays or '' }}" placeholder="سبت,أحد,إثنين">
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">حفظ</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ التعديلات</button>
                 </div>
             </form>
         </div>
