@@ -3991,10 +3991,12 @@ def add_classroom():
         flash('خطأ عند حفظ القاعة: ' + str(e)[:80], 'danger')
     return redirect(url_for('training_index'))
 
-@app.route('/training/add_batch', methods=['POST'])
+@app.route('/training/add_batch', methods=['GET', 'POST'])
 @login_required
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def add_batch():
+    if request.method == 'GET':
+        return redirect(url_for('training_index'))
     f = request.form
     room_id = f.get('room_id')
     if not room_id or room_id == '':
