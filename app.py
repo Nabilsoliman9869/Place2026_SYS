@@ -1914,23 +1914,40 @@ def talent_book_self():
     """شاشة حجز مواعيد لنفسه — المختبر يعرض مواعيده المتاحة ويحظرها أو ينشئ مواعيد جديدة."""
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
-    my_available = query_db("""
-        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status
-        FROM TASchedules T
-        WHERE T.EvaluatorID = ? AND T.SlotDate >= CAST(GETDATE() AS DATE) AND T.Status IN ('Available', 'Blocked')
-        ORDER BY T.SlotDate, T.SlotTime
-    """, (user_id,))
-    batches_with_exams = query_db("""
-        SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate,
-               BE.ExamDateID, BE.ExamDate, BE.ExamLabel
-        FROM CourseBatches B
-        JOIN Courses C ON B.CourseID = C.CourseID
-        JOIN BatchExamDates BE ON BE.BatchID = B.BatchID
-        WHERE B.Status = 'Active' AND BE.ExamDate >= CAST(GETDATE() AS DATE)
-        ORDER BY BE.ExamDate
-    """) or []
+    try:
+        my_available = query_db("""
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status
+            FROM TASchedules T
+            WHERE T.EvaluatorID = ? AND T.SlotDate >= CAST(GETDATE() AS DATE) AND T.Status IN ('Available', 'Blocked')
+            ORDER BY T.SlotDate, T.SlotTime
+        """, (user_id,)) or []
+    except Exception:
+        my_available = []
+    batches_with_exams = []
+    try:
+        batches_with_exams = query_db("""
+            SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate,
+                   BE.ExamDateID, BE.ExamDate, BE.ExamLabel
+            FROM CourseBatches B
+            JOIN Courses C ON B.CourseID = C.CourseID
+            JOIN BatchExamDates BE ON BE.BatchID = B.BatchID
+            WHERE B.Status = 'Active' AND BE.ExamDate >= CAST(GETDATE() AS DATE)
+            ORDER BY BE.ExamDate
+        """) or []
+    except Exception:
+        pass
     exam_dates_today = [b for b in batches_with_exams if str(b.get('ExamDate', ''))[:10] == selected_date]
-    return render_template('talent/book_self.html', slots=my_available or [], batches_with_exams=batches_with_exams, exam_dates_today=exam_dates_today, selected_date=selected_date)
+    try:
+        active_waves = query_db("""
+            SELECT B.BatchID, B.BatchName, C.CourseName
+            FROM CourseBatches B
+            JOIN Courses C ON B.CourseID = C.CourseID
+            WHERE B.Status = 'Active'
+            ORDER BY B.BatchName
+        """) or []
+    except Exception:
+        active_waves = []
+    return render_template('talent/book_self.html', slots=my_available or [], batches_with_exams=batches_with_exams, exam_dates_today=exam_dates_today, selected_date=selected_date, active_waves=active_waves)
 
 @app.route('/talent/add_self_slot', methods=['POST'])
 @login_required
