@@ -4465,10 +4465,25 @@ def add_student_direct():
     flash('تم تسجيل الطالب الجديد مباشرة في الدورة', 'success')
     return redirect(url_for('training_index'))
 
+def _ensure_attendance_columns():
+    """إضافة أعمدة الحضور التفصيلي إن لم تكن موجودة (توافق مع قواعد قديمة)."""
+    for stmt in [
+        "ALTER TABLE Attendance ADD CheckInTime TIME",
+        "ALTER TABLE Attendance ADD CheckOutTime TIME",
+        "ALTER TABLE Attendance ADD TotalHours DECIMAL(5,2)",
+        "ALTER TABLE Attendance ADD AssignmentDone BIT DEFAULT 0",
+        "ALTER TABLE Attendance ADD LateMinutes INT NULL",
+    ]:
+        try:
+            query_db(stmt)
+        except Exception:
+            pass  # العمود موجود أو خطأ صلاحيات — نتجاهل
+
 @app.route('/training/attendance', methods=['GET'])
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
 def training_attendance():
+    _ensure_attendance_columns()
     batches = query_db("SELECT * FROM CourseBatches WHERE Status='Active'")
     selected_batch_id = request.args.get('batch_id')
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
@@ -4481,16 +4496,28 @@ def training_attendance():
         if selected_batch:
             selected_batch['StartTimeStr'] = _safe_time_str(selected_batch.get('StartTime'))
             selected_batch['EndTimeStr'] = _safe_time_str(selected_batch.get('EndTime'))
-            raw = query_db('''
-                SELECT E.EnrollmentID, E.CandidateID, C.FullName,
-                        A.Status, A.CheckInTime, A.CheckOutTime, A.TotalHours, A.AssignmentDone, A.AttendanceID, A.LateMinutes,
-                        (SELECT ISNULL(SUM(LateMinutes), 0) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID) AS TotalDelayMinutes,
-                        (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
-                FROM Enrollments E
-                JOIN Candidates C ON E.CandidateID = C.CandidateID
-                LEFT JOIN Attendance A ON E.EnrollmentID = A.EnrollmentID AND A.Date = ?
-                WHERE E.BatchID = ? AND E.Status = 'Active'
-            ''', (selected_date, selected_batch_id))
+            try:
+                raw = query_db('''
+                    SELECT E.EnrollmentID, E.CandidateID, C.FullName,
+                            A.Status, A.CheckInTime, A.CheckOutTime, A.TotalHours, A.AssignmentDone, A.AttendanceID, A.LateMinutes,
+                            (SELECT ISNULL(SUM(LateMinutes), 0) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID) AS TotalDelayMinutes,
+                            (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
+                    FROM Enrollments E
+                    JOIN Candidates C ON E.CandidateID = C.CandidateID
+                    LEFT JOIN Attendance A ON E.EnrollmentID = A.EnrollmentID AND A.Date = ?
+                    WHERE E.BatchID = ? AND E.Status = 'Active'
+                ''', (selected_date, selected_batch_id))
+            except Exception:
+                raw = query_db('''
+                    SELECT E.EnrollmentID, E.CandidateID, C.FullName,
+                            A.Status, NULL AS CheckInTime, NULL AS CheckOutTime, NULL AS TotalHours, 0 AS AssignmentDone,
+                            A.AttendanceID, NULL AS LateMinutes, 0 AS TotalDelayMinutes,
+                            (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
+                    FROM Enrollments E
+                    JOIN Candidates C ON E.CandidateID = C.CandidateID
+                    LEFT JOIN Attendance A ON E.EnrollmentID = A.EnrollmentID AND A.Date = ?
+                    WHERE E.BatchID = ? AND E.Status = 'Active'
+                ''', (selected_date, selected_batch_id))
             students = []
             cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'TotalHours', 'AssignmentDone', 'AttendanceID', 'LateMinutes', 'TotalDelayMinutes', 'AbsenceCount']
             for row in (raw or []):
@@ -4510,6 +4537,7 @@ def training_attendance():
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
 def save_attendance_grid():
+    _ensure_attendance_columns()
     batch_id = request.form['batch_id']
     date = request.form['date']
     batch = query_db("SELECT StartTime FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
