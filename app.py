@@ -3926,22 +3926,26 @@ def training_sales_course_fee_print(invoice_id):
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator'])
 def training_index():
-    # عرض كل الدفعات (نشطة ومخططة) لاستعراضها وفتح التفاصيل
-    waves = query_db("""
+    view = request.args.get('view', 'active')  # active | archive
+    today = datetime.today().strftime('%Y-%m-%d')
+    base_sql = """
         SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName 
         FROM CourseBatches B 
         JOIN Courses C ON B.CourseID = C.CourseID 
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID 
         LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
-        ORDER BY B.StartDate DESC, B.BatchName
-    """)
+    """
+    if view == 'archive':
+        waves = query_db(base_sql + " WHERE (B.Status != 'Active' OR B.Status IS NULL) OR (B.EndDate IS NOT NULL AND B.EndDate < ?) ORDER BY B.StartDate DESC, B.BatchName", (today,))
+    else:
+        waves = query_db(base_sql + " WHERE B.Status = 'Active' AND (B.EndDate IS NULL OR B.EndDate >= ?) ORDER BY B.StartDate DESC, B.BatchName", (today,))
     
     # Also fetch definitions for the tabs
     courses = query_db("SELECT * FROM Courses")
     trainers = query_db("SELECT * FROM Trainers")
     classrooms = query_db("SELECT * FROM Classrooms")
     
-    return render_template('training/index.html', batches=waves or [], courses=courses or [], trainers=trainers or [], rooms=classrooms or [])
+    return render_template('training/index.html', batches=waves or [], courses=courses or [], trainers=trainers or [], rooms=classrooms or [], view=view)
 
 @app.route('/training/add_course', methods=['POST'])
 @login_required

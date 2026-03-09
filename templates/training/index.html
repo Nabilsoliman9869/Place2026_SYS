@@ -1,10 +1,13 @@
 {% extends 'base.html' %}
-
 {% block content %}
+<style>
+    .en-bold { font-weight: 700; }
+    .ar-normal { font-weight: 400; }
+</style>
 <div class="row mb-4">
     <div class="col-md-12">
-        <h2><i class="fas fa-chalkboard-teacher text-primary"></i> Training & Waves</h2>
-        <p class="text-muted">إدارة الدورات التدريبية والدفعات (Waves).</p>
+        <h2><i class="fas fa-chalkboard-teacher text-primary"></i> <span class="en-bold">Training & Waves</span> <span class="ar-normal">إدارة الدورات والدفعات</span></h2>
+        <p class="text-muted ar-normal">إدارة الدورات التدريبية والدفعات (Waves).</p>
         <div class="alert alert-light border border-warning py-2 px-3 small mb-0">
             <strong>الهيكل الإداري:</strong> مدير التدريب (TrainingManager) ← رئيس القسم (TrainingHead) ← قائد التدريب (TrainingLead) / منسق (TrainingCoordinator) ← مدرب (Trainer — يبدأ من الحضور).
         </div>
@@ -33,12 +36,33 @@
 </div>
 {% endif %}
 
+<!-- قائمة/منيو: النشطة | الأرشيف -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('training_index', view='active') }}" class="btn btn-{{ 'primary' if view == 'active' else 'outline-secondary' }}">
+                <span class="en-bold">Active</span> <span class="ar-normal">الدفعات النشطة</span>
+            </a>
+            <a href="{{ url_for('training_index', view='archive') }}" class="btn btn-{{ 'secondary' if view == 'archive' else 'outline-secondary' }}">
+                <span class="en-bold">Archive</span> <span class="ar-normal">الأرشيف</span>
+            </a>
+        </div>
+        <span class="ms-2 small text-muted ar-normal">
+            {% if view == 'active' %}تاريخ النهاية لم ينتهِ أو منشطة
+            {% else %}كل ما كان عليها — غير منشطة أو منتهية
+            {% endif %}
+        </span>
+    </div>
+</div>
+
 <div class="card shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Active Waves (الدفعات النشطة)</h5>
+        <h5 class="mb-0"><span class="en-bold">{% if view == 'active' %}Active{% else %}Archive{% endif %} Waves</span> <span class="ar-normal">({% if view == 'active' %}الدفعات النشطة{% else %}الأرشيف{% endif %})</span></h5>
+        {% if view == 'active' %}
         <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBatchModal">
-            <i class="fas fa-plus"></i> New Wave
+            <i class="fas fa-plus"></i> <span class="en-bold">New Wave</span>
         </button>
+        {% endif %}
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -55,7 +79,13 @@
             </thead>
             <tbody>
                 {% if not batches %}
-                <tr><td colspan="7" class="text-muted text-center py-4">لا توجد دفعات. أنشئ دفعة من زر <strong>New Wave</strong> أعلاه.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center py-4">
+                    {% if view == 'active' %}
+                    <span class="ar-normal">لا توجد دفعات نشطة.</span> <span class="en-bold">New Wave</span> <span class="ar-normal">أعلاه.</span>
+                    {% else %}
+                    <span class="ar-normal">لا توجد دفعات في الأرشيف.</span>
+                    {% endif %}
+                </td></tr>
                 {% endif %}
                 {% for wave in batches %}
                 <tr>
@@ -69,7 +99,7 @@
                     </td>
                     <td>
                         <span class="badge bg-{{ 'success' if wave.Status == 'Active' else 'secondary' }}">{{ wave.Status or '-' }}</span>
-                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator']) %}
                         <form action="{{ url_for('set_batch_status', batch_id=wave.BatchID) }}" method="POST" class="d-inline ms-1" data-turbo="false">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
                             {% if wave.Status == 'Active' %}
@@ -84,11 +114,11 @@
                     </td>
                     <td>
                         <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">
-                            <i class="fas fa-eye"></i> Manage
+                            <i class="fas fa-eye"></i> <span class="en-bold">Manage</span>
                         </a>
-                        {% if session.get('role') in ['TrainingCoordinator', 'Trainer', 'TrainingLead'] %}
+                        {% if view == 'active' and session.get('role') in ['TrainingCoordinator', 'Trainer', 'TrainingLead', 'TrainingSalesCoordinator'] %}
                         <a href="{{ url_for('batch_details', batch_id=wave.BatchID) }}" class="btn btn-sm btn-success ms-1" title="تسجيل طالب في الدفعة">
-                            <i class="fas fa-user-plus"></i> تسجيل طلاب
+                            <i class="fas fa-user-plus"></i> <span class="ar-normal">تسجيل طلاب</span>
                         </a>
                         {% endif %}
                     </td>
