@@ -25,6 +25,11 @@
                     </div>
 
                     <form action="" method="POST">
+                        {% if from_exam_feedback %}
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i> تقييم امتحان دوري — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id) }}">رجوع لفيدباك الدفعة</a>
+                        </div>
+                        {% endif %}
                         
                         <!-- Common Fields -->
                         <div class="mb-3">

@@ -88,6 +88,45 @@
         </div>
         {% endif %}
 
+        <!-- 0c. ملاحظات مختبر المواهب / الامتحان / الفيدباك — كل ما يحص التالنت -->
+        {% if talent_feedback_list %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-warning"><i class="fas fa-user-graduate"></i> ملاحظات مختبر المواهب <small class="text-muted fs-6">الاختبارات والفيدباك والتقييمات</small></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>النوع</th>
+                            <th>المختبر</th>
+                            <th>CEFR</th>
+                            <th>القرار</th>
+                            <th>الدرجات</th>
+                            <th>الملاحظات</th>
+                            <th>تسجيل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fb in talent_feedback_list %}
+                        <tr>
+                            <td class="small">{{ ((fb.EvaluationDate or fb.SlotDate)|string)[:10] if (fb.EvaluationDate or fb.SlotDate) else '-' }}</td>
+                            <td><span class="badge bg-{{ 'info' if fb.SlotType == 'Exam Feedback' else 'primary' }}">{{ fb.SlotType or fb.EvaluationType or 'تقييم' }}</span></td>
+                            <td class="small">{{ fb.EvaluatorName or '-' }}</td>
+                            <td><span class="badge bg-secondary">{{ fb.CEFR_Level or '-' }}</span></td>
+                            <td><span class="badge bg-{{ 'success' if fb.Decision == 'Accepted' else 'warning' if fb.Decision == 'Training' else 'secondary' }}">{{ fb.Decision or '-' }}</span></td>
+                            <td class="small">C:{{ fb.Score_Comprehension or '-' }} F:{{ fb.Score_Fluency or '-' }} P:{{ fb.Score_Pronunciation or '-' }} G:{{ fb.Score_Structure or '-' }} V:{{ fb.Score_Vocabulary or '-' }}</td>
+                            <td class="text-break small" style="max-width:200px">{{ (fb.Comments or '-')[:100] }}{% if (fb.Comments or '')|length > 100 %}...{% endif %}</td>
+                            <td>{% if fb.RecordingLink %}<a href="{{ fb.RecordingLink }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="تسجيل"><i class="fas fa-external-link-alt"></i></a>{% else %}-{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 1. Training Journey -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
@@ -195,13 +234,32 @@
             </div>
         </div>
 
-        <!-- 2b. الحضور -->
-        {% if attendance_list %}
+        <!-- 2b. الحضور + ملخص الحضور -->
+        {% if attendance_summary or attendance_list %}
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
                 <h5 class="mb-0 text-secondary"><i class="fas fa-calendar-check"></i> الحضور <small class="text-muted fs-6">سجل الحضور والغياب</small></h5>
             </div>
             <div class="card-body">
+                {% if attendance_summary %}
+                <div class="alert alert-light border mb-3">
+                    <h6 class="text-dark">ملخص الحضور</h6>
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>الدفعة</th><th>مجمل تأخير (دقيقة)</th><th>غيابات للإنذار</th><th>إجمالي ساعات</th></tr></thead>
+                        <tbody>
+                            {% for s in attendance_summary %}
+                            <tr>
+                                <td>{{ s.BatchName }}</td>
+                                <td><span class="badge bg-{{ 'danger' if s.TotalDelayMinutes > 120 else 'secondary' }}">{{ s.TotalDelayMinutes }}</span></td>
+                                <td><span class="badge bg-{{ 'danger' if s.AbsenceCount >= 1 else 'secondary' }}">{{ s.AbsenceCount }}</span></td>
+                                <td>{{ (s.TotalHours or 0)|round(1) }} س</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                {% if attendance_list %}
                 <table class="table table-sm table-hover">
                     <thead><tr><th>التاريخ</th><th>الدفعة</th><th>الحالة</th></tr></thead>
                     <tbody>
@@ -214,6 +272,9 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% else %}
+                <p class="text-muted mb-0">لا توجد سجلات حضور.</p>
+                {% endif %}
             </div>
         </div>
         {% endif %}

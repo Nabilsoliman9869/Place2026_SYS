@@ -382,9 +382,9 @@
             <!-- ============================================= -->
             <!-- التدريب: كل دور يرى نوافذه فقط — بدون تضارب أو تكرار -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'Trainer']) %}
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer']) %}
             <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
-            {% if session.get('role') in ['TrainingSales', 'Manager'] %}
+            {% if session.get('role') in ['TrainingSales', 'TrainingSalesCoordinator', 'Manager'] %}
             <a href="{{ url_for('training_sales_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_dashboard' else '' }}">
                 <i class="fas fa-tachometer-alt"></i>
@@ -416,7 +416,7 @@
                 <span class="link-text">فاتورة التدريب — ايراد دورات</span>
             </a>
             {% endif %}
-            {% if session.get('role') == 'TrainingCoordinator' %}
+            {% if session.get('role') in ['TrainingCoordinator', 'TrainingSalesCoordinator'] %}
             <a href="{{ url_for('training_sales_scheduling') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_scheduling' or request.endpoint == 'training_sales_book_slot' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
@@ -484,6 +484,11 @@
                 class="nav-link {{ 'active' if request.endpoint == 'talent_monthly_results' else '' }}">
                 <i class="fas fa-chart-bar"></i>
                 <span class="link-text">نتائج الشهر <span class="arabic-sub">استعراض النتائج</span></span>
+            </a>
+            <a href="{{ url_for('talent_book_self') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text">حجز مواعيد لنفسي</span>
             </a>
             {% endif %}
             {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}

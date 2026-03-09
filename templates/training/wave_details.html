@@ -86,18 +86,109 @@
         </div>
     </div>
 
-    <!-- Wave Info -->
+    <!-- Wave Info + إعدادات الدفعة -->
     <div class="col-md-4">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Wave Info</h5>
+                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editScheduleModal">
+                    <i class="fas fa-cog"></i> إعدادات
+                </button>
+                {% endif %}
             </div>
             <div class="card-body">
                 <p><strong>Start Date:</strong> {{ wave.StartDate }}</p>
                 <p><strong>End Date:</strong> {{ wave.EndDate }}</p>
+                <p><strong>وقت الدوام:</strong> {{ wave.StartTimeStr or '-' }} – {{ wave.EndTimeStr or '-' }}</p>
+                <p><strong>أيام الأسبوع:</strong> {{ wave.WeekDays or '-' }}</p>
                 <p><strong>Trainer:</strong> {{ wave.TrainerName or 'Not Assigned' }}</p>
                 <p><strong>Room:</strong> {{ wave.RoomName or 'Not Assigned' }}</p>
             </div>
+        </div>
+        <!-- أيام الامتحانات الدورية -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">أيام الامتحانات الدورية</h5>
+                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#addExamDateModal">
+                    <i class="fas fa-plus"></i> إضافة
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                {% if exam_dates %}
+                <ul class="list-group list-group-flush">
+                    {% for ed in exam_dates %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>{{ ed.ExamDate }} — {{ ed.ExamLabel or 'امتحان' }}</span>
+                        {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']) %}
+                        <form action="{{ url_for('delete_batch_exam_date', batch_id=wave.BatchID, exam_date_id=ed.ExamDateID) }}" method="POST" class="d-inline" onsubmit="return confirm('حذف؟');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted p-3 mb-0 small">لا توجد أيام امتحانات محددة. مثال: يوم 15-3 امتحان 1، يوم 21-3 امتحان 2</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: تعديل إعدادات الدفعة (وقت، أيام) -->
+<div class="modal fade" id="editScheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('update_batch_schedule', batch_id=wave.BatchID) }}" method="POST" data-turbo="false">
+                <div class="modal-header">
+                    <h5 class="modal-title">تعديل إعدادات الدفعة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-2">
+                        <div class="col">
+                            <label>وقت البداية (من)</label>
+                            <input type="time" name="start_time" class="form-control" value="{{ wave.StartTimeStr or '' }}">
+                        </div>
+                        <div class="col">
+                            <label>وقت الانتهاء (إلى)</label>
+                            <input type="time" name="end_time" class="form-control" value="{{ wave.EndTimeStr or '' }}">
+                        </div>
+                    </div>
+                    <label>أيام الأسبوع</label>
+                    <input type="text" name="week_days" class="form-control" value="{{ wave.WeekDays or '' }}" placeholder="سبت,أحد,إثنين...">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: إضافة يوم امتحان -->
+<div class="modal fade" id="addExamDateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('add_batch_exam_date', batch_id=wave.BatchID) }}" method="POST" data-turbo="false">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة يوم امتحان دوري</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label>التاريخ</label>
+                    <input type="date" name="exam_date" class="form-control mb-2" required>
+                    <label>التسمية</label>
+                    <input type="text" name="exam_label" class="form-control" value="امتحان 1" placeholder="مثال: امتحان 1">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">إضافة</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

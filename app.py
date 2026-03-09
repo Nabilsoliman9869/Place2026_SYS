@@ -193,6 +193,7 @@ def ensure_training_users():
         ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
         ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
         ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
+        ('salma', '123', 'TrainingSalesCoordinator', 'سلمى'),
         ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
         ('trainer1', '123', 'Trainer', 'مدرب'),
     ]
@@ -430,6 +431,10 @@ def init_system():
                 ALTER TABLE Attendance ADD AssignmentDone BIT DEFAULT 0;
             END
         """)
+        cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'LateMinutes' AND Object_ID = Object_ID(N'Attendance'))
+                ALTER TABLE Attendance ADD LateMinutes INT NULL;
+        """)
 
         # 7. Training Tables
         cursor.execute("""
@@ -484,6 +489,26 @@ def init_system():
             )
         """)
         created_tables.append("CourseBatches (المجموعات)")
+
+        # 7b. Batch schedule columns + أيام الامتحانات الدورية
+        cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'StartTime' AND Object_ID = Object_ID(N'CourseBatches'))
+            BEGIN
+                ALTER TABLE CourseBatches ADD StartTime TIME NULL;
+                ALTER TABLE CourseBatches ADD EndTime TIME NULL;
+                ALTER TABLE CourseBatches ADD WeekDays NVARCHAR(100) NULL;
+            END
+        """)
+        cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='BatchExamDates' AND xtype='U')
+            CREATE TABLE BatchExamDates (
+                ExamDateID INT IDENTITY(1,1) PRIMARY KEY,
+                BatchID INT NOT NULL FOREIGN KEY REFERENCES CourseBatches(BatchID),
+                ExamDate DATE NOT NULL,
+                ExamLabel NVARCHAR(100),
+                CreatedAt DATETIME DEFAULT GETDATE()
+            )
+        """)
         
         cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Enrollments' AND xtype='U')
@@ -701,6 +726,7 @@ def init_system():
             ('train_lead', '123', 'TrainingLead', 'قائد التدريب'),
             ('train_coord', '123', 'TrainingCoordinator', 'منسق التدريب'),
             ('train_sales', '123', 'TrainingSales', 'مبيعات التدريب'),
+            ('salma', '123', 'TrainingSalesCoordinator', 'سلمى'),
             ('ta_train', '123', 'Talent_Training', 'مختبر مواهب التدريب'),
             ('trainer1', '123', 'Trainer', 'مدرب'),
         ]
@@ -801,7 +827,7 @@ def login():
 
         try:
             user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
-            if user is None and username in ('train_coord', 'trainer1', 'train_mgr', 'train_head', 'train_lead', 'train_sales', 'ta_train'):
+            if user is None and username in ('train_coord', 'trainer1', 'train_mgr', 'train_head', 'train_lead', 'train_sales', 'salma', 'ta_train'):
                 ensure_training_users()
                 user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
                 if user is None and username == 'train_sales':
@@ -1278,7 +1304,7 @@ def dashboard():
     if role == 'Finance': return redirect(url_for('finance_index'))
     
     # --- 5. Training Department ---
-    if role == 'TrainingSales': return redirect(url_for('training_sales_dashboard'))
+    if role in ['TrainingSales', 'TrainingSalesCoordinator']: return redirect(url_for('training_sales_dashboard'))
     if role in ['TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator']: return redirect(url_for('training_index'))
     if role == 'Trainer': return redirect(url_for('training_attendance'))
     
@@ -1879,7 +1905,123 @@ def block_ta_slot():
     slot_id = request.form['slot_id']
     query_db("UPDATE TASchedules SET Status='Blocked' WHERE SlotID=? AND EvaluatorID=?", (slot_id, session['user_id']))
     flash('Slot Blocked', 'warning')
-    return redirect(url_for('talent_dashboard'))
+    return redirect(request.referrer or url_for('talent_dashboard'))
+
+@app.route('/talent/book_self')
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_book_self():
+    """شاشة حجز مواعيد لنفسه — المختبر يعرض مواعيده المتاحة ويحظرها أو ينشئ مواعيد جديدة."""
+    user_id = session['user_id']
+    selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
+    my_available = query_db("""
+        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status
+        FROM TASchedules T
+        WHERE T.EvaluatorID = ? AND T.SlotDate >= CAST(GETDATE() AS DATE) AND T.Status IN ('Available', 'Blocked')
+        ORDER BY T.SlotDate, T.SlotTime
+    """, (user_id,))
+    batches_with_exams = query_db("""
+        SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate,
+               BE.ExamDateID, BE.ExamDate, BE.ExamLabel
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        JOIN BatchExamDates BE ON BE.BatchID = B.BatchID
+        WHERE B.Status = 'Active' AND BE.ExamDate >= CAST(GETDATE() AS DATE)
+        ORDER BY BE.ExamDate
+    """) or []
+    exam_dates_today = [b for b in batches_with_exams if str(b.get('ExamDate', ''))[:10] == selected_date]
+    return render_template('talent/book_self.html', slots=my_available or [], batches_with_exams=batches_with_exams, exam_dates_today=exam_dates_today, selected_date=selected_date)
+
+@app.route('/talent/add_self_slot', methods=['POST'])
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_add_self_slot():
+    """إضافة موعد شاغر للمختبر (لحظره لاحقاً)."""
+    user_id = session['user_id']
+    slot_date = request.form.get('slot_date')
+    slot_time = request.form.get('slot_time')
+    if not slot_date or not slot_time:
+        flash('التاريخ والوقت مطلوبان.', 'warning')
+        return redirect(url_for('talent_book_self'))
+    existing = query_db("SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?", (user_id, slot_date, slot_time), one=True)
+    if existing:
+        flash('هذا الموعد موجود مسبقاً.', 'info')
+        return redirect(url_for('talent_book_self'))
+    query_db("INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, 'Blocked', ?)", (slot_date, slot_time, user_id))
+    flash('تم إضافة الموعد وحظره بنجاح.', 'success')
+    return redirect(url_for('talent_book_self', date=slot_date))
+
+@app.route('/talent/exam_feedback/<int:batch_id>')
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_exam_feedback(batch_id):
+    """زر فيدباك — في أيام الامتحانات يفتح تقييم كاختبار عادي لطالب من الدفعة."""
+    batch = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
+    if not batch:
+        flash('الدفعة غير موجودة.', 'danger')
+        return redirect(url_for('talent_dashboard'))
+    students = query_db("""
+        SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        WHERE E.BatchID = ? AND E.Status = 'Active'
+        ORDER BY C.FullName
+    """, (batch_id,)) or []
+    return render_template('talent/exam_feedback.html', batch=batch, students=students)
+
+@app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>', methods=['GET', 'POST'])
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_exam_feedback_evaluate(batch_id, candidate_id):
+    """تسجيل تقييم امتحان دوري — مثل talent_evaluate لكن بدون slot محجوز."""
+    cand = query_db("SELECT CandidateID, FullName, Phone, Email, Status, CurrentCEFR FROM Candidates WHERE CandidateID=?", (candidate_id,), one=True)
+    batch = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
+    if not cand or not batch:
+        flash('المرشح أو الدفعة غير موجودين.', 'danger')
+        return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
+    eval_type = 'Training'
+    if request.method == 'POST':
+        f = request.form
+        cefr = (f.get('cefr_level') or '').strip()
+        decision = (f.get('decision') or '').strip()
+        if not cefr or not decision:
+            flash('CEFR Level و Decision مطلوبان.', 'warning')
+            return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
+        score_c = _safe_int(f.get('score_c'))
+        score_f = _safe_int(f.get('score_f'))
+        score_p = _safe_int(f.get('score_p'))
+        score_s = _safe_int(f.get('score_g'))
+        score_v = _safe_int(f.get('score_v'))
+        comments = (f.get('comments') or '')[:4000]
+        recommended_level = (f.get('recommended_level') or '').strip() or None
+        recording_link = (f.get('recording_link') or '').strip() or None
+        try:
+            db = get_db()
+            cur = db.cursor()
+            cur.execute("""
+                INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType)
+                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, 'Exam Feedback', 'Training')
+            """, (session['user_id'], candidate_id))
+            cur.execute("SELECT SCOPE_IDENTITY()")
+            row = cur.fetchone()
+            slot_id = int(row[0]) if row and row[0] else None
+            db.commit()
+            cur.close()
+            if slot_id:
+                query_db('''
+                    INSERT INTO Evaluations (CandidateID, SlotID, Score_Comprehension, Score_Fluency, Score_Pronunciation,
+                                         Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
+                ''', (candidate_id, slot_id, score_c, score_f, score_p, score_s, score_v, cefr, decision, recommended_level, comments, session['user_id'], eval_type, recording_link))
+                query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', candidate_id))
+                flash('تم حفظ تقييم الامتحان الدوري بنجاح.', 'success')
+            else:
+                flash('خطأ في الحصول على SlotID.', 'danger')
+            return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
+        except Exception as e:
+            flash(f'خطأ: {str(e)[:80]}', 'danger')
+            return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
+    return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
 
 @app.route('/talent/monthly_results')
 @login_required
@@ -2940,14 +3082,26 @@ def candidate_profile(candidate_id):
     except Exception:
         pass
     attendance_list = []
+    attendance_summary = []
     try:
         attendance_list = query_db('''
-            SELECT A.Date, A.Status, B.BatchName
+            SELECT A.Date, A.Status, B.BatchName, A.LateMinutes, A.TotalHours
             FROM Attendance A
             JOIN Enrollments E ON A.EnrollmentID = E.EnrollmentID
             JOIN CourseBatches B ON E.BatchID = B.BatchID
             WHERE E.CandidateID = ?
             ORDER BY A.Date DESC
+        ''', (candidate_id,)) or []
+        attendance_summary = query_db('''
+            SELECT E.EnrollmentID, B.BatchName,
+                   ISNULL(SUM(A.LateMinutes), 0) AS TotalDelayMinutes,
+                   SUM(CASE WHEN A.Status = 'Absent' THEN 1 ELSE 0 END) AS AbsenceCount,
+                   ISNULL(SUM(A.TotalHours), 0) AS TotalHours
+            FROM Enrollments E
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            LEFT JOIN Attendance A ON A.EnrollmentID = E.EnrollmentID
+            WHERE E.CandidateID = ?
+            GROUP BY E.EnrollmentID, B.BatchName
         ''', (candidate_id,)) or []
     except Exception:
         pass
@@ -2996,6 +3150,21 @@ def candidate_profile(candidate_id):
         ''', (candidate_id,)) or []
     except Exception:
         pass
+    # ملاحظات مختبر المواهب / الامتحان / الفيدباك — كل ما يحص التالنت يظهر هنا
+    talent_feedback_list = []
+    try:
+        talent_feedback_list = query_db('''
+            SELECT E.EvaluationID, E.CEFR_Level, E.Decision, E.Comments, E.EvaluationType, E.RecordingLink, E.EvaluationDate,
+                   E.Score_Comprehension, E.Score_Fluency, E.Score_Pronunciation, E.Score_Structure, E.Score_Vocabulary,
+                   E.RecommendedLevel, T.Type AS SlotType, T.SlotDate, T.SlotTime, U.FullName AS EvaluatorName
+            FROM Evaluations E
+            LEFT JOIN TASchedules T ON E.SlotID = T.SlotID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.CandidateID = ?
+            ORDER BY E.EvaluationDate DESC, T.SlotDate DESC, T.SlotTime DESC
+        ''', (candidate_id,)) or []
+    except Exception:
+        pass
     return render_template(
         'profile.html',
         cand=cand,
@@ -3005,12 +3174,14 @@ def candidate_profile(candidate_id):
         recruiter_name=recruiter_name,
         placement_tests=placement_tests,
         attendance_list=attendance_list,
+        attendance_summary=attendance_summary,
         source_channel=source_channel,
         placement_reason=placement_reason,
         marketing_assessment=marketing_assessment,
         sheet_data_list=sheet_data_list,
         trainer_notes_list=trainer_notes_list,
         candidate_invoices=candidate_invoices,
+        talent_feedback_list=talent_feedback_list,
     )
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):
@@ -3170,7 +3341,7 @@ def delete_user(user_id):
     return redirect(url_for('manage_users'))
 @app.route('/training/batch/<int:batch_id>/set-status', methods=['POST'])
 @login_required
-@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def set_batch_status(batch_id):
     """تغيير حالة الدفعة من Active إلى Completed (غير منشطة) أو العكس."""
     new_status = (request.form.get('status') or '').strip()
@@ -3213,7 +3384,7 @@ def browse_academy():
 # --- مبيعات التدريب (محاكاة مبيعات التوظيف): نوافذ مثل التوظيف — Dashboard, Workbench, Scheduling, متابعة ---
 @app.route('/training/sales')
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_dashboard():
     """لوحة مبيعات التدريب — محاكاة لوحة التوظيف (إحصائيات + اختصارات المسار)."""
     user_id = session.get('user_id')
@@ -3244,7 +3415,7 @@ def training_sales_dashboard():
 
 @app.route('/training/sales/workbench')
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_index():
     """لوحة مبيعات التدريب: تسجيل مهتم تدريب، قائمة المهتمين (من لم يُحجز لهم موعد بعد)، حجز موعد اختبار مواهب تدريب. بعد الحجز ينتقلون لقائمة متابعة المواعيد."""
     # مهتمو التدريب: من لم يُحجز لهم موعد بعد (بعد الحجز يختفون من هنا ويظهرون في متابعة المواعيد)
@@ -3263,7 +3434,7 @@ def training_sales_index():
 
 @app.route('/training/sales/register', methods=['POST'])
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_register():
     """تسجيل مهتم تدريب (تعريف المهتم لأول مرة)."""
     f = request.form
@@ -3293,7 +3464,7 @@ def training_sales_register():
 
 @app.route('/training/sales/book/<int:candidate_id>', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator'])
 def training_sales_book_slot(candidate_id):
     """حجز موعد اختبار مواهب تدريب لمهتم (عرض شاغر لمختبر مواهب التدريب)."""
     cand = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE CandidateID = ?", (candidate_id,), one=True)
@@ -3370,7 +3541,7 @@ def training_sales_book_slot(candidate_id):
 
 @app.route('/training/sales/scheduling')
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_scheduling():
     """جدولة اختبار التدريب — من لم يُحجز لهم موعد بعد + روابط الحجز (محاكاة Scheduling للتوظيف)."""
     try:
@@ -3388,7 +3559,7 @@ def training_sales_scheduling():
 
 @app.route('/training/sales/followup')
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_followup():
     """متابعة المواعيد — من حُجز لهم موعد (اليوم والقادم) لمتابعة وصول المهتم (محاكاة متابعة التوظيف)."""
     today = datetime.today().strftime('%Y-%m-%d')
@@ -3481,7 +3652,7 @@ def _create_training_fee_invoice_tbl022_023(cursor, amount, notes, pay_method=0)
 
 @app.route('/training/sales/exam-fee', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_exam_fee():
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
@@ -3587,7 +3758,7 @@ def training_sales_exam_fee():
 
 @app.route('/training/sales/exam-fee/<int:invoice_id>/print')
 @login_required
-@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
 def training_sales_exam_fee_print(invoice_id):
     inv = query_db("""
         SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I
@@ -3609,7 +3780,7 @@ def training_sales_exam_fee_print(invoice_id):
 
 @app.route('/training/sales/course-fee', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
 def training_sales_course_fee():
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
@@ -3714,7 +3885,7 @@ def training_sales_course_fee():
 
 @app.route('/training/sales/course-fee/<int:invoice_id>/print')
 @login_required
-@role_required(['TrainingSales', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
 def training_sales_course_fee_print(invoice_id):
     inv = query_db("""
         SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I
@@ -3736,7 +3907,7 @@ def training_sales_course_fee_print(invoice_id):
 
 @app.route('/training/index')
 @login_required
-@role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales'])
+@role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator'])
 def training_index():
     # عرض كل الدفعات (نشطة ومخططة) لاستعراضها وفتح التفاصيل
     waves = query_db("""
@@ -3757,7 +3928,7 @@ def training_index():
 
 @app.route('/training/add_course', methods=['POST'])
 @login_required
-@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def add_course():
     f = request.form
     name = (f.get('course_name') or '').strip()
@@ -3777,7 +3948,7 @@ def add_course():
 
 @app.route('/training/add_trainer', methods=['POST'])
 @login_required
-@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def add_trainer():
     f = request.form
     full_name = (f.get('full_name') or '').strip()
@@ -3795,7 +3966,7 @@ def add_trainer():
 
 @app.route('/training/add_classroom', methods=['POST'])
 @login_required
-@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def add_classroom():
     f = request.form
     room_name = (f.get('room_name') or '').strip()
@@ -3822,26 +3993,78 @@ def add_classroom():
 
 @app.route('/training/add_batch', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def add_batch():
     f = request.form
-    # Fix IntegrityError: RoomID might be empty string if not selected
     room_id = f.get('room_id')
     if not room_id or room_id == '':
-        room_id = None # Let DB handle NULL if nullable, or we must enforce selection
-    
-    # Check if RoomID exists if provided
+        room_id = None
     if room_id:
         room_check = query_db("SELECT RoomID FROM Classrooms WHERE RoomID=?", (room_id,), one=True)
         if not room_check:
-            flash('Error: Selected Classroom does not exist. Please create it first.', 'danger')
+            flash('القاعة المختارة غير موجودة.', 'danger')
             return redirect(url_for('training_index'))
 
+    start_time = (f.get('start_time') or '').strip() or None
+    end_time = (f.get('end_time') or '').strip() or None
+    week_days = (f.get('week_days') or '').strip() or None
+
     query_db("""
-        INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, Status)
-        VALUES (?, ?, ?, ?, ?, ?, 'Active')
-    """, (f['batch_name'], f['course_id'], f['trainer_id'], room_id, f['start_date'], f['end_date']))
-    flash('Wave/Batch Created', 'success')
+        INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+    """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+    flash('تم إنشاء الدفعة بنجاح.', 'success')
     return redirect(url_for('training_index'))
+
+@app.route('/training/batch/<int:batch_id>/update_schedule', methods=['POST'])
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def update_batch_schedule(batch_id):
+    """تحديث إعدادات الدفعة: وقت من-إلى، أيام الأسبوع."""
+    f = request.form
+    start_time = (f.get('start_time') or '').strip() or None
+    end_time = (f.get('end_time') or '').strip() or None
+    week_days = (f.get('week_days') or '').strip() or None
+    b = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
+    if not b:
+        flash('الدفعة غير موجودة.', 'danger')
+        return redirect(url_for('training_index'))
+    try:
+        query_db("UPDATE CourseBatches SET StartTime=?, EndTime=?, WeekDays=? WHERE BatchID=?", (start_time, end_time, week_days, batch_id))
+        flash('تم تحديث إعدادات الدفعة.', 'success')
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:60], 'danger')
+    return redirect(url_for('wave_details', wave_id=batch_id))
+
+@app.route('/training/batch/<int:batch_id>/add_exam_date', methods=['POST'])
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def add_batch_exam_date(batch_id):
+    """إضافة يوم امتحان دوري للدفعة."""
+    f = request.form
+    exam_date = (f.get('exam_date') or '').strip()
+    exam_label = (f.get('exam_label') or '').strip() or 'امتحان دوري'
+    if not exam_date:
+        flash('التاريخ مطلوب.', 'warning')
+        return redirect(url_for('wave_details', wave_id=batch_id))
+    b = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
+    if not b:
+        flash('الدفعة غير موجودة.', 'danger')
+        return redirect(url_for('training_index'))
+    try:
+        query_db("INSERT INTO BatchExamDates (BatchID, ExamDate, ExamLabel) VALUES (?, ?, ?)", (batch_id, exam_date, exam_label))
+        flash('تم إضافة يوم الامتحان.', 'success')
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:60], 'danger')
+    return redirect(url_for('wave_details', wave_id=batch_id))
+
+@app.route('/training/batch/<int:batch_id>/delete_exam_date/<int:exam_date_id>', methods=['POST'])
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def delete_batch_exam_date(batch_id, exam_date_id):
+    query_db("DELETE FROM BatchExamDates WHERE ExamDateID=? AND BatchID=?", (exam_date_id, batch_id))
+    flash('تم حذف يوم الامتحان.', 'info')
+    return redirect(url_for('wave_details', wave_id=batch_id))
 
 @app.route('/training/wave/<int:wave_id>')
 @login_required
@@ -3849,6 +4072,11 @@ def add_batch():
 def wave_details(wave_id):
     wave = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE BatchID=?", (wave_id,), one=True)
     if not wave: return "Wave not found", 404
+
+    exam_dates = query_db("SELECT * FROM BatchExamDates WHERE BatchID=? ORDER BY ExamDate", (wave_id,)) or []
+    if wave:
+        wave['StartTimeStr'] = _safe_time_str(wave.get('StartTime'))
+        wave['EndTimeStr'] = _safe_time_str(wave.get('EndTime'))
     
     students = query_db("""
         SELECT E.*, C.FullName, C.Phone, C.CurrentCEFR
@@ -3857,7 +4085,6 @@ def wave_details(wave_id):
         WHERE E.BatchID = ?
     """, (wave_id,))
     
-    # Weekly Reports
     reports = query_db("""
         SELECT WP.*, C.FullName
         FROM WeeklyProgress WP
@@ -3867,7 +4094,7 @@ def wave_details(wave_id):
         ORDER BY WP.WeekNumber DESC, C.FullName ASC
     """, (wave_id,))
     
-    return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [])
+    return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [], exam_dates=exam_dates)
 
 @app.route('/training/add_report', methods=['POST'])
 @login_required
@@ -4001,7 +4228,7 @@ def graduate_student():
 
 @app.route('/training/batch/<int:batch_id>')
 @login_required
-@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
+@role_required(['Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Trainer', 'TrainingLead'])
 def batch_details(batch_id):
     batch = query_db("SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID JOIN Trainers T ON B.TrainerID = T.TrainerID JOIN Classrooms R ON B.RoomID = R.RoomID WHERE B.BatchID = ?", (batch_id,), one=True)
     if not batch: return redirect(url_for('training_index'))
@@ -4011,7 +4238,7 @@ def batch_details(batch_id):
 
 @app.route('/training/notes/<int:enrollment_id>', methods=['GET', 'POST'])
 @login_required
-@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
+@role_required(['Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Trainer', 'TrainingLead'])
 def trainer_notes(enrollment_id):
     """نافذة ملاحظات المدرب اليومية لطالب معيّن (حسب التسجيل في دفعة)."""
     student = query_db("""
@@ -4055,7 +4282,7 @@ def trainer_notes(enrollment_id):
 
 @app.route('/training/enroll_student', methods=['POST'])
 @login_required
-@role_required(['Manager', 'TrainingCoordinator', 'Trainer', 'TrainingLead'])
+@role_required(['Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Trainer', 'TrainingLead'])
 def enroll_student():
     f = request.form
     batch_id = f.get('batch_id')
@@ -4207,7 +4434,7 @@ def add_student_direct():
 
 @app.route('/training/attendance', methods=['GET'])
 @login_required
-@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingLead'])
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
 def training_attendance():
     batches = query_db("SELECT * FROM CourseBatches WHERE Status='Active'")
     selected_batch_id = request.args.get('batch_id')
@@ -4219,25 +4446,22 @@ def training_attendance():
     if selected_batch_id:
         selected_batch = query_db("SELECT * FROM CourseBatches WHERE BatchID=?", (selected_batch_id,), one=True)
         if selected_batch:
-            # Fetch students and their attendance for the SPECIFIC DATE
+            selected_batch['StartTimeStr'] = _safe_time_str(selected_batch.get('StartTime'))
+            selected_batch['EndTimeStr'] = _safe_time_str(selected_batch.get('EndTime'))
             raw = query_db('''
                 SELECT E.EnrollmentID, E.CandidateID, C.FullName,
-                        A.Status, A.CheckInTime, A.CheckOutTime, A.AssignmentDone, A.AttendanceID
+                        A.Status, A.CheckInTime, A.CheckOutTime, A.TotalHours, A.AssignmentDone, A.AttendanceID, A.LateMinutes,
+                        (SELECT ISNULL(SUM(LateMinutes), 0) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID) AS TotalDelayMinutes,
+                        (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
                 FROM Enrollments E
                 JOIN Candidates C ON E.CandidateID = C.CandidateID
                 LEFT JOIN Attendance A ON E.EnrollmentID = A.EnrollmentID AND A.Date = ?
                 WHERE E.BatchID = ? AND E.Status = 'Active'
             ''', (selected_date, selected_batch_id))
-            # Normalize time for template (DB may return time or string)
             students = []
-            cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'AssignmentDone', 'AttendanceID']
+            cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'TotalHours', 'AssignmentDone', 'AttendanceID', 'LateMinutes', 'TotalDelayMinutes', 'AbsenceCount']
             for row in (raw or []):
-                r = {}
-                for k in cols:
-                    try:
-                        r[k] = row[k]
-                    except Exception:
-                        r[k] = None
+                r = {k: row.get(k) for k in cols}
                 r['CheckInTimeStr'] = _safe_time_str(r.get('CheckInTime'))
                 r['CheckOutTimeStr'] = _safe_time_str(r.get('CheckOutTime'))
                 students.append(r)
@@ -4251,28 +4475,23 @@ def training_attendance():
 
 @app.route('/training/save_attendance_grid', methods=['POST'])
 @login_required
-@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingLead'])
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
 def save_attendance_grid():
     batch_id = request.form['batch_id']
     date = request.form['date']
-    
+    batch = query_db("SELECT StartTime FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
+    expected_start = batch.get('StartTime') if batch else None
+
     for key in request.form:
         if key.startswith('status_'):
             enrollment_id = key.split('_')[1]
-            
-            # Get Inputs
-            # FIX: Use f.get not request.form.get if f is defined above, but f is not defined here yet? 
-            # Ah, the previous block I wrote "f = request.form" at start of function.
-            # But here in old_str, it uses request.form.get.
-            # Let's use request.form directly to match context or define f.
-            
             status = request.form.get(f'status_{enrollment_id}')
             check_in = request.form.get(f'in_{enrollment_id}') or None
             check_out = request.form.get(f'out_{enrollment_id}') or None
             assignment = 1 if request.form.get(f'assign_{enrollment_id}') else 0
             
-            # Calculate Hours
             total_hours = 0
+            late_minutes = None
             if check_in and check_out:
                 try:
                     fmt = '%H:%M'
@@ -4280,23 +4499,34 @@ def save_attendance_grid():
                     t2 = datetime.strptime(check_out, fmt)
                     delta = t2 - t1
                     total_hours = round(delta.total_seconds() / 3600, 2)
-                except: pass
+                except Exception:
+                    pass
+                if expected_start and hasattr(expected_start, 'strftime'):
+                    try:
+                        exp_str = expected_start.strftime('%H:%M') if hasattr(expected_start, 'strftime') else str(expected_start)[:5]
+                        t_exp = datetime.strptime(exp_str, '%H:%M')
+                        t_act = datetime.strptime(check_in, '%H:%M')
+                        if t_act > t_exp:
+                            late_minutes = int((t_act - t_exp).total_seconds() / 60)
+                        else:
+                            late_minutes = 0
+                    except Exception:
+                        late_minutes = None
+            elif status == 'Absent':
+                late_minutes = None
 
-            # Update DB
-            # 'Date' column is confirmed by schema check.
             existing = query_db('SELECT AttendanceID FROM Attendance WHERE EnrollmentID=? AND Date=?', (enrollment_id, date), one=True)
-            
             if existing:
                 query_db('''
                     UPDATE Attendance 
-                    SET Status=?, CheckInTime=?, CheckOutTime=?, TotalHours=?, AssignmentDone=?
+                    SET Status=?, CheckInTime=?, CheckOutTime=?, TotalHours=?, AssignmentDone=?, LateMinutes=?
                     WHERE AttendanceID=?
-                ''', (status, check_in, check_out, total_hours, assignment, existing['AttendanceID']))
+                ''', (status, check_in, check_out, total_hours, assignment, late_minutes, existing['AttendanceID']))
             else:
                 query_db('''
-                    INSERT INTO Attendance (EnrollmentID, Date, Status, CheckInTime, CheckOutTime, TotalHours, AssignmentDone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (enrollment_id, date, status, check_in, check_out, total_hours, assignment))
+                    INSERT INTO Attendance (EnrollmentID, Date, Status, CheckInTime, CheckOutTime, TotalHours, AssignmentDone, LateMinutes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (enrollment_id, date, status, check_in, check_out, total_hours, assignment, late_minutes))
 
     flash('تم حفظ الحضور التفصيلي بنجاح', 'success')
     return redirect(url_for('training_attendance', batch_id=batch_id, date=date))
