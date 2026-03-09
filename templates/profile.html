@@ -115,7 +115,7 @@
                             <td><span class="badge bg-{{ 'info' if fb.SlotType == 'Exam Feedback' else 'primary' }}">{{ fb.SlotType or fb.EvaluationType or 'تقييم' }}</span></td>
                             <td class="small">{{ fb.EvaluatorName or '-' }}</td>
                             <td><span class="badge bg-secondary">{{ fb.CEFR_Level or '-' }}</span></td>
-                            <td><span class="badge bg-{{ 'success' if fb.Decision == 'Accepted' else 'warning' if fb.Decision == 'Training' else 'secondary' }}">{{ fb.Decision or '-' }}</span></td>
+                            <td><span class="badge bg-{{ 'success' if fb.Decision == 'Accepted' else 'warning' if fb.Decision == 'Training' else 'danger' if fb.Decision == 'Rejected' else 'secondary' }}">{{ fb.Decision or '-' }}</span></td>
                             <td class="small">C:{{ fb.Score_Comprehension or '-' }} F:{{ fb.Score_Fluency or '-' }} P:{{ fb.Score_Pronunciation or '-' }} G:{{ fb.Score_Structure or '-' }} V:{{ fb.Score_Vocabulary or '-' }}</td>
                             <td class="text-break small" style="max-width:200px">{{ (fb.Comments or '-')[:100] }}{% if (fb.Comments or '')|length > 100 %}...{% endif %}</td>
                             <td>{% if fb.RecordingLink %}<a href="{{ fb.RecordingLink }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="تسجيل"><i class="fas fa-external-link-alt"></i></a>{% else %}-{% endif %}</td>

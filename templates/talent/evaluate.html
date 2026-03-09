@@ -89,22 +89,20 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-bold">4. Final Recommendation</label>
+                            <label class="form-label fw-bold">4. Final Recommendation <small class="text-muted">(التوصية النهائية)</small></label>
                             <div class="btn-group w-100" role="group">
                                 <input type="radio" class="btn-check" name="decision" id="dec1" value="Accepted" required>
-                                <label class="btn btn-outline-success" for="dec1">Accepted</label>
+                                <label class="btn btn-outline-success" for="dec1">مقبول <small class="d-block">نجاح داخل الدورة</small></label>
 
                                 <input type="radio" class="btn-check" name="decision" id="dec2" value="Training">
-                                <label class="btn btn-outline-warning" for="dec2">Training</label>
+                                <label class="btn btn-outline-warning" for="dec2">تدريب <small class="d-block">نجاح في تحديد المستوى</small></label>
 
-                                {% if eval_type != 'Training' %}
                                 <input type="radio" class="btn-check" name="decision" id="dec3" value="Rejected">
-                                <label class="btn btn-outline-danger" for="dec3">Rejected</label>
-                                {% endif %}
+                                <label class="btn btn-outline-danger" for="dec3">مرفوض <small class="d-block">رفض للاثنين</small></label>
                             </div>
-                            {% if eval_type == 'Training' %}
-                            <small class="text-muted">في تقييم التدريب لا يُرفض أحد — الخياران: Accepted أو Training.</small>
-                            {% endif %}
+                            <small class="text-muted d-block mt-2">
+                                مقبول = نجاح المتدرب داخل الدورة الويف — تدريب = نجاح في تحديد المستوى — مرفوض = رفض للاثنين معاً.
+                            </small>
                         </div>
 
                         <div class="d-grid gap-2">

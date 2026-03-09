@@ -17,6 +17,8 @@
     </script>
 
     <style>
+        .en-bold { font-weight: 700; }
+        .ar-normal { font-weight: 400; }
         :root {
             --sidebar-width: 260px;
             --sidebar-collapsed-width: 70px;
@@ -478,29 +480,29 @@
             <!-- المواهب (TA): للمدير ومختبر المواهب فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment', 'TA-Training', 'Talent_Training']) %}
-            <div class="sidebar-section-label">Talent Center <span class="arabic-sub">المواهب</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Talent Center</span> <span class="ar-normal">المواهب</span></div>
             {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] %}
             <a href="{{ url_for('talent_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' or request.endpoint == 'talent_evaluate' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text">مواعيد اختبار التدريب <span class="arabic-sub">للمختبر</span></span>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة المواهب</span></span>
             </a>
             <a href="{{ url_for('talent_monthly_results') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_monthly_results' else '' }}">
                 <i class="fas fa-chart-bar"></i>
-                <span class="link-text">نتائج الشهر <span class="arabic-sub">استعراض النتائج</span></span>
+                <span class="link-text"><span class="en-bold">Monthly Results</span> <span class="ar-normal">نتائج الشهر</span></span>
             </a>
             <a href="{{ url_for('talent_book_self') }}"
                 class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
                 <i class="fas fa-calendar-plus"></i>
-                <span class="link-text">حجز مواعيد لنفسي</span>
+                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز مواعيد لنفسي</span></span>
             </a>
             {% endif %}
             {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}
             <a href="{{ url_for('talent_conduct_test') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_conduct_test' else '' }}">
                 <i class="fas fa-vial"></i>
-                <span class="link-text">Conduct Tests <span class="arabic-sub">اختبارات توظيف</span></span>
+                <span class="link-text"><span class="en-bold">Conduct Tests</span> <span class="ar-normal">اختبارات توظيف</span></span>
             </a>
             {% endif %}
             {% endif %}

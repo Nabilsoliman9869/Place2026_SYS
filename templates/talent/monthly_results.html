@@ -29,7 +29,7 @@
                             <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" target="_blank">{{ r.FullName }}</a>
                         </td>
                         <td><span class="badge bg-info">{{ r.CEFR_Level or '-' }}</span></td>
-                        <td><span class="badge bg-{{ 'success' if r.Decision == 'Accepted' else 'warning' if r.Decision == 'Training' else 'secondary' }}">{{ r.Decision or '-' }}</span></td>
+                        <td><span class="badge bg-{{ 'success' if r.Decision == 'Accepted' else 'warning' if r.Decision == 'Training' else 'danger' if r.Decision == 'Rejected' else 'secondary' }}">{{ r.Decision or '-' }}</span></td>
                         <td>{{ r.EvaluationType or '-' }}</td>
                         <td class="small text-muted">{{ (r.Comments or '')[:80] }}{% if (r.Comments or '')|length > 80 %}...{% endif %}</td>
                     </tr>

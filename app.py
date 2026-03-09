@@ -1749,26 +1749,46 @@ def accounting_issue_invoice():
 def talent_dashboard():
     if 'role' not in session: return redirect(url_for('login'))
     user_id = session['user_id']
-    role = session['role']
-    
-    # 1. Fetch Assigned Slots (Evaluator's Schedule)
-    # Include IsConfirmedByRecruiter, BookedByName, PreviousTests
-    
+    selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
+
+    # 1. Fetch slots for selected date
     slots_sql = """
         SELECT T.*, C.FullName, C.Phone, C.CandidateID,
                (SELECT Username FROM Users_1 WHERE UserID = T.BookedBy) as BookedByName,
                (SELECT COUNT(*) FROM TASchedules TS WHERE TS.CandidateID = T.CandidateID AND TS.Status = 'Completed') as PreviousTests
-        FROM TASchedules T 
-        LEFT JOIN Candidates C ON T.CandidateID = C.CandidateID 
-        WHERE T.EvaluatorID = ? 
-        AND (T.Status = 'Booked' OR (T.Status = 'Completed' AND T.SlotDate = CONVERT(DATE, GETDATE())))
-        ORDER BY T.SlotDate, T.SlotTime
+        FROM TASchedules T
+        LEFT JOIN Candidates C ON T.CandidateID = C.CandidateID
+        WHERE T.EvaluatorID = ?
+        AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
+        AND (T.Status = 'Booked' OR T.Status = 'Completed')
+        ORDER BY T.SlotTime
     """
-    
-    my_schedule = query_db(slots_sql, (user_id,))
-    
-    # Use 'slots' variable to match template
-    return render_template('talent/dashboard.html', slots=my_schedule or [], selected_date=datetime.today().strftime('%Y-%m-%d'))
+    my_schedule = query_db(slots_sql, (user_id, selected_date)) or []
+
+    # 2. Batches with students — for talent tester to review and evaluate at line level
+    batches_with_students = []
+    try:
+        waves = query_db("""
+            SELECT B.BatchID, B.BatchName, C.CourseName
+            FROM CourseBatches B
+            JOIN Courses C ON B.CourseID = C.CourseID
+            WHERE B.Status = 'Active'
+            ORDER BY B.BatchName
+        """) or []
+        for w in waves:
+            students = query_db("""
+                SELECT E.CandidateID, C.FullName, C.CurrentCEFR
+                FROM Enrollments E
+                JOIN Candidates C ON E.CandidateID = C.CandidateID
+                WHERE E.BatchID = ? AND E.Status = 'Active'
+                ORDER BY C.FullName
+            """, (w['BatchID'],)) or []
+            batches_with_students.append({'batch': w, 'students': students})
+    except Exception:
+        pass
+
+    return render_template('talent/dashboard.html',
+        slots=my_schedule, selected_date=selected_date, batches_with_students=batches_with_students)
 
 @app.route('/talent/cancel_slot', methods=['POST'])
 @login_required
