@@ -4011,10 +4011,41 @@ def add_batch():
     end_time = (f.get('end_time') or '').strip() or None
     week_days = (f.get('week_days') or '').strip() or None
 
-    query_db("""
-        INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
-    """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+    try:
+        # محاولة مع الأعمدة الجديدة (StartTime, EndTime, WeekDays)
+        query_db("""
+            INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+        """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+    except Exception as e:
+        err_msg = str(e).lower()
+        # إذا الأعمدة غير موجودة (قاعدة قديمة)، نضيفها ثم نعيد المحاولة أو نستخدم INSERT بسيط
+        if 'starttime' in err_msg or 'invalid column' in err_msg or 'column name' in err_msg:
+            try:
+                query_db("ALTER TABLE CourseBatches ADD StartTime TIME NULL")
+            except Exception:
+                pass
+            try:
+                query_db("ALTER TABLE CourseBatches ADD EndTime TIME NULL")
+            except Exception:
+                pass
+            try:
+                query_db("ALTER TABLE CourseBatches ADD WeekDays NVARCHAR(100) NULL")
+            except Exception:
+                pass
+            try:
+                query_db("""
+                    INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+                """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+            except Exception:
+                query_db("""
+                    INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, Status)
+                    VALUES (?, ?, ?, ?, ?, ?, 'Active')
+                """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date')))
+        else:
+            flash(f'خطأ عند إنشاء الدفعة: {str(e)[:100]}', 'danger')
+            return redirect(url_for('training_index'))
     flash('تم إنشاء الدفعة بنجاح.', 'success')
     return redirect(url_for('training_index'))
 
