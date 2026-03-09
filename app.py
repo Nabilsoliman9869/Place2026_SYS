@@ -4101,32 +4101,38 @@ def delete_batch_exam_date(batch_id, exam_date_id):
 
 @app.route('/training/wave/<int:wave_id>')
 @login_required
-@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def wave_details(wave_id):
     wave = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE BatchID=?", (wave_id,), one=True)
     if not wave: return "Wave not found", 404
 
-    exam_dates = query_db("SELECT * FROM BatchExamDates WHERE BatchID=? ORDER BY ExamDate", (wave_id,)) or []
-    if wave:
-        wave['StartTimeStr'] = _safe_time_str(wave.get('StartTime'))
-        wave['EndTimeStr'] = _safe_time_str(wave.get('EndTime'))
-    
+    wave['StartTimeStr'] = _safe_time_str(wave.get('StartTime'))
+    wave['EndTimeStr'] = _safe_time_str(wave.get('EndTime'))
+
+    try:
+        exam_dates = query_db("SELECT * FROM BatchExamDates WHERE BatchID=? ORDER BY ExamDate", (wave_id,)) or []
+    except Exception:
+        exam_dates = []
+
     students = query_db("""
         SELECT E.*, C.FullName, C.Phone, C.CurrentCEFR
         FROM Enrollments E
         JOIN Candidates C ON E.CandidateID = C.CandidateID
         WHERE E.BatchID = ?
     """, (wave_id,))
-    
-    reports = query_db("""
-        SELECT WP.*, C.FullName
-        FROM WeeklyProgress WP
-        JOIN Enrollments E ON WP.EnrollmentID = E.EnrollmentID
-        JOIN Candidates C ON E.CandidateID = C.CandidateID
-        WHERE E.BatchID = ?
-        ORDER BY WP.WeekNumber DESC, C.FullName ASC
-    """, (wave_id,))
-    
+
+    try:
+        reports = query_db("""
+            SELECT WP.*, C.FullName
+            FROM WeeklyProgress WP
+            JOIN Enrollments E ON WP.EnrollmentID = E.EnrollmentID
+            JOIN Candidates C ON E.CandidateID = C.CandidateID
+            WHERE E.BatchID = ?
+            ORDER BY WP.WeekNumber DESC, C.FullName ASC
+        """, (wave_id,)) or []
+    except Exception:
+        reports = []
+
     return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [], exam_dates=exam_dates)
 
 @app.route('/training/add_report', methods=['POST'])
