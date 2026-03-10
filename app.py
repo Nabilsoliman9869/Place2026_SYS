@@ -1485,7 +1485,7 @@ def check_expired_appointments():
 # --- ALLOCATION / MATCHING ---
 @app.route('/allocation/matching', methods=['GET', 'POST'])
 @login_required
-@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_matching():
     # 1. Fetch Open Requests
     open_requests = query_db("""
@@ -1550,15 +1550,68 @@ def allocation_matching():
         WHERE M.Status = 'Approved'
     """)
 
+    # 5. Matching by Client/Request — عميل → طلب → فلاتر → ترشيح
+    clients = query_db("SELECT ClientID, CompanyName FROM Clients ORDER BY CompanyName")
+    selected_client_id = request.args.get('client_id')
+    selected_request_id = request.args.get('request_id')
+    selected_request = None
+    client_requests = []
+    filtered_by_request = []
+
+    if selected_client_id:
+        client_requests = query_db("""
+            SELECT CR.*, C.CompanyName FROM ClientRequests CR
+            JOIN Clients C ON CR.ClientID = C.ClientID
+            WHERE CR.ClientID = ? AND CR.Status = 'Open'
+        """, (selected_client_id,))
+    if selected_request_id:
+        selected_request = query_db("""
+            SELECT CR.*, C.CompanyName FROM ClientRequests CR
+            JOIN Clients C ON CR.ClientID = C.ClientID
+            WHERE CR.RequestID = ?
+        """, (selected_request_id,), one=True)
+        if selected_request:
+            req = selected_request
+            cefr_order = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
+            req_level = (req.get('EnglishLevel') or 'A0').strip()
+            req_idx = cefr_order.index(req_level) if req_level in cefr_order else 0
+            def _cefr_idx(l):
+                return cefr_order.index(l) if l in cefr_order else 0
+            base_sql = """
+                SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
+                FROM Candidates C
+                LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
+                LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
+                WHERE C.Status = 'Ready_For_Matching'
+                AND NOT EXISTS (SELECT 1 FROM Matches M WHERE M.CandidateID = C.CandidateID AND M.RequestID = ?
+                    AND M.Status NOT IN ('Rejected'))
+            """
+            params = [selected_request_id]
+            if req.get('Gender') and str(req.get('Gender')).lower() not in ('any', 'none', ''):
+                base_sql += " AND (C.Gender = ? OR C.Gender IS NULL)"
+                params.append(req.get('Gender'))
+            all_cands = query_db(base_sql, tuple(params))
+            for cand in (all_cands or []):
+                cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
+                cand_idx = _cefr_idx(cand_level)
+                if cand_idx >= req_idx:
+                    filtered_by_request.append({'cand': cand, 'score': cand_idx - req_idx})
+
     return render_template('allocation/matching.html', 
                            open_requests=open_requests, 
                            ready_candidates=ready_candidates,
                            matches=matches_proposed,
-                           approved_matches=approved_matches or [])
+                           approved_matches=approved_matches or [],
+                           clients=clients or [],
+                           selected_client_id=selected_client_id,
+                           selected_request_id=selected_request_id,
+                           client_requests=client_requests or [],
+                           selected_request=selected_request,
+                           filtered_by_request=filtered_by_request)
 
 @app.route('/allocation/confirm_match', methods=['POST'])
 @login_required
-@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_confirm_match():
     req_id = request.form.get('request_id')
     cand_id = request.form.get('candidate_id')

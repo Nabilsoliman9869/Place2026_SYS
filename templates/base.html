@@ -330,22 +330,22 @@
             <!-- ============================================= -->
             <!-- الترشيح (Allocation): للمدير والمسكّن فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist']) %}
-            <div class="sidebar-section-label">Allocation <span class="arabic-sub">الترشيح</span></div>
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist', 'AccountManager']) %}
+            <div class="sidebar-section-label"><span class="en-bold">Allocation</span> <span class="ar-normal">الترشيح</span></div>
             <a href="{{ url_for('allocation_matching') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'allocation_matching' else '' }}">
                 <i class="fas fa-random"></i>
-                <span class="link-text">Matching Center <span class="arabic-sub">مركز المطابقة</span></span>
+                <span class="link-text"><span class="en-bold">Matching Center</span> <span class="ar-normal">مركز المطابقة</span></span>
             </a>
             {% if check_role_access(['Manager', 'Allocator', 'AllocationManager']) %}
             <a href="{{ url_for('allocator_dashboard') }}" class="nav-link">
                 <i class="fas fa-chart-line"></i>
-                <span class="link-text">Manager Dash</span>
+                <span class="link-text"><span class="en-bold">Manager Dash</span></span>
             </a>
             {% endif %}
             <a href="{{ url_for('match_candidates') }}" class="nav-link">
                 <i class="fas fa-people-arrows"></i>
-                <span class="link-text">Matching <span class="arabic-sub">مطابقة</span></span>
+                <span class="link-text"><span class="en-bold">Matching</span> <span class="ar-normal">مطابقة</span></span>
             </a>
             {% endif %}
 
@@ -353,31 +353,31 @@
             <!-- التوظيف (Recruiter): للمدير ومسؤول التوظيف فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Recruiter', 'RecruitmentManager']) %}
-            <div class="sidebar-section-label">Recruitment <span class="arabic-sub">قطاع التوظيف</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Recruitment</span> <span class="ar-normal">قطاع التوظيف</span></div>
             <a href="{{ url_for('recruiter_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_dashboard' else '' }}">
                 <i class="fas fa-tachometer-alt"></i>
-                <span class="link-text">My Dashboard</span>
+                <span class="link-text"><span class="en-bold">My Dashboard</span> <span class="ar-normal">لوحتي</span></span>
             </a>
             <a href="{{ url_for('recruiter_workbench') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_workbench' else '' }}">
                 <i class="fas fa-user-plus"></i>
-                <span class="link-text">Workbench <span class="arabic-sub">تسجيل</span></span>
+                <span class="link-text"><span class="en-bold">Workbench</span> <span class="ar-normal">تسجيل</span></span>
             </a>
             <a href="{{ url_for('recruiter_scheduling') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_scheduling' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text">Scheduling <span class="arabic-sub">حجز</span></span>
+                <span class="link-text"><span class="en-bold">Scheduling</span> <span class="ar-normal">حجز</span></span>
             </a>
             <a href="{{ url_for('recruiter_interviews_notify') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_interviews_notify' else '' }}">
                 <i class="fas fa-envelope"></i>
-                <span class="link-text">Interviews <span class="arabic-sub">مقابلات</span></span>
+                <span class="link-text"><span class="en-bold">Interviews</span> <span class="ar-normal">مقابلات</span></span>
             </a>
             <a href="{{ url_for('recruiter_hiring_onboarding') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_hiring_onboarding' else '' }}">
                 <i class="fas fa-user-check"></i>
-                <span class="link-text">Onboarding <span class="arabic-sub">تعيين</span></span>
+                <span class="link-text"><span class="en-bold">Onboarding</span> <span class="ar-normal">تعيين</span></span>
             </a>
             {% endif %}
 
@@ -385,93 +385,93 @@
             <!-- التدريب: كل دور يرى نوافذه فقط — بدون تضارب أو تكرار -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer']) %}
-            <div class="sidebar-section-label">Training <span class="arabic-sub">قطاع التدريب</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Training</span> <span class="ar-normal">قطاع التدريب</span></div>
             {% if session.get('role') in ['TrainingSales', 'TrainingSalesCoordinator', 'Manager'] %}
             <a href="{{ url_for('training_sales_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_dashboard' else '' }}">
                 <i class="fas fa-tachometer-alt"></i>
-                <span class="link-text">لوحة مبيعات التدريب</span>
+                <span class="link-text"><span class="en-bold">Sales Dashboard</span> <span class="ar-normal">لوحة مبيعات التدريب</span></span>
             </a>
             <a href="{{ url_for('training_sales_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_index' else '' }}">
                 <i class="fas fa-user-plus"></i>
-                <span class="link-text">مهتمو التدريب <span class="arabic-sub">تسجيل</span></span>
+                <span class="link-text"><span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span></span>
             </a>
             <a href="{{ url_for('training_sales_scheduling') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_scheduling' or request.endpoint == 'training_sales_book_slot' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text">جدولة اختبار التدريب <span class="arabic-sub">حجز</span></span>
+                <span class="link-text"><span class="en-bold">Test Scheduling</span> <span class="ar-normal">جدولة اختبار التدريب</span></span>
             </a>
             <a href="{{ url_for('training_sales_followup') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_followup' else '' }}">
                 <i class="fas fa-calendar-day"></i>
-                <span class="link-text">متابعة المواعيد</span>
+                <span class="link-text"><span class="en-bold">Follow-up</span> <span class="ar-normal">متابعة المواعيد</span></span>
             </a>
             <a href="{{ url_for('training_sales_exam_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text">تحصيل رسوم امتحان</span>
+                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
             </a>
             <a href="{{ url_for('training_sales_course_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
                 <i class="fas fa-file-invoice"></i>
-                <span class="link-text">فاتورة التدريب — ايراد دورات</span>
+                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
             </a>
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
-                <span class="link-text">Academy <span class="arabic-sub">الأكاديمية — الدفعات النشطة/الأرشيف</span></span>
+                <span class="link-text"><span class="en-bold">Academy</span> <span class="ar-normal">الأكاديمية — الدفعات</span></span>
             </a>
             {% endif %}
             {% if session.get('role') in ['TrainingCoordinator', 'TrainingSalesCoordinator'] %}
             <a href="{{ url_for('training_sales_scheduling') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_scheduling' or request.endpoint == 'training_sales_book_slot' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text">جدولة اختبار التدريب <span class="arabic-sub">حجز من مختبري مواهب</span></span>
+                <span class="link-text"><span class="en-bold">Test Scheduling</span> <span class="ar-normal">حجز من مختبري مواهب</span></span>
             </a>
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
-                <span class="link-text">Academy <span class="arabic-sub">الأكاديمية — إلحاق مهتمين</span></span>
+                <span class="link-text"><span class="en-bold">Academy</span> <span class="ar-normal">إلحاق مهتمين</span></span>
             </a>
             <a href="{{ url_for('training_sales_exam_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text">تحصيل رسوم امتحان</span>
+                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
             </a>
             <a href="{{ url_for('training_sales_course_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
                 <i class="fas fa-file-invoice"></i>
-                <span class="link-text">فاتورة التدريب — ايراد دورات</span>
+                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
             </a>
             <a href="{{ url_for('training_attendance') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
-                <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
+                <span class="link-text"><span class="en-bold">Attendance</span> <span class="ar-normal">الحضور</span></span>
             </a>
             {% endif %}
             {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'Trainer'] %}
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
                 <i class="fas fa-graduation-cap"></i>
-                <span class="link-text">Academy <span class="arabic-sub">الأكاديمية</span></span>
+                <span class="link-text"><span class="en-bold">Academy</span> <span class="ar-normal">الأكاديمية</span></span>
             </a>
             <a href="{{ url_for('training_attendance') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
-                <span class="link-text">Attendance <span class="arabic-sub">الحضور</span></span>
+                <span class="link-text"><span class="en-bold">Attendance</span> <span class="ar-normal">الحضور</span></span>
             </a>
             {% endif %}
             {% if session.get('role') == 'TrainingManager' %}
             <a href="{{ url_for('training_sales_exam_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text">تحصيل رسوم امتحان</span>
+                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
             </a>
             <a href="{{ url_for('training_sales_course_fee') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
                 <i class="fas fa-file-invoice"></i>
-                <span class="link-text">فاتورة التدريب — ايراد دورات</span>
+                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
             </a>
             {% endif %}
             {% endif %}

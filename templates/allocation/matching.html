@@ -2,8 +2,8 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-random"></i> Allocation Matching Center</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2><i class="fas fa-random"></i> <span class="en-bold">Matching Center</span> <span class="ar-normal">مركز المطابقة</span></h2>
         <div class="d-flex align-items-center gap-2">
             <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#infoModalAllocation" title="شرح قواعد الترشيح">
                 <i class="fas fa-info-circle"></i> قواعد الترشيح
@@ -11,6 +11,115 @@
             <span class="badge bg-success fs-6">{{ matches|length }} Proposed Matches Found</span>
         </div>
     </div>
+
+    <!-- Matching by Client/Request — عميل → طلب → ترشيح -->
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary bg-opacity-10">
+            <h5 class="mb-0"><span class="en-bold">Matching by Request</span> <span class="ar-normal">عميل → طلب عميل → ترشيح على مستوى السطر</span></h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small"><span class="en-bold">Client</span> <span class="ar-normal">العميل</span></label>
+                    <select name="client_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- <span class="ar-normal">اختر العميل</span> --</option>
+                        {% for cl in clients %}
+                        <option value="{{ cl.ClientID }}" {% if selected_client_id and selected_client_id|string == cl.ClientID|string %}selected{% endif %}>{{ cl.CompanyName }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small"><span class="en-bold">Job Order</span> <span class="ar-normal">طلب العميل</span></label>
+                    <select name="request_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- <span class="ar-normal">اختر الطلب</span> --</option>
+                        {% for r in client_requests %}
+                        <option value="{{ r.RequestID }}" {% if selected_request_id and selected_request_id|string == r.RequestID|string %}selected{% endif %}>
+                            {{ r.JobTitle }} — {{ r.EnglishLevel or '-' }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary"><span class="en-bold">Apply</span> <span class="ar-normal">تطبيق</span></button>
+                </div>
+            </form>
+            {% if selected_request %}
+            <div class="alert alert-light border mt-3 mb-0">
+                <strong><span class="en-bold">Request:</span></strong> {{ selected_request.JobTitle }} — <span class="ar-normal">لغة:</span> {{ selected_request.EnglishLevel or '-' }} | <span class="ar-normal">نوع:</span> {{ selected_request.Gender or 'Any' }} | <span class="ar-normal">عمر:</span> {{ selected_request.AgeFrom }}-{{ selected_request.AgeTo }} | <span class="ar-normal">منطقة:</span> {{ selected_request.Location or '-' }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if selected_request %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><span class="en-bold">Matching Candidates</span> <span class="ar-normal">المرشحون المطابقون — زر الترشيح على مستوى السطر</span> ({{ filtered_by_request|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th><span class="en-bold">Candidate</span> <span class="ar-normal">المرشح</span></th>
+                        <th><span class="en-bold">Level</span></th>
+                        <th><span class="en-bold">Score</span></th>
+                        <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in filtered_by_request %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('candidate_profile', candidate_id=m.cand.CandidateID) }}" target="_blank">{{ m.cand.FullName }}</a>
+                            <br><small>{{ m.cand.Phone }} | {{ m.cand.Gender or '-' }}</small>
+                        </td>
+                        <td><span class="badge bg-info">{{ m.cand.CurrentCEFR or '-' }}</span></td>
+                        <td>{% if m.score > 0 %}<span class="badge bg-success">+{{ m.score }}</span>{% else %}<span class="badge bg-warning">Exact</span>{% endif %}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#allocModal{{ loop.index }}">
+                                <i class="fas fa-check-circle"></i> <span class="en-bold">Allocate</span> <span class="ar-normal">ترشيح</span>
+                            </button>
+                        </td>
+                    </tr>
+                    <div class="modal fade" id="allocModal{{ loop.index }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title"><span class="en-bold">Confirm Allocation</span> <span class="ar-normal">تأكيد الترشيح</span></h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form action="{{ url_for('allocation_confirm_match') }}" method="POST">
+                                    <div class="modal-body">
+                                        <input type="hidden" name="request_id" value="{{ selected_request.RequestID }}">
+                                        <input type="hidden" name="candidate_id" value="{{ m.cand.CandidateID }}">
+                                        <p><span class="ar-normal">ترشيح</span> <strong>{{ m.cand.FullName }}</strong> <span class="ar-normal">لطلب</span> {{ selected_request.JobTitle }} — {{ selected_request.CompanyName }}</p>
+                                        <div class="mb-2">
+                                            <label class="form-label small"><span class="en-bold">Notes</span> <span class="ar-normal">ملاحظات</span></label>
+                                            <textarea name="notes" class="form-control form-control-sm" rows="2"></textarea>
+                                        </div>
+                                        <div class="mb-0">
+                                            <label class="form-label small"><span class="en-bold">Feedback for Recruiter</span></label>
+                                            <textarea name="allocator_feedback" class="form-control form-control-sm" rows="2" placeholder="للريكروتر"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span class="ar-normal">إلغاء</span></button>
+                                        <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> <span class="en-bold">Confirm</span></button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    {% if selected_request %}
+                    <tr><td colspan="4" class="text-center py-4 text-muted"><span class="ar-normal">لا يوجد مرشحون مطابقون لهذا الطلب.</span></td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Approved Matches (Scheduling Pending) -->
     <div class="card shadow-sm mb-4 border-start border-5 border-warning">
