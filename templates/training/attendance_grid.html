@@ -39,6 +39,7 @@
     <form method="POST" action="{{ url_for('save_attendance_grid') }}" data-turbo="false">
         <input type="hidden" name="batch_id" value="{{ selected_batch.BatchID }}">
         <input type="hidden" name="date" value="{{ selected_date }}">
+        <input type="hidden" name="batch_start_time" value="{{ selected_batch.StartTimeStr if selected_batch and selected_batch.StartTimeStr else '' }}">
 
         <!-- قواعد الحضور: ممنوع غياب أكثر من يوم — ممنوع تأخير إجمالي أكثر من ساعتين -->
             <div class="alert alert-light border-danger mb-3 py-2 small">
@@ -80,7 +81,7 @@
                         {% set over_absence = (s.AbsenceCount or 0) >= 2 %}
                         {% set over_delay = (s.TotalDelayMinutes or 0) > 120 %}
                         {% set over_limit = over_absence or over_delay %}
-                        <tr class="{{ 'table-danger' if over_limit else '' }}" data-enrollment-id="{{ s.EnrollmentID }}">
+                        <tr class="{{ 'table-danger' if over_limit else '' }}" data-enrollment-id="{{ s.EnrollmentID }}" data-batch-start="{{ selected_batch.StartTimeStr if selected_batch and selected_batch.StartTimeStr else '' }}">
                             <td>{{ loop.index }}</td>
                             <td class="text-center">
                                 {% if over_limit %}
@@ -105,7 +106,7 @@
                                 <input type="time" name="out_{{ s.EnrollmentID }}" class="form-control form-control-sm time-out" value="{{ s.CheckOutTimeStr or '' }}" onchange="recalcRow(this.closest('tr'));" oninput="recalcRow(this.closest('tr'));">
                             </td>
                             <td><span class="badge bg-info hours-badge">{{ (s.TotalHours or 0)|round(1) if s.TotalHours else '-' }} س</span></td>
-                            <td><span class="badge bg-{{ 'warning' if (s.LateMinutes or 0) > 0 else 'secondary' }}">{{ s.LateMinutes or '-' }}</span></td>
+                            <td><span class="badge late-minutes-badge bg-{{ 'warning' if (s.LateMinutes or 0) > 0 else 'secondary' }}" data-saved="{{ s.LateMinutes if s.LateMinutes is not none else '' }}">{{ s.LateMinutes if s.LateMinutes is not none else '-' }}</span></td>
                             <td><span class="badge bg-{{ 'danger' if over_delay else 'secondary' }}" title="مجمل تأخير على مدار الدورة (الحد 120 دقيقة)">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
                             <td><span class="badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
                             <td class="text-center">
@@ -152,36 +153,58 @@ function toggleTimeInputs(select) {
     });
 }
 
-/** حساب مدة الدوام (ساعات) من وقت الدخول والخروج وعرضها فوراً */
+/** حساب مدة الدوام (ساعات) وتأخير اليوم وعرضها فوراً */
 function recalcRow(row) {
     if (!row) return;
     const statusSelect = row.querySelector('.status-select');
     const timeIn = row.querySelector('.time-in');
     const timeOut = row.querySelector('.time-out');
     const badgeEl = row.querySelector('.hours-badge');
-    if (!badgeEl) return;
+    const lateBadge = row.querySelector('.late-minutes-badge');
+    const batchStart = (row.getAttribute('data-batch-start') || '').trim();
     
     if (statusSelect && statusSelect.value === 'Absent') {
-        badgeEl.textContent = '- س';
+        if (badgeEl) badgeEl.textContent = '- س';
+        if (lateBadge) { lateBadge.textContent = '-'; lateBadge.className = 'badge late-minutes-badge bg-secondary'; }
         return;
     }
-    if (!timeIn || !timeOut || timeIn.disabled || timeOut.disabled) {
-        badgeEl.textContent = '- س';
+    if (!timeIn || timeIn.disabled) {
+        if (badgeEl) badgeEl.textContent = '- س';
+        if (lateBadge) { lateBadge.textContent = lateBadge.getAttribute('data-saved') || '-'; lateBadge.className = 'badge late-minutes-badge bg-secondary'; }
         return;
     }
+    // حساب تأخير اليوم (دقائق) من وقت الدخول ووقت بداية الدفعة
     const vIn = (timeIn.value || '').trim();
-    const vOut = (timeOut.value || '').trim();
+    let lateMins = 0;
+    if (lateBadge && batchStart && vIn) {
+        const [hExp, mExp] = batchStart.split(':').map(Number);
+        const [hIn, mIn] = vIn.split(':').map(Number);
+        const minsExp = (hExp || 0) * 60 + (mExp || 0);
+        const minsIn = (hIn || 0) * 60 + (mIn || 0);
+        lateMins = minsIn > minsExp ? minsIn - minsExp : 0;
+        lateBadge.textContent = lateMins;
+        lateBadge.className = 'badge late-minutes-badge ' + (lateMins > 0 ? 'bg-warning' : 'bg-secondary');
+    } else if (lateBadge) {
+        lateBadge.textContent = lateBadge.getAttribute('data-saved') || '-';
+    }
+    // حساب الساعات
+    if (!badgeEl) return;
+    const timeOutEl = row.querySelector('.time-out');
+    if (!timeOutEl || timeOutEl.disabled) {
+        badgeEl.textContent = '- س';
+        return;
+    }
+    const vOut = (timeOutEl.value || '').trim();
     if (!vIn || !vOut) {
         badgeEl.textContent = '- س';
         return;
     }
-    // Parse HH:MM
-    const [hIn, mIn] = vIn.split(':').map(Number);
+    const [hIn2, mIn2] = vIn.split(':').map(Number);
     const [hOut, mOut] = vOut.split(':').map(Number);
-    let minsIn = (hIn || 0) * 60 + (mIn || 0);
-    let minsOut = (hOut || 0) * 60 + (mOut || 0);
-    let diffMins = minsOut - minsIn;
-    if (diffMins < 0) diffMins = 0; // خروج قبل دخول = خطأ إدخال
+    let minsIn2 = (hIn2 || 0) * 60 + (mIn2 || 0);
+    let minsOut2 = (hOut || 0) * 60 + (mOut || 0);
+    let diffMins = minsOut2 - minsIn2;
+    if (diffMins < 0) diffMins = 0;
     const hours = Math.round((diffMins / 60) * 10) / 10;
     badgeEl.textContent = (hours >= 0 ? hours : 0) + ' س';
 }

@@ -4700,8 +4700,17 @@ def save_attendance_grid():
     _ensure_attendance_columns()
     batch_id = request.form['batch_id']
     date = request.form['date']
-    batch = query_db("SELECT StartTime FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
-    expected_start = batch.get('StartTime') if batch else None
+    # وقت البداية: من النموذج أولاً (نفس القيمة المعروضة) أو من القاعدة
+    batch_start_str = (request.form.get('batch_start_time') or '').strip()
+    if not batch_start_str:
+        batch = query_db("SELECT StartTime FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
+        if batch and batch.get('StartTime'):
+            t = batch['StartTime']
+            if hasattr(t, 'strftime'):
+                batch_start_str = t.strftime('%H:%M')
+            else:
+                batch_start_str = str(t)[:5] if t else ''
+    expected_start_str = batch_start_str[:5] if batch_start_str and ':' in batch_start_str[:5] else None
 
     for key in request.form:
         if key.startswith('status_'):
@@ -4724,22 +4733,20 @@ def save_attendance_grid():
                         total_hours = 0
                 except Exception:
                     pass
-            # حساب التأخير: عند وجود وقت دخول ووقت البداية — بغض النظر عن وقت الخروج
-            if check_in and expected_start and status not in ('Absent', 'Excused'):
+            # حساب التأخير (دقائق): عند وجود وقت دخول ووقت بداية الدفعة
+            if check_in and expected_start_str and status not in ('Absent', 'Excused'):
                 try:
                     fmt = '%H:%M'
-                    if hasattr(expected_start, 'strftime'):
-                        exp_str = expected_start.strftime('%H:%M')
+                    t_exp = datetime.strptime(expected_start_str, fmt)
+                    check_in_trim = (check_in or '')[:5]
+                    if not check_in_trim or ':' not in check_in_trim:
+                        late_minutes = None
                     else:
-                        s = str(expected_start).strip()
-                        # دعم "17:00:00" أو "17:00"
-                        exp_str = s[:5] if ':' in s[:5] else s[:2] + ':00'
-                    t_exp = datetime.strptime(exp_str, fmt)
-                    t_act = datetime.strptime(check_in[:5], fmt)  # check_in قد يكون "17:31" أو "17:31:00"
-                    if t_act > t_exp:
-                        late_minutes = int((t_act - t_exp).total_seconds() / 60)
-                    else:
-                        late_minutes = 0
+                        t_act = datetime.strptime(check_in_trim, fmt)
+                        if t_act > t_exp:
+                            late_minutes = int((t_act - t_exp).total_seconds() / 60)
+                        else:
+                            late_minutes = 0
                 except Exception:
                     late_minutes = None
             elif status == 'Absent':
