@@ -67,21 +67,21 @@
                             <th style="width: 8%;">تأخير (د)</th>
                             <th style="width: 8%;">مجمل تأخير</th>
                             <th style="width: 6%;">غيابات</th>
-                            <th style="width: 8%;">واجب</th>
-                            <th style="width: 10%;">إجراء</th>
+                            <th style="width: 6%;">ملف</th>
+                            <th style="width: 8%;">إجراء</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if selected_batch and selected_batch.StartTimeStr %}
                         <tr class="table-warning small">
-                            <td colspan="12">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — الحد الأقصى: غياب يوم واحد، إجمالي تأخير ساعتين على مدار عمر الدورة</td>
+                            <td colspan="11">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — الحد الأقصى: غياب يوم واحد، إجمالي تأخير ساعتين على مدار عمر الدورة</td>
                         </tr>
                         {% endif %}
                         {% for s in students %}
                         {% set over_absence = (s.AbsenceCount or 0) >= 2 %}
                         {% set over_delay = (s.TotalDelayMinutes or 0) > 120 %}
                         {% set over_limit = over_absence or over_delay %}
-                        <tr class="{{ 'table-danger' if over_limit else '' }}" data-enrollment-id="{{ s.EnrollmentID }}" data-batch-start="{{ selected_batch.StartTimeStr if selected_batch and selected_batch.StartTimeStr else '' }}">
+                        <tr class="{{ 'table-danger' if over_limit else '' }}" data-enrollment-id="{{ s.EnrollmentID }}" data-batch-start="{{ selected_batch.StartTimeStr if selected_batch and selected_batch.StartTimeStr else '' }}" data-absence-count="{{ s.AbsenceCount or 0 }}" data-initial-status="{{ s.Status or '' }}">
                             <td>{{ loop.index }}</td>
                             <td class="text-center">
                                 {% if over_limit %}
@@ -92,7 +92,7 @@
                             </td>
                             <td class="fw-bold">{{ s.FullName }}</td>
                             <td>
-                                <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" onchange="toggleTimeInputs(this); recalcRow(this.closest('tr'));">
+                                <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" onchange="toggleTimeInputs(this); recalcRow(this.closest('tr')); updateAbsenceBadge(this.closest('tr'));">
                                     <option value="Present" {% if s.Status == 'Present' %}selected{% endif %}>حاضر</option>
                                     <option value="Absent" {% if s.Status == 'Absent' %}selected{% endif %}>غائب</option>
                                     <option value="Late" {% if s.Status == 'Late' %}selected{% endif %}>متأخر</option>
@@ -108,25 +108,24 @@
                             <td><span class="badge bg-info hours-badge">{{ (s.TotalHours or 0)|round(1) if s.TotalHours else '-' }} س</span></td>
                             <td><span class="badge late-minutes-badge bg-{{ 'warning' if (s.LateMinutes or 0) > 0 else 'secondary' }}" data-saved="{{ s.LateMinutes if s.LateMinutes is not none else '' }}">{{ s.LateMinutes if s.LateMinutes is not none else '-' }}</span></td>
                             <td><span class="badge bg-{{ 'danger' if over_delay else 'secondary' }}" title="مجمل تأخير على مدار الدورة (الحد 120 دقيقة)">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
-                            <td><span class="badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
+                            <td><span class="badge absence-badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
                             <td class="text-center">
-                                <div class="form-check d-flex justify-content-center">
-                                    <input class="form-check-input" type="checkbox" name="assign_{{ s.EnrollmentID }}" {% if s.AssignmentDone %}checked{% endif %}>
-                                </div>
-                            </td>
-                            <td>
-                                <a href="{{ url_for('trainer_notes', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-info me-1" title="ملاحظات المدرب">
-                                    <i class="fas fa-sticky-note"></i>
-                                </a>
                                 {% if s.CandidateID %}
                                 <a href="{{ url_for('candidate_profile', candidate_id=s.CandidateID) }}" class="btn btn-sm btn-outline-secondary" title="ملف المتدرب">
                                     <i class="fas fa-user-file"></i>
                                 </a>
+                                {% else %}
+                                <span class="text-muted">—</span>
                                 {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('trainer_notes', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-info" title="ملاحظات المدرب">
+                                    <i class="fas fa-sticky-note"></i>
+                                </a>
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="12" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
+                        <tr><td colspan="11" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -151,6 +150,22 @@ function toggleTimeInputs(select) {
         input.disabled = isAbsent;
         if(isAbsent) input.value = '';
     });
+}
+
+/** عند تحديد غائب: تحديث عمود الغيابات فوراً (1 أو أكثر) */
+function updateAbsenceBadge(row) {
+    if (!row) return;
+    const statusSelect = row.querySelector('.status-select');
+    const badge = row.querySelector('.absence-badge');
+    if (!statusSelect || !badge) return;
+    const baseCount = parseInt(row.getAttribute('data-absence-count') || '0', 10);
+    const wasAbsent = row.getAttribute('data-initial-status') === 'Absent';
+    const nowAbsent = statusSelect.value === 'Absent';
+    let liveCount = baseCount;
+    if (nowAbsent && !wasAbsent) liveCount = baseCount + 1;
+    else if (!nowAbsent && wasAbsent) liveCount = Math.max(0, baseCount - 1);
+    badge.textContent = liveCount;
+    badge.className = 'badge absence-badge ' + (liveCount >= 2 ? 'bg-danger' : 'bg-secondary');
 }
 
 /** حساب مدة الدوام (ساعات) وتأخير اليوم وعرضها فوراً */
@@ -215,7 +230,7 @@ function markAllPresent() {
     document.querySelectorAll('.status-select').forEach(s => s.value = 'Present');
     document.querySelectorAll('.time-in').forEach(i => { if(!i.disabled && !i.value) i.value = defaultIn; });
     document.querySelectorAll('.time-out').forEach(i => { if(!i.disabled && !i.value) i.value = defaultOut; });
-    document.querySelectorAll('tr[data-enrollment-id]').forEach(row => recalcRow(row));
+    document.querySelectorAll('tr[data-enrollment-id]').forEach(row => { recalcRow(row); updateAbsenceBadge(row); });
 }
 
 // حساب أولي عند تحميل الصفحة
