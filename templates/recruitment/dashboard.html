@@ -1,10 +1,12 @@
 {% extends 'base.html' %}
 
+{% block page_title %}<span class="en-bold">My Dashboard</span> <span class="ar-normal">لوحتي — التوظيف</span>{% endblock %}
+
 {% block content %}
 <div class="row mb-4">
     <div class="col-md-12">
-        <h2><i class="fas fa-handshake text-primary"></i> Recruitment Dashboard</h2>
-        <p class="text-muted">إدارة طلبات التوظيف والمطابقة مع الشركات.</p>
+        <h2><i class="fas fa-handshake text-primary"></i> <span class="en-bold">My Dashboard</span> <span class="ar-normal">لوحتي — التوظيف</span></h2>
+        <p class="text-muted"><span class="ar-normal">إدارة طلبات التوظيف والمطابقة مع الشركات.</span></p>
     </div>
 </div>
 
@@ -13,36 +15,36 @@
     <div class="col-md-3">
         <div class="card bg-primary text-white h-100">
             <div class="card-body">
-                <h6><i class="fas fa-bullhorn"></i> My Active Ads</h6>
+                <h6><i class="fas fa-bullhorn"></i> <span class="en-bold">My Active Ads</span> <span class="ar-normal">إعلاناتي النشطة</span></h6>
                 <h2>{{ metrics.my_ads }}</h2>
-                <small class="text-white-50">إعلاناتي النشطة</small>
+                <small class="text-white-50 ar-normal">إعلاناتي النشطة</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card bg-info text-white h-100">
             <div class="card-body">
-                <h6><i class="fas fa-users"></i> My Candidates</h6>
+                <h6><i class="fas fa-users"></i> <span class="en-bold">My Candidates</span> <span class="ar-normal">إجمالي المرشحين</span></h6>
                 <h2>{{ metrics.my_candidates }}</h2>
-                <small class="text-white-50">إجمالي المرشحين</small>
+                <small class="text-white-50 ar-normal">إجمالي المرشحين</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card bg-warning text-dark h-100">
             <div class="card-body">
-                <h6><i class="fas fa-calendar-check"></i> Test Interviews Today</h6>
+                <h6><i class="fas fa-calendar-check"></i> <span class="en-bold">Test Interviews Today</span> <span class="ar-normal">مقابلات الاختبار اليوم</span></h6>
                 <h2>{{ metrics.my_tests_today }}</h2>
-                <small>مقابلات الاختبار اليوم</small>
+                <small class="ar-normal">مقابلات الاختبار اليوم</small>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card bg-success text-white h-100">
             <div class="card-body">
-                <h6><i class="fas fa-handshake"></i> Job Interviews Today</h6>
+                <h6><i class="fas fa-handshake"></i> <span class="en-bold">Job Interviews Today</span> <span class="ar-normal">مقابلات التوظيف اليوم</span></h6>
                 <h2>{{ metrics.my_interviews_today }}</h2>
-                <small class="text-white-50">مقابلات التوظيف اليوم</small>
+                <small class="text-white-50 ar-normal">مقابلات التوظيف اليوم</small>
             </div>
         </div>
     </div>
@@ -53,12 +55,12 @@
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fas fa-project-diagram"></i> Workflow Shortcuts</h5>
+                <h5 class="mb-0"><i class="fas fa-project-diagram"></i> <span class="en-bold">Workflow Shortcuts</span> <span class="ar-normal">اختصارات المسار</span></h5>
             </div>
             <div class="card-body">
                 <div class="d-flex justify-content-between flex-wrap gap-2">
                     <a href="{{ url_for('recruiter_workbench') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
-                        <i class="fas fa-user-plus"></i> 1. Registration
+                        <i class="fas fa-user-plus"></i> 1. <span class="en-bold">Registration</span> <span class="ar-normal">تسجيل</span>
                         {% if metrics.count_new_leads > 0 %}
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
                             {{ metrics.count_new_leads }}
@@ -66,7 +68,7 @@
                         {% endif %}
                     </a>
                     <a href="{{ url_for('recruiter_scheduling') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
-                        <i class="fas fa-calendar-check"></i> 2. Talent Test
+                        <i class="fas fa-calendar-check"></i> 2. <span class="en-bold">Talent Test</span> <span class="ar-normal">اختبار مواهب</span>
                         {% if metrics.count_tests_pending > 0 %}
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
                             {{ metrics.count_tests_pending }}
@@ -74,13 +76,13 @@
                         {% endif %}
                     </a>
                     <a href="{{ url_for('recruiter_interviews_notify') }}" class="btn btn-outline-warning flex-grow-1">
-                        <i class="fas fa-envelope"></i> 3. Notify Client
+                        <i class="fas fa-envelope"></i> 3. <span class="en-bold">Notify Client</span> <span class="ar-normal">إشعار العميل</span>
                     </a>
                     <a href="{{ url_for('recruiter_interviews_followup') }}" class="btn btn-outline-info flex-grow-1">
-                        <i class="fas fa-calendar-day"></i> 4. Daily Follow-up
+                        <i class="fas fa-calendar-day"></i> 4. <span class="en-bold">Daily Follow-up</span> <span class="ar-normal">متابعة يومية</span>
                     </a>
                     <a href="{{ url_for('recruiter_interviews_results') }}" class="btn btn-outline-primary flex-grow-1 position-relative">
-                        <i class="fas fa-poll"></i> 5. Interview Results
+                        <i class="fas fa-poll"></i> 5. <span class="en-bold">Interview Results</span> <span class="ar-normal">نتائج المقابلات</span>
                         {% if metrics.count_feedback_needed > 0 %}
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
                             {{ metrics.count_feedback_needed }}
@@ -88,12 +90,12 @@
                         {% endif %}
                     </a>
                     <a href="{{ url_for('recruiter_hiring_onboarding') }}" class="btn btn-success flex-grow-1 text-white fw-bold">
-                        <i class="fas fa-file-contract"></i> 6. Hiring & Onboarding
+                        <i class="fas fa-file-contract"></i> 6. <span class="en-bold">Hiring & Onboarding</span> <span class="ar-normal">التعيين والتوطين</span>
                     </a>
                     
                     <!-- DIRECT USER GUIDE BUTTON -->
                     <button class="btn btn-info flex-grow-1 text-white fw-bold" data-bs-toggle="modal" data-bs-target="#userGuideModal">
-                        <i class="fas fa-question-circle"></i> Help / Guide
+                        <i class="fas fa-question-circle"></i> <span class="en-bold">Help</span> <span class="ar-normal">المساعدة</span>
                     </button>
                 </div>
             </div>

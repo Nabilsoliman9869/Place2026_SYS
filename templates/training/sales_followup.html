@@ -5,19 +5,19 @@
     <div class="col-md-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}">لوحة مبيعات التدريب</a></li>
-                <li class="breadcrumb-item active">متابعة المواعيد</li>
+                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة مبيعات التدريب</span></a></li>
+                <li class="breadcrumb-item active"><span class="en-bold">Follow-up</span> <span class="ar-normal">متابعة المواعيد</span></li>
             </ol>
         </nav>
-        <h2><i class="fas fa-calendar-day text-info"></i> متابعة المواعيد</h2>
-        <p class="text-muted">مواعيد اختبار مواهب التدريب — اليوم والقادمة لمتابعة وصول المهتم وتأكيد الحضور.</p>
+        <h2><i class="fas fa-calendar-day text-info"></i> <span class="en-bold">Follow-up</span> <span class="ar-normal">متابعة المواعيد</span></h2>
+        <p class="text-muted"><span class="ar-normal">مواعيد اختبار مواهب التدريب — اليوم والقادمة لمتابعة وصول المهتم وتأكيد الحضور.</span></p>
     </div>
 </div>
 
 <!-- مواعيد اليوم -->
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-warning text-dark">
-        <h5 class="mb-0"><i class="fas fa-calendar-day me-2"></i> مواعيد اليوم ({{ today }}) <span class="badge bg-dark">{{ booked_today|length }}</span></h5>
+        <h5 class="mb-0"><i class="fas fa-calendar-day me-2"></i> <span class="en-bold">Today's Slots</span> <span class="ar-normal">مواعيد اليوم</span> ({{ today }}) <span class="badge bg-dark">{{ booked_today|length }}</span></h5>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -53,7 +53,7 @@
 <!-- مواعيد قادمة -->
 <div class="card shadow-sm">
     <div class="card-header bg-info text-white">
-        <h5 class="mb-0"><i class="fas fa-calendar-week me-2"></i> مواعيد قادمة <span class="badge bg-light text-dark">{{ booked_upcoming|length }}</span></h5>
+        <h5 class="mb-0"><i class="fas fa-calendar-week me-2"></i> <span class="en-bold">Upcoming</span> <span class="ar-normal">مواعيد قادمة</span> <span class="badge bg-light text-dark">{{ booked_upcoming|length }}</span></h5>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">

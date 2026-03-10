@@ -9,7 +9,7 @@
                 <form action="{{ url_for('global_search') }}" method="GET" class="d-flex">
                     <input type="text" name="q" class="form-control form-control-lg me-2"
                         placeholder="بحث عن طالب (اسم/هاتف)، شركة، أو دورة..." value="{{ q }}" autofocus>
-                    <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-search"></i> بحث</button>
+                    <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-search"></i> <span class="en-bold">Search</span> <span class="ar-normal">بحث</span></button>
                 </form>
             </div>
         </div>
@@ -20,7 +20,7 @@
         <!-- Candidates Results -->
         <div class="card mb-4 shadow-sm">
             <div class="card-header bg-white text-primary fw-bold">
-                <i class="fas fa-user-graduate"></i> الطلاب والمرشحين ({{ candidates|length }})
+                <i class="fas fa-user-graduate"></i> <span class="en-bold">Candidates & Students</span> <span class="ar-normal">الطلاب والمرشحين</span> ({{ candidates|length }})
             </div>
             {% if candidates %}
             <div class="list-group list-group-flush">
@@ -43,7 +43,7 @@
         <!-- Clients Results -->
         <div class="card mb-4 shadow-sm">
             <div class="card-header bg-white text-success fw-bold">
-                <i class="fas fa-building"></i> الشركات والعملاء ({{ clients|length }})
+                <i class="fas fa-building"></i> <span class="en-bold">Clients & Companies</span> <span class="ar-normal">الشركات والعملاء</span> ({{ clients|length }})
             </div>
             {% if clients %}
             <div class="list-group list-group-flush">

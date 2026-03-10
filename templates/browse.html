@@ -2,14 +2,14 @@
 
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4"><i class="fas fa-th-list text-primary"></i> استعراض الدورات والمدربين والفصول والدفعات</h2>
+    <h2 class="mb-4"><i class="fas fa-th-list text-primary"></i> <span class="en-bold">Browse</span> <span class="ar-normal">استعراض الدورات والمدربين والفصول والدفعات</span></h2>
 
     <div class="row">
         <!-- الدورات -->
         <div class="col-lg-6 mb-4">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-book"></i> الدورات ({{ courses|length }})</h5>
+                    <h5 class="mb-0"><i class="fas fa-book"></i> <span class="en-bold">Courses</span> <span class="ar-normal">الدورات</span> ({{ courses|length }})</h5>
                 </div>
                 <div class="card-body p-0">
                     {% if courses %}
@@ -34,7 +34,7 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-chalkboard-teacher"></i> المدربون ({{ trainers|length }})</h5>
+                    <h5 class="mb-0"><i class="fas fa-chalkboard-teacher"></i> <span class="en-bold">Trainers</span> <span class="ar-normal">المدربون</span> ({{ trainers|length }})</h5>
                 </div>
                 <div class="card-body p-0">
                     {% if trainers %}

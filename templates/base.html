@@ -273,18 +273,18 @@
             <a href="{{ url_for('dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'dashboard' else '' }}">
                 <i class="fas fa-home"></i>
-                <span class="link-text">Dashboard <span class="arabic-sub">الرئيسية</span></span>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">الرئيسية</span></span>
             </a>
 
             <!-- ============================================= -->
             <!-- التسويق: للمدير ومدير التسويق فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Marketing']) %}
-            <div class="sidebar-section-label">Marketing <span class="arabic-sub">قطاع التسويق</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Marketing</span> <span class="ar-normal">قطاع التسويق</span></div>
             <a href="{{ url_for('daily_marketing_sheet') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'daily_marketing_sheet' else '' }}">
                 <i class="fas fa-bullhorn"></i>
-                <span class="link-text">Daily Sheet <span class="arabic-sub">الورقة اليومية</span></span>
+                <span class="link-text"><span class="en-bold">Daily Sheet</span> <span class="ar-normal">الورقة اليومية</span></span>
             </a>
             {% endif %}
 
@@ -292,11 +292,11 @@
             <!-- المبيعات: للمدير ومندوب المبيعات فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Sales']) %}
-            <div class="sidebar-section-label">Sales <span class="arabic-sub">قطاع المبيعات</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Sales</span> <span class="ar-normal">قطاع المبيعات</span></div>
             <a href="{{ url_for('sales_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'sales_index' else '' }}">
                 <i class="fas fa-hand-holding-usd"></i>
-                <span class="link-text">Sales Dashboard <span class="arabic-sub">لوحة المبيعات</span></span>
+                <span class="link-text"><span class="en-bold">Sales Dashboard</span> <span class="ar-normal">لوحة المبيعات</span></span>
             </a>
             {% endif %}
 
@@ -304,26 +304,26 @@
             <!-- مدير الحسابات: للمدير و Account Manager فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'AccountManager']) %}
-            <div class="sidebar-section-label">Account Management <span class="arabic-sub">إدارة الحسابات</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Account Management</span> <span class="ar-normal">إدارة الحسابات</span></div>
             <a href="{{ url_for('manage_clients') }}" class="nav-link">
                 <i class="fas fa-building"></i>
-                <span class="link-text">Define Client <span class="arabic-sub">تعريف عميل</span></span>
+                <span class="link-text"><span class="en-bold">Define Client</span> <span class="ar-normal">تعريف عميل</span></span>
             </a>
             <a href="{{ url_for('manage_requests') }}" class="nav-link">
                 <i class="fas fa-file-signature"></i>
-                <span class="link-text">Job Orders <span class="arabic-sub">الطلبات</span></span>
+                <span class="link-text"><span class="en-bold">Job Orders</span> <span class="ar-normal">الطلبات</span></span>
             </a>
             <a href="{{ url_for('account_manager_dashboard') }}" class="nav-link">
                 <i class="fas fa-chart-pie"></i>
-                <span class="link-text">AM Dashboard</span>
+                <span class="link-text"><span class="en-bold">AM Dashboard</span> <span class="ar-normal">لوحة مدير الحسابات</span></span>
             </a>
             <a href="{{ url_for('accounting_invoices') }}" class="nav-link">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text">Invoices <span class="arabic-sub">فواتير</span></span>
+                <span class="link-text"><span class="en-bold">Invoices</span> <span class="ar-normal">فواتير</span></span>
             </a>
             <a href="{{ url_for('create_ad_campaign') }}" class="nav-link">
                 <i class="fas fa-bullhorn"></i>
-                <span class="link-text">Campaigns <span class="arabic-sub">حملات</span></span>
+                <span class="link-text"><span class="en-bold">Campaigns</span> <span class="ar-normal">حملات</span></span>
             </a>
             {% endif %}
 
@@ -511,11 +511,11 @@
             <!-- المالية: للمدير و Finance ومدير التدريب (احصائية الماليات والفواتير) -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Finance', 'TrainingManager']) %}
-            <div class="sidebar-section-label">Finance <span class="arabic-sub">المالية</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Finance</span> <span class="ar-normal">المالية</span></div>
             <a href="{{ url_for('finance_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text">Finance <span class="arabic-sub">الحسابات</span></span>
+                <span class="link-text"><span class="en-bold">Finance</span> <span class="ar-normal">الحسابات</span></span>
             </a>
             {% endif %}
 
@@ -523,10 +523,10 @@
             <!-- إدارة المستخدمين: للمدير و Admin فقط -->
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Admin']) %}
-            <div class="sidebar-section-label">Admin <span class="arabic-sub">الإدارة</span></div>
+            <div class="sidebar-section-label"><span class="en-bold">Admin</span> <span class="ar-normal">الإدارة</span></div>
             <a href="{{ url_for('manage_users') }}" class="nav-link">
                 <i class="fas fa-user-shield"></i>
-                <span class="link-text">Users</span>
+                <span class="link-text"><span class="en-bold">Users</span> <span class="ar-normal">المستخدمون</span></span>
             </a>
             {% endif %}
 
@@ -535,16 +535,16 @@
                 <!-- استعراض الدورات والمدربين والفصول والدفعات — متاح لجميع المستخدمين -->
                 <a href="{{ url_for('browse_academy') }}" class="nav-link {{ 'active' if request.endpoint == 'browse_academy' else '' }}" title="Browse courses, trainers, classes, batches / استعراض دورات، مدربين، فصول، دفعات">
                     <i class="fas fa-th-list"></i>
-                    <span class="link-text">Browse <span class="arabic-sub">استعراض دورات، مدربين، فصول، دفعات</span></span>
+                    <span class="link-text"><span class="en-bold">Browse</span> <span class="ar-normal">استعراض دورات، مدربين، فصول، دفعات</span></span>
                 </a>
                 <!-- ملف المتدرب / بحث عام — متاح لجميع المستخدمين -->
                 <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ملف متدرب — بحث وفتح الملف">
                     <i class="fas fa-folder-open"></i>
-                    <span class="link-text">Trainee File <span class="arabic-sub">ملف متدرب — بحث عام</span></span>
+                    <span class="link-text"><span class="en-bold">Trainee File</span> <span class="ar-normal">ملف متدرب — بحث عام</span></span>
                 </a>
                 <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false" title="Logout / خروج">
                     <i class="fas fa-sign-out-alt"></i>
-                    <span class="link-text">Logout <span class="arabic-sub">خروج</span></span>
+                    <span class="link-text"><span class="en-bold">Logout</span> <span class="ar-normal">خروج</span></span>
                 </a>
             </div>
         </div>
@@ -558,7 +558,7 @@
                 <i class="fas fa-bars fa-lg"></i>
             </button>
 
-            <h5 class="m-0 text-muted">{{ request.endpoint.replace('_', ' ').title() }}</h5>
+            <h5 class="m-0 text-muted">{% block page_title %}<span class="en-bold">{{ request.endpoint.replace('_', ' ').title() }}</span>{% endblock %}</h5>
 
             <div class="ms-auto d-flex align-items-center">
                 <!-- User Profile or Quick Actions can go here -->

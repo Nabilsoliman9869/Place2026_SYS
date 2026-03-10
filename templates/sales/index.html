@@ -6,7 +6,7 @@
   <div class="col-md-3">
     <div class="card shadow-sm mb-4">
       <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="fas fa-bullhorn text-warning"></i> الحملات النشطة</h5>
+        <h5 class="mb-0"><i class="fas fa-bullhorn text-warning"></i> <span class="en-bold">Active Campaigns</span> <span class="ar-normal">الحملات النشطة</span></h5>
       </div>
       <ul class="list-group list-group-flush">
         {% for c in campaigns %}
@@ -21,7 +21,7 @@
       </ul>
       <div class="card-body">
         <button class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#addCampaignModal">
-          <i class="fas fa-plus"></i> حملة جديدة
+          <i class="fas fa-plus"></i> <span class="en-bold">New Campaign</span> <span class="ar-normal">حملة جديدة</span>
         </button>
       </div>
     </div>
@@ -29,7 +29,7 @@
     <!-- Active Requests -->
     <div class="card shadow-sm">
       <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="fas fa-tasks text-info"></i> طلبات مفتوحة</h5>
+        <h5 class="mb-0"><i class="fas fa-tasks text-info"></i> <span class="en-bold">Open Requests</span> <span class="ar-normal">طلبات مفتوحة</span></h5>
       </div>
       <ul class="list-group list-group-flush">
         {% for r in active_requests %}
@@ -48,8 +48,7 @@
     <!-- TA BOOKING (New Feature) -->
     <div class="card shadow-sm mb-4 border-primary">
       <div class="card-header bg-primary text-white">
-        <h5 class="mb-0"><i class="fas fa-calendar-check"></i> Book Assessment (TA)</h5>
-        <span class="small opacity-75">حجز موعد تقييم مستوى</span>
+        <h5 class="mb-0"><i class="fas fa-calendar-check"></i> <span class="en-bold">Book Assessment (TA)</span> <span class="ar-normal">حجز موعد تقييم مستوى</span></h5>
       </div>
       <div class="card-body">
         <!-- Date Selector -->

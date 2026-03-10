@@ -5,19 +5,19 @@
     <div class="col-md-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}">لوحة مبيعات التدريب</a></li>
-                <li class="breadcrumb-item active">مهتمو التدريب (Workbench)</li>
+                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة مبيعات التدريب</span></a></li>
+                <li class="breadcrumb-item active"><span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span></li>
             </ol>
         </nav>
-        <h2><i class="fas fa-user-plus text-success"></i> مهتمو التدريب</h2>
-        <p class="text-muted">تسجيل مهتم تدريب جديد وعرض القائمة.</p>
+        <h2><i class="fas fa-user-plus text-success"></i> <span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span></h2>
+        <p class="text-muted"><span class="ar-normal">تسجيل مهتم تدريب جديد وعرض القائمة.</span></p>
     </div>
 </div>
 
 <!-- تسجيل مهتم تدريب -->
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-success text-white">
-        <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i> تسجيل مهتم تدريب (تعريف المهتم لأول مرة)</h6>
+        <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i> <span class="en-bold">Register Lead</span> <span class="ar-normal">تسجيل مهتم تدريب</span></h6>
     </div>
     <div class="card-body">
         <form action="{{ url_for('training_sales_register') }}" method="POST" class="row g-3">
@@ -34,7 +34,7 @@
                 <input type="email" name="email" class="form-control" placeholder="email@example.com">
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-success w-100"><i class="fas fa-save me-1"></i> تسجيل</button>
+                <button type="submit" class="btn btn-success w-100"><i class="fas fa-save me-1"></i> <span class="en-bold">Save</span> <span class="ar-normal">تسجيل</span></button>
             </div>
         </form>
     </div>
@@ -43,18 +43,18 @@
 <!-- قائمة مهتمي التدريب (من لم يُحجز لهم موعد — بعد الحجز ينتقلون لمتابعة المواعيد) -->
 <div class="card shadow-sm">
     <div class="card-header bg-white">
-        <h5 class="mb-0">مهتمو التدريب <span class="badge bg-secondary">{{ training_leads|length }}</span> <small class="text-muted fw-normal">(من لم يُحجز لهم موعد — بعد الحجز ينتقلون لقائمة متابعة المواعيد)</small></h5>
+        <h5 class="mb-0"><span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span> <span class="badge bg-secondary">{{ training_leads|length }}</span></h5>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>الاسم</th>
-                    <th>الهاتف</th>
-                    <th>البريد</th>
-                    <th>الحالة</th>
-                    <th>تاريخ التسجيل</th>
-                    <th>إجراء</th>
+                    <th><span class="en-bold">Name</span> <span class="ar-normal">الاسم</span></th>
+                    <th><span class="en-bold">Phone</span> <span class="ar-normal">الهاتف</span></th>
+                    <th><span class="en-bold">Email</span> <span class="ar-normal">البريد</span></th>
+                    <th><span class="en-bold">Status</span> <span class="ar-normal">الحالة</span></th>
+                    <th><span class="en-bold">Date</span> <span class="ar-normal">تاريخ التسجيل</span></th>
+                    <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -70,9 +70,9 @@
                     <td><small>{{ lead.CreatedAt.strftime('%Y-%m-%d') if lead.CreatedAt else '-' }}</small></td>
                     <td>
                         <a href="{{ url_for('training_sales_book_slot', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-primary" title="حجز موعد اختبار مواهب تدريب">
-                            <i class="fas fa-calendar-check"></i> حجز موعد اختبار
+                            <i class="fas fa-calendar-check"></i> <span class="en-bold">Book Test</span> <span class="ar-normal">حجز موعد اختبار</span>
                         </a>
-                        <a href="{{ url_for('candidate_profile', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-outline-secondary">ملف</a>
+                        <a href="{{ url_for('candidate_profile', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-outline-secondary"><span class="en-bold">File</span> <span class="ar-normal">ملف</span></a>
                     </td>
                 </tr>
                 {% endfor %}
