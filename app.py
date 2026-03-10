@@ -1568,6 +1568,20 @@ def allocation_confirm_match():
     notes = request.form.get('notes', '')
     feedback = request.form.get('allocator_feedback', '')
 
+    # لا يسمح للمرشح بأكثر من ترشيحيَن نشطيَن في نفس الوقت — إلا إذا رُفض في أحدهم
+    active_statuses = ("Approved", "Interview Scheduled", "Confirmed by Candidate", "2nd Interview Pending", "Offer Stage", "Interview", "Accepted")
+    placeholders = ','.join('?' for _ in active_statuses)
+    try:
+        active_count = query_db(
+            "SELECT COUNT(*) as c FROM Matches WHERE CandidateID = ? AND Status IN (" + placeholders + ")",
+            (cand_id,) + active_statuses, one=True
+        )['c']
+        if active_count >= 2:
+            flash('لا يمكن ترشيح هذا المرشح — لديه بالفعل ترشيحيْن نشطين. يجب تسجيل رفض في أحد المقابلات أولاً لتحرير الشاغر.', 'warning')
+            return redirect(url_for('allocation_matching'))
+    except Exception:
+        pass
+
     try:
         query_db("""
             INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
@@ -3187,10 +3201,11 @@ def candidate_profile(candidate_id):
         ''', (candidate_id,)) or []
     except Exception:
         pass
-    # ملاحظات مختبر المواهب / الامتحان / الفيدباك — كل ما يحص التالنت يظهر هنا
-    talent_feedback_list = []
+    # ملاحظات مختبر المواهب — فصل التدريب عن التوظيف (نوعان من المختبريين)
+    talent_feedback_training = []
+    talent_feedback_recruitment = []
     try:
-        talent_feedback_list = query_db('''
+        all_feedback = query_db('''
             SELECT E.EvaluationID, E.CEFR_Level, E.Decision, E.Comments, E.EvaluationType, E.RecordingLink, E.EvaluationDate,
                    E.Score_Comprehension, E.Score_Fluency, E.Score_Pronunciation, E.Score_Structure, E.Score_Vocabulary,
                    E.RecommendedLevel, T.Type AS SlotType, T.SlotDate, T.SlotTime, U.FullName AS EvaluatorName
@@ -3200,6 +3215,13 @@ def candidate_profile(candidate_id):
             WHERE E.CandidateID = ?
             ORDER BY E.EvaluationDate DESC, T.SlotDate DESC, T.SlotTime DESC
         ''', (candidate_id,)) or []
+        for fb in all_feedback:
+            et = (fb.get('EvaluationType') or '').strip()
+            st = (fb.get('SlotType') or '').strip()
+            if et == 'Training' or st == 'Exam Feedback':
+                talent_feedback_training.append(fb)
+            else:
+                talent_feedback_recruitment.append(fb)
     except Exception:
         pass
     return render_template(
@@ -3218,7 +3240,8 @@ def candidate_profile(candidate_id):
         sheet_data_list=sheet_data_list,
         trainer_notes_list=trainer_notes_list,
         candidate_invoices=candidate_invoices,
-        talent_feedback_list=talent_feedback_list,
+        talent_feedback_training=talent_feedback_training,
+        talent_feedback_recruitment=talent_feedback_recruitment,
     )
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):

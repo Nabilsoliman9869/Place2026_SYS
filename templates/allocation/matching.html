@@ -4,7 +4,10 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="fas fa-random"></i> Allocation Matching Center</h2>
-        <div>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#infoModalAllocation" title="شرح قواعد الترشيح">
+                <i class="fas fa-info-circle"></i> قواعد الترشيح
+            </button>
             <span class="badge bg-success fs-6">{{ matches|length }} Proposed Matches Found</span>
         </div>
     </div>
@@ -233,6 +236,24 @@
                     </li>
                     {% endfor %}
                 </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة تعريفية — قواعد الترشيح -->
+<div class="modal fade" id="infoModalAllocation" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info bg-opacity-25">
+                <h5 class="modal-title"><i class="fas fa-users-cog"></i> قواعد الترشيح (Allocation)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small">
+                <p><strong>لا يسمح للمرشح أو المتدرب بالترشح لأكثر من عملَيْن في نفس الوقت.</strong></p>
+                <p>الاستثناء: إذا تم تسجيل <strong>رفض في مقابلة العميل</strong> لأحد الترشيحات، فإن هذا الشاغر يتحرر ويُسمح بترشيح جديد.</p>
+                <hr>
+                <p class="mb-0"><strong>المطابقة (Matching):</strong> تقييم أن المرشح يناسب طلب العميل. — <strong>الترشيح (Allocation):</strong> إرسال المرشح لمقابلة العميل.</p>
             </div>
         </div>
     </div>
