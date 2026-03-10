@@ -4669,17 +4669,24 @@ def save_attendance_grid():
                     total_hours = round(delta.total_seconds() / 3600, 2)
                 except Exception:
                     pass
-                if expected_start and hasattr(expected_start, 'strftime'):
-                    try:
-                        exp_str = expected_start.strftime('%H:%M') if hasattr(expected_start, 'strftime') else str(expected_start)[:5]
-                        t_exp = datetime.strptime(exp_str, '%H:%M')
-                        t_act = datetime.strptime(check_in, '%H:%M')
-                        if t_act > t_exp:
-                            late_minutes = int((t_act - t_exp).total_seconds() / 60)
-                        else:
-                            late_minutes = 0
-                    except Exception:
-                        late_minutes = None
+            # حساب التأخير: عند وجود وقت دخول ووقت البداية — بغض النظر عن وقت الخروج
+            if check_in and expected_start and status not in ('Absent', 'Excused'):
+                try:
+                    fmt = '%H:%M'
+                    if hasattr(expected_start, 'strftime'):
+                        exp_str = expected_start.strftime('%H:%M')
+                    else:
+                        s = str(expected_start).strip()
+                        # دعم "17:00:00" أو "17:00"
+                        exp_str = s[:5] if ':' in s[:5] else s[:2] + ':00'
+                    t_exp = datetime.strptime(exp_str, fmt)
+                    t_act = datetime.strptime(check_in[:5], fmt)  # check_in قد يكون "17:31" أو "17:31:00"
+                    if t_act > t_exp:
+                        late_minutes = int((t_act - t_exp).total_seconds() / 60)
+                    else:
+                        late_minutes = 0
+                except Exception:
+                    late_minutes = None
             elif status == 'Absent':
                 late_minutes = None
 
