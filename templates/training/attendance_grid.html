@@ -36,10 +36,15 @@
             <i class="fas fa-list me-1"></i> تفاصيل الدفعة (ملاحظات المدرب / الماليات من هنا)
         </a>
     </div>
-    <form method="POST" action="{{ url_for('save_attendance_grid') }}">
+    <form method="POST" action="{{ url_for('save_attendance_grid') }}" data-turbo="false">
         <input type="hidden" name="batch_id" value="{{ selected_batch.BatchID }}">
         <input type="hidden" name="date" value="{{ selected_date }}">
 
+        <!-- قواعد الحضور: ممنوع غياب أكثر من يوم — ممنوع تأخير إجمالي أكثر من ساعتين -->
+            <div class="alert alert-light border-danger mb-3 py-2 small">
+                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                <strong>قواعد الدورة:</strong> ممنوع الغياب أكثر من يوم واحد على مدار عمر الدورة. ممنوع تجاوز ساعتين إجمالي تأخير. الصفوف بالخلفية الحمراء أو علامة <i class="fas fa-exclamation-circle text-danger"></i> تجاوزت الحد.
+            </div>
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 d-flex justify-content-between">
                 <h5 class="mb-0 text-primary">Attendance Sheet: {{ selected_batch.BatchName }}</h5>
@@ -51,8 +56,9 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 4%;">#</th>
-                            <th style="width: 20%;">المتدرب</th>
+                            <th style="width: 3%;">#</th>
+                            <th style="width: 3%;"></th>
+                            <th style="width: 19%;">المتدرب</th>
                             <th style="width: 12%;">الحالة</th>
                             <th style="width: 10%;">دخول</th>
                             <th style="width: 10%;">خروج</th>
@@ -67,15 +73,25 @@
                     <tbody>
                         {% if selected_batch and selected_batch.StartTimeStr %}
                         <tr class="table-warning small">
-                            <td colspan="10">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — تأخير بحد أقصى ساعتين خلال الدورة</td>
+                            <td colspan="12">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — الحد الأقصى: غياب يوم واحد، إجمالي تأخير ساعتين على مدار عمر الدورة</td>
                         </tr>
                         {% endif %}
                         {% for s in students %}
-                        <tr class="{{ 'table-danger' if (s.AbsenceCount or 0) >= 1 else '' }}">
+                        {% set over_absence = (s.AbsenceCount or 0) >= 2 %}
+                        {% set over_delay = (s.TotalDelayMinutes or 0) > 120 %}
+                        {% set over_limit = over_absence or over_delay %}
+                        <tr class="{{ 'table-danger' if over_limit else '' }}" data-enrollment-id="{{ s.EnrollmentID }}">
                             <td>{{ loop.index }}</td>
+                            <td class="text-center">
+                                {% if over_limit %}
+                                <i class="fas fa-exclamation-circle text-danger" title="تجاوز الحد: {% if over_absence %}غياب أكثر من يوم{% endif %}{% if over_absence and over_delay %} — {% endif %}{% if over_delay %}مجمل تأخير &gt; ساعتين{% endif %}"></i>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td class="fw-bold">{{ s.FullName }}</td>
                             <td>
-                                <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" onchange="toggleTimeInputs(this)">
+                                <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" onchange="toggleTimeInputs(this); recalcRow(this.closest('tr'));">
                                     <option value="Present" {% if s.Status == 'Present' %}selected{% endif %}>حاضر</option>
                                     <option value="Absent" {% if s.Status == 'Absent' %}selected{% endif %}>غائب</option>
                                     <option value="Late" {% if s.Status == 'Late' %}selected{% endif %}>متأخر</option>
@@ -83,15 +99,15 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="time" name="in_{{ s.EnrollmentID }}" class="form-control form-control-sm time-in" value="{{ s.CheckInTimeStr or selected_batch.StartTimeStr if selected_batch else '' }}">
+                                <input type="time" name="in_{{ s.EnrollmentID }}" class="form-control form-control-sm time-in" value="{{ s.CheckInTimeStr or selected_batch.StartTimeStr if selected_batch else '' }}" onchange="recalcRow(this.closest('tr'));" oninput="recalcRow(this.closest('tr'));">
                             </td>
                             <td>
-                                <input type="time" name="out_{{ s.EnrollmentID }}" class="form-control form-control-sm time-out" value="{{ s.CheckOutTimeStr or '' }}">
+                                <input type="time" name="out_{{ s.EnrollmentID }}" class="form-control form-control-sm time-out" value="{{ s.CheckOutTimeStr or '' }}" onchange="recalcRow(this.closest('tr'));" oninput="recalcRow(this.closest('tr'));">
                             </td>
-                            <td><span class="badge bg-info">{{ (s.TotalHours or 0)|round(1) if s.TotalHours else '-' }} س</span></td>
+                            <td><span class="badge bg-info hours-badge">{{ (s.TotalHours or 0)|round(1) if s.TotalHours else '-' }} س</span></td>
                             <td><span class="badge bg-{{ 'warning' if (s.LateMinutes or 0) > 0 else 'secondary' }}">{{ s.LateMinutes or '-' }}</span></td>
-                            <td><span class="badge bg-{{ 'danger' if (s.TotalDelayMinutes or 0) > 120 else 'secondary' }}" title="مجمل تأخير سابق">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
-                            <td><span class="badge bg-{{ 'danger' if (s.AbsenceCount or 0) >= 1 else 'secondary' }}" title="غيابات للإنذار">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
+                            <td><span class="badge bg-{{ 'danger' if over_delay else 'secondary' }}" title="مجمل تأخير على مدار الدورة (الحد 120 دقيقة)">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
+                            <td><span class="badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
                             <td class="text-center">
                                 <div class="form-check d-flex justify-content-center">
                                     <input class="form-check-input" type="checkbox" name="assign_{{ s.EnrollmentID }}" {% if s.AssignmentDone %}checked{% endif %}>
@@ -109,7 +125,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="10" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
+                        <tr><td colspan="12" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -136,12 +152,52 @@ function toggleTimeInputs(select) {
     });
 }
 
+/** حساب مدة الدوام (ساعات) من وقت الدخول والخروج وعرضها فوراً */
+function recalcRow(row) {
+    if (!row) return;
+    const statusSelect = row.querySelector('.status-select');
+    const timeIn = row.querySelector('.time-in');
+    const timeOut = row.querySelector('.time-out');
+    const badgeEl = row.querySelector('.hours-badge');
+    if (!badgeEl) return;
+    
+    if (statusSelect && statusSelect.value === 'Absent') {
+        badgeEl.textContent = '- س';
+        return;
+    }
+    if (!timeIn || !timeOut || timeIn.disabled || timeOut.disabled) {
+        badgeEl.textContent = '- س';
+        return;
+    }
+    const vIn = (timeIn.value || '').trim();
+    const vOut = (timeOut.value || '').trim();
+    if (!vIn || !vOut) {
+        badgeEl.textContent = '- س';
+        return;
+    }
+    // Parse HH:MM
+    const [hIn, mIn] = vIn.split(':').map(Number);
+    const [hOut, mOut] = vOut.split(':').map(Number);
+    let minsIn = (hIn || 0) * 60 + (mIn || 0);
+    let minsOut = (hOut || 0) * 60 + (mOut || 0);
+    let diffMins = minsOut - minsIn;
+    if (diffMins < 0) diffMins = 0; // خروج قبل دخول = خطأ إدخال
+    const hours = Math.round((diffMins / 60) * 10) / 10;
+    badgeEl.textContent = (hours >= 0 ? hours : 0) + ' س';
+}
+
 function markAllPresent() {
     const defaultIn = '{{ selected_batch.StartTimeStr if selected_batch and selected_batch.StartTimeStr else "09:00" }}';
-    const defaultOut = '{{ selected_batch.EndTimeStr if selected_batch and selected_batch.EndTimeStr else "11:00" }}';
+    const defaultOut = '{{ selected_batch.EndTimeStr if selected_batch and selected_batch.EndTimeStr else "13:00" }}';
     document.querySelectorAll('.status-select').forEach(s => s.value = 'Present');
     document.querySelectorAll('.time-in').forEach(i => { if(!i.disabled && !i.value) i.value = defaultIn; });
     document.querySelectorAll('.time-out').forEach(i => { if(!i.disabled && !i.value) i.value = defaultOut; });
+    document.querySelectorAll('tr[data-enrollment-id]').forEach(row => recalcRow(row));
 }
+
+// حساب أولي عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('tr[data-enrollment-id]').forEach(row => recalcRow(row));
+});
 </script>
 {% endblock %}

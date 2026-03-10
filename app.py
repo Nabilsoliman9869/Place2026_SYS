@@ -4713,13 +4713,15 @@ def save_attendance_grid():
             
             total_hours = 0
             late_minutes = None
-            if check_in and check_out:
+            if check_in and check_out and status not in ('Absent', 'Excused'):
                 try:
                     fmt = '%H:%M'
-                    t1 = datetime.strptime(check_in, fmt)
-                    t2 = datetime.strptime(check_out, fmt)
+                    t1 = datetime.strptime(check_in[:5], fmt)
+                    t2 = datetime.strptime(check_out[:5], fmt)
                     delta = t2 - t1
                     total_hours = round(delta.total_seconds() / 3600, 2)
+                    if total_hours < 0:
+                        total_hours = 0
                 except Exception:
                     pass
             # حساب التأخير: عند وجود وقت دخول ووقت البداية — بغض النظر عن وقت الخروج
@@ -4756,6 +4758,12 @@ def save_attendance_grid():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (enrollment_id, date, status, check_in, check_out, total_hours, assignment, late_minutes))
 
+    try:
+        db = get_db()
+        if db:
+            db.commit()
+    except Exception:
+        pass
     flash('تم حفظ الحضور التفصيلي بنجاح', 'success')
     return redirect(url_for('training_attendance', batch_id=batch_id, date=date))
 
