@@ -522,11 +522,13 @@
 
             <div class="mt-auto">
                 <hr class="border-secondary mx-3">
-                <!-- استعراض الدورات والمدربين والفصول والدفعات — متاح لجميع المستخدمين -->
+                <!-- استعراض الدورات — للتدريب فقط، وليس للألوكيتر (قسم توظيف) -->
+                {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer']) %}
                 <a href="{{ url_for('browse_academy') }}" class="nav-link {{ 'active' if request.endpoint == 'browse_academy' else '' }}" title="Browse courses, trainers, classes, batches / استعراض دورات، مدربين، فصول، دفعات">
                     <i class="fas fa-th-list"></i>
                     <span class="link-text"><span class="en-bold">Browse</span> <span class="ar-normal">استعراض دورات، مدربين، فصول، دفعات</span></span>
                 </a>
+                {% endif %}
                 <!-- ملف المتدرب / بحث عام — متاح لجميع المستخدمين -->
                 <a href="{{ url_for('global_search') }}" class="nav-link {{ 'active' if request.endpoint == 'global_search' else '' }}" title="ملف متدرب — بحث وفتح الملف">
                     <i class="fas fa-folder-open"></i>

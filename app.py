@@ -1487,58 +1487,61 @@ def check_expired_appointments():
 @login_required
 @role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_matching():
-    # 1. Fetch Open Requests
+    # 1. Fetch Open Requests (استعلام واحد)
     open_requests = query_db("""
         SELECT CR.*, C.CompanyName 
         FROM ClientRequests CR 
         JOIN Clients C ON CR.ClientID = C.ClientID 
-        WHERE CR.Status = 'Open'
-    """)
+        WHERE CR.Status IN ('Open', 'Pending', 'Active')
+    """) or []
     
-    # 2. Fetch Ready Candidates
+    # 2. Fetch Ready Candidates (استعلام واحد)
     ready_candidates = query_db("""
         SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
         FROM Candidates C
         LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
         LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
-        WHERE C.Status = 'Ready_For_Matching'
-    """)
+        WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
+    """) or []
+    
+    # 3. جلب كل المطابقات الموجودة دفعة واحدة (بدلاً من N×M استعلام)
+    existing_matches = set()
+    if open_requests and ready_candidates:
+        req_ids = [r['RequestID'] for r in open_requests]
+        cand_ids = [c['CandidateID'] for c in ready_candidates]
+        placeholders_r = ','.join('?' * len(req_ids)) if req_ids else '0'
+        placeholders_c = ','.join('?' * len(cand_ids)) if cand_ids else '0'
+        rows = query_db(
+            f"SELECT CandidateID, RequestID FROM Matches WHERE RequestID IN ({placeholders_r}) AND CandidateID IN ({placeholders_c})",
+            tuple(req_ids) + tuple(cand_ids)
+        ) or []
+        existing_matches = {(r['CandidateID'], r['RequestID']) for r in rows}
     
     matches_proposed = []
-    
-    # 3. Smart Sync Logic (In-Memory for MVP)
     cefr_map = {
-        'A0': 0, 'A1.1': 1, 'A1.2': 2, 'A2.1': 3, 'A2.2': 4,
-        'B1.1': 5, 'B1.2': 6, 'B2.1': 7, 'B2.2': 8,
-        'C1.1': 9, 'C1.2': 10, 'C2': 11
+        'A0': 0, 'A1': 0, 'A1.1': 1, 'A1.2': 2, 'A2': 2, 'A2.1': 3, 'A2.2': 4,
+        'B1': 4, 'High B1': 4, 'Low B1+': 4, 'B1.1': 5, 'B1.2': 6,
+        'B2': 6, 'Compromised B2': 6, 'B2.1': 7, 'B2.2': 8,
+        'C1': 8, 'C1.1': 9, 'C1.2': 10, 'C2': 11
     }
     
     for req in open_requests:
-        req_level = req['EnglishLevel'] or 'A0'
+        req_level = (req.get('EnglishLevel') or 'A0').strip()
         req_val = cefr_map.get(req_level, 0)
         
         for cand in ready_candidates:
-            existing = query_db("SELECT MatchID FROM Matches WHERE CandidateID=? AND RequestID=?", (cand['CandidateID'], req['RequestID']), one=True)
-            if existing: continue
-
-            cand_level = cand['CurrentCEFR'] or 'A0'
+            if (cand['CandidateID'], req['RequestID']) in existing_matches:
+                continue
+            cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
             cand_val = cefr_map.get(cand_level, 0)
-            
-            # Gender Check (Safe Access)
             gender_match = True
             req_gender = req.get('Gender')
             cand_gender = cand.get('Gender')
-            
-            if req_gender and req_gender != 'Any':
-                if not cand_gender or req_gender.lower() != cand_gender.lower():
+            if req_gender and str(req_gender).lower() not in ('any', 'none', ''):
+                if not cand_gender or str(req_gender).lower() != str(cand_gender).lower():
                     gender_match = False
-            
             if cand_val >= req_val and gender_match:
-                matches_proposed.append({
-                    'req': req,
-                    'cand': cand,
-                    'score': cand_val - req_val
-                })
+                matches_proposed.append({'req': req, 'cand': cand, 'score': cand_val - req_val})
 
     # 4. Fetch Approved Matches (Waiting for Interview Scheduling)
     approved_matches = query_db("""
@@ -1550,20 +1553,40 @@ def allocation_matching():
         WHERE M.Status = 'Approved'
     """)
 
-    # 5. Matching by Client/Request — عميل → طلب → فلاتر → ترشيح
-    clients = query_db("SELECT ClientID, CompanyName FROM Clients ORDER BY CompanyName")
+    # 5. Matching by Client/Request — عميل → طلب → فلاتر حسب بيانات طلب العميل
+    # الفلاتر المتفق عليها: العمر، المنطقة، اللغة، الجنس، متخرج ام لا
+    clients = query_db("SELECT ClientID, CompanyName FROM Clients ORDER BY CompanyName") or []
     selected_client_id = request.args.get('client_id')
     selected_request_id = request.args.get('request_id')
+    filter_cefr = request.args.get('filter_cefr', '')           # اللغة / المستوى
+    filter_gender = request.args.get('filter_gender', '')      # الجنس
+    filter_age_from = request.args.get('filter_age_from', '')  # العمر من
+    filter_age_to = request.args.get('filter_age_to', '')      # العمر إلى
+    filter_location = request.args.get('filter_location', '')  # المنطقة
+    filter_graduation = request.args.get('filter_graduation', '')  # متخرج ام لا
     selected_request = None
     client_requests = []
     filtered_by_request = []
+    cefr_levels = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
 
     if selected_client_id:
+        # طلبات مفتوحة أولاً — إن لم يوجد فجميع طلبات العميل
         client_requests = query_db("""
             SELECT CR.*, C.CompanyName FROM ClientRequests CR
             JOIN Clients C ON CR.ClientID = C.ClientID
-            WHERE CR.ClientID = ? AND CR.Status = 'Open'
-        """, (selected_client_id,))
+            WHERE CR.ClientID = ? AND CR.Status IN ('Open', 'Pending', 'Active')
+            ORDER BY CR.RequestID DESC
+        """, (selected_client_id,)) or []
+        if not client_requests:
+            client_requests = query_db("""
+                SELECT CR.*, C.CompanyName FROM ClientRequests CR
+                JOIN Clients C ON CR.ClientID = C.ClientID
+                WHERE CR.ClientID = ?
+                ORDER BY CR.RequestID DESC
+            """, (selected_client_id,)) or []
+        # إذا للعميل طلب واحد فقط — اختياره تلقائياً وإعادة التوجيه
+        if len(client_requests) == 1 and not selected_request_id:
+            return redirect(url_for('allocation_matching', client_id=selected_client_id, request_id=client_requests[0]['RequestID']))
     if selected_request_id:
         selected_request = query_db("""
             SELECT CR.*, C.CompanyName FROM ClientRequests CR
@@ -1572,26 +1595,60 @@ def allocation_matching():
         """, (selected_request_id,), one=True)
         if selected_request:
             req = selected_request
-            cefr_order = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
-            req_level = (req.get('EnglishLevel') or 'A0').strip()
-            req_idx = cefr_order.index(req_level) if req_level in cefr_order else 0
+            # القيم من الفلتر أو من طلب العميل
+            min_level = filter_cefr.strip() if filter_cefr else (req.get('EnglishLevel') or 'A0')
+            req_idx = cefr_levels.index(min_level) if min_level in cefr_levels else 0
             def _cefr_idx(l):
-                return cefr_order.index(l) if l in cefr_order else 0
+                return cefr_levels.index(l) if l in cefr_levels else 0
+            gender_filter = filter_gender.strip() if filter_gender else req.get('Gender')
+            age_from = filter_age_from.strip() or (req.get('AgeFrom') and str(req.get('AgeFrom')))
+            age_to = filter_age_to.strip() or (req.get('AgeTo') and str(req.get('AgeTo')))
+            location_filter = filter_location.strip() or req.get('Location')
+            graduation_filter = filter_graduation.strip()
+
             base_sql = """
                 SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
                 FROM Candidates C
                 LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
                 LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
-                WHERE C.Status = 'Ready_For_Matching'
+                WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
                 AND NOT EXISTS (SELECT 1 FROM Matches M WHERE M.CandidateID = C.CandidateID AND M.RequestID = ?
                     AND M.Status NOT IN ('Rejected'))
             """
             params = [selected_request_id]
-            if req.get('Gender') and str(req.get('Gender')).lower() not in ('any', 'none', ''):
+            if gender_filter and str(gender_filter).lower() not in ('any', 'none', ''):
                 base_sql += " AND (C.Gender = ? OR C.Gender IS NULL)"
-                params.append(req.get('Gender'))
+                params.append(gender_filter)
+            if graduation_filter and str(graduation_filter).lower() not in ('any', 'none', ''):
+                base_sql += " AND (C.GraduationStatus = ? OR C.GraduationStatus IS NULL)"
+                params.append(graduation_filter)
             all_cands = query_db(base_sql, tuple(params))
+            # فلترة العمر والمنطقة في الذاكرة (تعمل حتى لو لم تكن الأعمدة في الاستعلام)
+            def _passes_filters(c):
+                if age_from and age_from.isdigit():
+                    a = c.get('Age')
+                    if a is not None:
+                        try:
+                            if int(a) < int(age_from):
+                                return False
+                        except (ValueError, TypeError):
+                            pass
+                if age_to and age_to.isdigit():
+                    a = c.get('Age')
+                    if a is not None:
+                        try:
+                            if int(a) > int(age_to):
+                                return False
+                        except (ValueError, TypeError):
+                            pass
+                if location_filter:
+                    addr = (c.get('Address') or c.get('Location') or '')
+                    if addr and location_filter.lower() not in str(addr).lower():
+                        return False
+                return True
             for cand in (all_cands or []):
+                if not _passes_filters(cand):
+                    continue
                 cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
                 cand_idx = _cefr_idx(cand_level)
                 if cand_idx >= req_idx:
@@ -1607,7 +1664,14 @@ def allocation_matching():
                            selected_request_id=selected_request_id,
                            client_requests=client_requests or [],
                            selected_request=selected_request,
-                           filtered_by_request=filtered_by_request)
+                           filtered_by_request=filtered_by_request,
+                           filter_cefr=filter_cefr,
+                           filter_gender=filter_gender,
+                           filter_age_from=filter_age_from,
+                           filter_age_to=filter_age_to,
+                           filter_location=filter_location,
+                           filter_graduation=filter_graduation,
+                           cefr_levels=cefr_levels)
 
 @app.route('/allocation/confirm_match', methods=['POST'])
 @login_required
