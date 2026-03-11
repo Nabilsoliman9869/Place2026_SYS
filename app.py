@@ -1584,15 +1584,27 @@ def allocation_matching():
     filtered_by_request = []
     cefr_levels = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
 
+    # جلب كل الطلبات دفعة واحدة — لاستخدامها في Job Order فوراً
+    all_requests = query_db("""
+        SELECT CR.RequestID, CR.ClientID, CR.JobTitle, CR.EnglishLevel, C.CompanyName
+        FROM ClientRequests CR
+        JOIN Clients C ON CR.ClientID = C.ClientID
+        ORDER BY CR.ClientID, CR.RequestID DESC
+    """) or []
+    requests_by_client = {}
+    for r in all_requests:
+        cid = str(r.get('ClientID', ''))
+        if cid not in requests_by_client:
+            requests_by_client[cid] = []
+        requests_by_client[cid].append({
+            'RequestID': r.get('RequestID'),
+            'JobTitle': r.get('JobTitle') or '',
+            'EnglishLevel': r.get('EnglishLevel') or ''
+        })
+
     if selected_client_id:
-        # جلب كل طلبات العميل (بدون فلتر Status) لضمان تحميل Job Order
-        client_requests = query_db("""
-            SELECT CR.*, C.CompanyName FROM ClientRequests CR
-            JOIN Clients C ON CR.ClientID = C.ClientID
-            WHERE CR.ClientID = ?
-            ORDER BY CR.RequestID DESC
-        """, (selected_client_id,)) or []
-        # إن كان للعميل طلب واحد — يظهر مباشرة (redirect)
+        sid = str(selected_client_id)
+        client_requests = requests_by_client.get(sid, [])
         if len(client_requests) == 1 and not selected_request_id:
             return redirect(url_for('allocation_matching', client_id=selected_client_id, request_id=client_requests[0]['RequestID']))
     if selected_request_id:
@@ -1679,7 +1691,8 @@ def allocation_matching():
                            filter_age_to=filter_age_to,
                            filter_location=filter_location,
                            filter_graduation=filter_graduation,
-                           cefr_levels=cefr_levels)
+                           cefr_levels=cefr_levels,
+                           requests_by_client_json=json.dumps(requests_by_client))
 
 @app.route('/allocation/confirm_match', methods=['POST'])
 @login_required

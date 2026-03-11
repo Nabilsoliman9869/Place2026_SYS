@@ -24,7 +24,7 @@
                 <div class="row align-items-end mb-2">
                     <div class="col-md-3">
                         <label class="form-label small"><span class="en-bold">Client</span> <span class="ar-normal">العميل</span></label>
-                        <select name="client_id" class="form-select form-select-sm">
+                        <select name="client_id" id="clientSelect" class="form-select form-select-sm">
                             <option value="">-- <span class="ar-normal">اختر العميل</span> --</option>
                             {% for cl in clients %}
                             <option value="{{ cl.ClientID }}" {% if selected_client_id and selected_client_id|string == cl.ClientID|string %}selected{% endif %}>{{ cl.CompanyName }}</option>
@@ -34,11 +34,11 @@
                     <div class="col-md-3">
                         <label class="form-label small"><span class="en-bold">Job Order</span> <span class="ar-normal">طلب العميل</span></label>
                         <div class="d-flex gap-1 align-items-start">
-                            <select name="request_id" class="form-select form-select-sm flex-grow-1">
+                            <select name="request_id" id="requestSelect" class="form-select form-select-sm flex-grow-1">
                                 <option value="">-- <span class="ar-normal">اختر الطلب</span> --</option>
                                 {% for r in client_requests %}
                                 <option value="{{ r.RequestID }}" {% if selected_request_id and selected_request_id|string == r.RequestID|string %}selected{% endif %}>
-                                    {{ r.JobTitle or '(بدون عنوان)' }} — {{ r.EnglishLevel or '-' }}
+                                    {{ (r.JobTitle or '(بدون عنوان)') }} — {{ r.EnglishLevel or '-' }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -429,4 +429,29 @@
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    var requestsByClient = {{ requests_by_client_json|safe }};
+    var clientSel = document.getElementById('clientSelect');
+    var requestSel = document.getElementById('requestSelect');
+    var preserveReqId = '{{ selected_request_id or "" }}';
+    if (!clientSel || !requestSel) return;
+    function fillJobOrder() {
+        var cid = (clientSel.value || '').toString();
+        requestSel.innerHTML = '<option value="">-- اختر الطلب --</option>';
+        if (cid && requestsByClient[cid]) {
+            requestsByClient[cid].forEach(function(r) {
+                var opt = document.createElement('option');
+                opt.value = r.RequestID;
+                opt.textContent = (r.JobTitle || '(بدون عنوان)') + ' — ' + (r.EnglishLevel || '-');
+                if (preserveReqId && String(r.RequestID) === String(preserveReqId)) opt.selected = true;
+                requestSel.appendChild(opt);
+            });
+        }
+    }
+    clientSel.addEventListener('change', fillJobOrder);
+    fillJobOrder();
+})();
+</script>
 {% endblock %}
