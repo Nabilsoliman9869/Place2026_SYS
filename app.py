@@ -136,7 +136,7 @@ def get_db_connection_string():
     else:
         username = config.get("username", "")
         password = config.get("password", "")
-        return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=60;'
+        return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=15;'
 
 def get_db():
     if 'db' not in g:
@@ -224,21 +224,25 @@ def query_db(query, args=(), one=False):
         cursor.close()
         raise e
 
-# --- PERFORMANCE LOGGING & USER LOADING ---
+# --- PERFORMANCE: تحميل المستخدم + التحقق السريع ---
 @app.before_request
 def start_timer():
-    # 1. Start Timer
     g.start = time.time()
-    
-    # 2. Load User (CRITICAL FIX: This was missing in start_timer)
     user_id = session.get('user_id')
     if user_id is None:
         g.user = None
     else:
-        try:
-            g.user = query_db('SELECT * FROM Users_1 WHERE UserID = ?', (user_id,), one=True)
-        except Exception:
-            g.user = None
+        # تخزين مؤقت للمستخدم 30 ثانية لتسريع التنقل (تجنب استعلام DB في كل طلب)
+        cache = session.get('_user_cache')
+        if cache and cache.get('id') == user_id and (time.time() - cache.get('t', 0)) < 30:
+            g.user = cache.get('user')
+        else:
+            try:
+                g.user = query_db('SELECT * FROM Users_1 WHERE UserID = ?', (user_id,), one=True)
+                if g.user:
+                    session['_user_cache'] = {'id': user_id, 'user': g.user, 't': time.time()}
+            except Exception:
+                g.user = None
 
 @app.after_request
 def log_request(response):
@@ -846,6 +850,8 @@ def login():
             session.clear()
             session['user_id'] = user['UserID']
             session['role'] = user['Role']
+            uc = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in dict(user).items()}
+            session['_user_cache'] = {'id': user['UserID'], 'user': uc, 't': time.time()}
             return redirect(url_for('dashboard'))
         flash(error, 'danger')
     
@@ -1483,19 +1489,27 @@ def check_expired_appointments():
             query_db("UPDATE Candidates SET Status='Test_Missed' WHERE CandidateID=? AND Status='Test Scheduled'", (s['BookedCandidateID'],))
 
 # --- ALLOCATION / MATCHING ---
+# حدود الأداء: تجنب التجميد عند عدد كبير من الطلبات/المرشحين
+_MAX_REQUESTS_FOR_MATCHES = 30
+_MAX_CANDIDATES_FOR_MATCHES = 150
+_MAX_PROPOSED_MATCHES = 80
+
 @app.route('/allocation/matching', methods=['GET', 'POST'])
 @login_required
 @role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_matching():
-    # 1. Fetch Open Requests (استعلام واحد)
+    selected_client_id = request.args.get('client_id')
+    selected_request_id = request.args.get('request_id')
+    # عند اختيار عميل+طلب: تخطي حساب AI Matches الثقيل — المستخدم يعتمد على Matching Candidates
+    skip_heavy_matches = bool(selected_client_id and selected_request_id)
+
     open_requests = query_db("""
         SELECT CR.*, C.CompanyName 
         FROM ClientRequests CR 
         JOIN Clients C ON CR.ClientID = C.ClientID 
         WHERE CR.Status IN ('Open', 'Pending', 'Active')
     """) or []
-    
-    # 2. Fetch Ready Candidates (استعلام واحد)
+
     ready_candidates = query_db("""
         SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
         FROM Candidates C
@@ -1503,12 +1517,13 @@ def allocation_matching():
         LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
         WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
     """) or []
-    
-    # 3. جلب كل المطابقات الموجودة دفعة واحدة (بدلاً من N×M استعلام)
-    existing_matches = set()
-    if open_requests and ready_candidates:
-        req_ids = [r['RequestID'] for r in open_requests]
-        cand_ids = [c['CandidateID'] for c in ready_candidates]
+
+    matches_proposed = []
+    if not skip_heavy_matches and open_requests and ready_candidates:
+        reqs = open_requests[:_MAX_REQUESTS_FOR_MATCHES]
+        cands = ready_candidates[:_MAX_CANDIDATES_FOR_MATCHES]
+        req_ids = [r['RequestID'] for r in reqs]
+        cand_ids = [c['CandidateID'] for c in cands]
         placeholders_r = ','.join('?' * len(req_ids)) if req_ids else '0'
         placeholders_c = ','.join('?' * len(cand_ids)) if cand_ids else '0'
         rows = query_db(
@@ -1516,32 +1531,32 @@ def allocation_matching():
             tuple(req_ids) + tuple(cand_ids)
         ) or []
         existing_matches = {(r['CandidateID'], r['RequestID']) for r in rows}
-    
-    matches_proposed = []
-    cefr_map = {
-        'A0': 0, 'A1': 0, 'A1.1': 1, 'A1.2': 2, 'A2': 2, 'A2.1': 3, 'A2.2': 4,
-        'B1': 4, 'High B1': 4, 'Low B1+': 4, 'B1.1': 5, 'B1.2': 6,
-        'B2': 6, 'Compromised B2': 6, 'B2.1': 7, 'B2.2': 8,
-        'C1': 8, 'C1.1': 9, 'C1.2': 10, 'C2': 11
-    }
-    
-    for req in open_requests:
-        req_level = (req.get('EnglishLevel') or 'A0').strip()
-        req_val = cefr_map.get(req_level, 0)
-        
-        for cand in ready_candidates:
-            if (cand['CandidateID'], req['RequestID']) in existing_matches:
-                continue
-            cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
-            cand_val = cefr_map.get(cand_level, 0)
-            gender_match = True
-            req_gender = req.get('Gender')
-            cand_gender = cand.get('Gender')
-            if req_gender and str(req_gender).lower() not in ('any', 'none', ''):
-                if not cand_gender or str(req_gender).lower() != str(cand_gender).lower():
-                    gender_match = False
-            if cand_val >= req_val and gender_match:
-                matches_proposed.append({'req': req, 'cand': cand, 'score': cand_val - req_val})
+        cefr_map = {
+            'A0': 0, 'A1': 0, 'A1.1': 1, 'A1.2': 2, 'A2': 2, 'A2.1': 3, 'A2.2': 4,
+            'B1': 4, 'High B1': 4, 'Low B1+': 4, 'B1.1': 5, 'B1.2': 6,
+            'B2': 6, 'Compromised B2': 6, 'B2.1': 7, 'B2.2': 8,
+            'C1': 8, 'C1.1': 9, 'C1.2': 10, 'C2': 11
+        }
+        for req in reqs:
+            if len(matches_proposed) >= _MAX_PROPOSED_MATCHES:
+                break
+            req_level = (req.get('EnglishLevel') or 'A0').strip()
+            req_val = cefr_map.get(req_level, 0)
+            for cand in cands:
+                if len(matches_proposed) >= _MAX_PROPOSED_MATCHES:
+                    break
+                if (cand['CandidateID'], req['RequestID']) in existing_matches:
+                    continue
+                cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
+                cand_val = cefr_map.get(cand_level, 0)
+                gender_match = True
+                req_gender = req.get('Gender')
+                cand_gender = cand.get('Gender')
+                if req_gender and str(req_gender).lower() not in ('any', 'none', ''):
+                    if not cand_gender or str(req_gender).lower() != str(cand_gender).lower():
+                        gender_match = False
+                if cand_val >= req_val and gender_match:
+                    matches_proposed.append({'req': req, 'cand': cand, 'score': cand_val - req_val})
 
     # 4. Fetch Approved Matches (Waiting for Interview Scheduling)
     approved_matches = query_db("""

@@ -24,7 +24,7 @@
                 <div class="row align-items-end mb-2">
                     <div class="col-md-3">
                         <label class="form-label small"><span class="en-bold">Client</span> <span class="ar-normal">العميل</span></label>
-                        <select name="client_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <select name="client_id" class="form-select form-select-sm">
                             <option value="">-- <span class="ar-normal">اختر العميل</span> --</option>
                             {% for cl in clients %}
                             <option value="{{ cl.ClientID }}" {% if selected_client_id and selected_client_id|string == cl.ClientID|string %}selected{% endif %}>{{ cl.CompanyName }}</option>
@@ -34,7 +34,7 @@
                     <div class="col-md-3">
                         <label class="form-label small"><span class="en-bold">Job Order</span> <span class="ar-normal">طلب العميل</span></label>
                         <div class="d-flex gap-1 align-items-start">
-                            <select name="request_id" class="form-select form-select-sm flex-grow-1" onchange="this.form.submit()">
+                            <select name="request_id" class="form-select form-select-sm flex-grow-1">
                                 <option value="">-- <span class="ar-normal">اختر الطلب</span> --</option>
                                 {% for r in client_requests %}
                                 <option value="{{ r.RequestID }}" {% if selected_request_id and selected_request_id|string == r.RequestID|string %}selected{% endif %}>
@@ -51,7 +51,8 @@
                         {% endif %}
                     </div>
                     <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary btn-sm"><span class="en-bold">Apply</span> <span class="ar-normal">تطبيق</span></button>
+                        <button type="submit" class="btn btn-primary btn-sm w-100"><span class="en-bold">Apply</span> <span class="ar-normal">تطبيق</span></button>
+                        <small class="text-muted d-block mt-1"><span class="ar-normal">اضغط تطبيق بعد الاختيار</span></small>
                     </div>
                 </div>
                 {% if selected_request %}
@@ -59,7 +60,7 @@
                     <div class="col-12"><small class="text-muted"><i class="fas fa-filter"></i> <span class="ar-normal">فلاتر حسب بيانات طلب العميل</span></small></div>
                     <div class="col-md-2 col-6 mt-1">
                         <label class="form-label small"><span class="ar-normal">اللغة</span></label>
-                        <select name="filter_cefr" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <select name="filter_cefr" class="form-select form-select-sm">
                             <option value="">من الطلب ({{ selected_request.EnglishLevel or '-' }})</option>
                             {% for lvl in cefr_levels %}
                             <option value="{{ lvl }}" {% if filter_cefr == lvl %}selected{% endif %}>{{ lvl }}</option>
@@ -77,19 +78,19 @@
                     </div>
                     <div class="col-md-2 col-6 mt-1">
                         <label class="form-label small"><span class="ar-normal">العمر من</span></label>
-                        <input type="number" name="filter_age_from" class="form-control form-control-sm" placeholder="{{ selected_request.AgeFrom or '-' }}" value="{{ filter_age_from }}" min="18" max="70" onchange="this.form.submit()">
+                        <input type="number" name="filter_age_from" class="form-control form-control-sm" placeholder="{{ selected_request.AgeFrom or '-' }}" value="{{ filter_age_from }}" min="18" max="70">
                     </div>
                     <div class="col-md-2 col-6 mt-1">
                         <label class="form-label small"><span class="ar-normal">العمر إلى</span></label>
-                        <input type="number" name="filter_age_to" class="form-control form-control-sm" placeholder="{{ selected_request.AgeTo or '-' }}" value="{{ filter_age_to }}" min="18" max="70" onchange="this.form.submit()">
+                        <input type="number" name="filter_age_to" class="form-control form-control-sm" placeholder="{{ selected_request.AgeTo or '-' }}" value="{{ filter_age_to }}" min="18" max="70">
                     </div>
                     <div class="col-md-2 col-6 mt-1">
                         <label class="form-label small"><span class="ar-normal">المنطقة</span></label>
-                        <input type="text" name="filter_location" class="form-control form-control-sm" placeholder="{{ selected_request.Location or '-' }}" value="{{ filter_location }}" onchange="this.form.submit()">
+                        <input type="text" name="filter_location" class="form-control form-control-sm" placeholder="{{ selected_request.Location or '-' }}" value="{{ filter_location }}">
                     </div>
                     <div class="col-md-2 col-6 mt-1">
                         <label class="form-label small"><span class="ar-normal">متخرج</span></label>
-                        <select name="filter_graduation" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <select name="filter_graduation" class="form-select form-select-sm">
                             <option value="">-- الكل --</option>
                             <option value="Graduated" {% if filter_graduation == 'Graduated' %}selected{% endif %}>Graduated</option>
                             <option value="Student" {% if filter_graduation == 'Student' %}selected{% endif %}>Student</option>
