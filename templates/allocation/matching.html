@@ -43,11 +43,16 @@
                                 {% endfor %}
                             </select>
                             {% if selected_client_id and not client_requests %}
-                            <a href="{{ url_for('manage_requests') }}?client_id={{ selected_client_id }}" class="btn btn-outline-success btn-sm" title="إنشاء طلب جديد"><i class="fas fa-plus"></i></a>
+                            <a href="{{ url_for('manage_requests') }}?create_for={{ selected_client_id }}" class="btn btn-success btn-sm" title="إنشاء طلب لهذا العميل مباشرة">
+                                <i class="fas fa-plus"></i> <span class="ar-normal">إنشاء طلب له مباشرة</span>
+                            </a>
                             {% endif %}
                         </div>
                         {% if selected_client_id and not client_requests %}
-                        <small class="text-muted"><span class="ar-normal">لا توجد طلبات مفتوحة. </span><a href="{{ url_for('manage_requests') }}">إنشاء طلب</a></small>
+                        <div class="alert alert-warning py-2 px-2 mt-1 mb-0 small">
+                            <span class="ar-normal">هذا العميل غير مسجل له طلبات. </span>
+                            <a href="{{ url_for('manage_requests') }}?create_for={{ selected_client_id }}" class="alert-link fw-bold">اضغط لإنشاء طلب له مباشرة</a>
+                        </div>
                         {% endif %}
                     </div>
                     <div class="col-md-2">

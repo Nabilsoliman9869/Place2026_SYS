@@ -103,10 +103,10 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label class="form-label fw-bold">Client Company <span class="text-danger">*</span></label>
-                                    <select name="client_id" class="form-select" required>
+                                    <select name="client_id" id="addReqClientSelect" class="form-select" required>
                                         <option value="">-- Select Client --</option>
                                         {% for c in clients %}
-                                        <option value="{{ c.ClientID }}">{{ c.CompanyName }}</option>
+                                        <option value="{{ c.ClientID }}" {% if create_for_client and create_for_client|string == c.ClientID|string %}selected{% endif %}>{{ c.CompanyName }}</option>
                                         {% endfor %}
                                     </select>
                                     <div class="form-text">
@@ -267,4 +267,12 @@
         </div>
     </div>
 </div>
+{% if create_for_client %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = new bootstrap.Modal(document.getElementById('addRequestModal'));
+    modal.show();
+});
+</script>
+{% endif %}
 {% endblock %}

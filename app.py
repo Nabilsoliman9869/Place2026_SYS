@@ -1585,21 +1585,14 @@ def allocation_matching():
     cefr_levels = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
 
     if selected_client_id:
-        # طلبات مفتوحة أولاً — إن لم يوجد فجميع طلبات العميل
+        # جلب كل طلبات العميل (بدون فلتر Status) لضمان تحميل Job Order
         client_requests = query_db("""
             SELECT CR.*, C.CompanyName FROM ClientRequests CR
             JOIN Clients C ON CR.ClientID = C.ClientID
-            WHERE CR.ClientID = ? AND CR.Status IN ('Open', 'Pending', 'Active')
+            WHERE CR.ClientID = ?
             ORDER BY CR.RequestID DESC
         """, (selected_client_id,)) or []
-        if not client_requests:
-            client_requests = query_db("""
-                SELECT CR.*, C.CompanyName FROM ClientRequests CR
-                JOIN Clients C ON CR.ClientID = C.ClientID
-                WHERE CR.ClientID = ?
-                ORDER BY CR.RequestID DESC
-            """, (selected_client_id,)) or []
-        # إذا للعميل طلب واحد فقط — اختياره تلقائياً وإعادة التوجيه
+        # إن كان للعميل طلب واحد — يظهر مباشرة (redirect)
         if len(client_requests) == 1 and not selected_request_id:
             return redirect(url_for('allocation_matching', client_id=selected_client_id, request_id=client_requests[0]['RequestID']))
     if selected_request_id:
@@ -2713,7 +2706,8 @@ def manage_requests():
         ORDER BY CR.RequestDate DESC
     ''')
     clients = query_db('SELECT * FROM Clients')
-    return render_template('recruitment/requests.html', requests=requests or [], clients=clients or [])
+    create_for_client = request.args.get('create_for', '')
+    return render_template('recruitment/requests.html', requests=requests or [], clients=clients or [], create_for_client=create_for_client)
 
 @app.route('/recruitment/interview_feedback', methods=['POST'])
 @login_required
