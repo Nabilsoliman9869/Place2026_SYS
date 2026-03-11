@@ -47,6 +47,12 @@
                             <label class="text-muted small">Initial Marketing Assessment</label>
                             <div class="alert alert-light border">{{ cand.MarketingAssessment or 'No notes recorded.' }}</div>
                         </div>
+                        {% if recruiter_feedback %}
+                        <div class="col-md-12">
+                            <label class="text-muted small">ملاحظات الريكروتر</label>
+                            <div class="alert alert-info border">{{ recruiter_feedback }}</div>
+                        </div>
+                        {% endif %}
                     </div>
                     
                     <h5 class="text-muted border-bottom pb-2 mt-4">Talent Assessment</h5>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort, jsonify
 from markupsafe import Markup
 import functools
 import os
@@ -350,6 +350,13 @@ def init_system():
                 ALTER TABLE ClientRequests ADD AppearanceLevel NVARCHAR(50);
             IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'PhysicalTraits' AND Object_ID = Object_ID(N'ClientRequests'))
                 ALTER TABLE ClientRequests ADD PhysicalTraits NVARCHAR(MAX);
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'AllocatorRole' AND Object_ID = Object_ID(N'ClientRequests'))
+                ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(100);
+        """)
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'RecruiterFeedback' AND Object_ID = Object_ID(N'Candidates'))
+                ALTER TABLE Candidates ADD RecruiterFeedback NVARCHAR(MAX);
         """)
         
         # Explicitly Commit Schema Changes
@@ -1469,8 +1476,8 @@ def view_candidate_profile(cand_id):
     if not cand:
         flash('Candidate not found', 'danger')
         return redirect(request.referrer)
-        
-    return render_template('candidate_profile_ro.html', cand=cand)
+    recruiter_feedback = (cand.get('RecruiterFeedback') or '') if cand else ''
+    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback)
 
 def check_expired_appointments():
     # Helper to expire old 'Booked' slots (e.g. yesterday)
@@ -1614,65 +1621,74 @@ def allocation_matching():
             WHERE CR.RequestID = ?
         """, (selected_request_id,), one=True)
         if selected_request:
-            req = selected_request
-            # القيم من الفلتر أو من طلب العميل
-            min_level = filter_cefr.strip() if filter_cefr else (req.get('EnglishLevel') or 'A0')
-            req_idx = cefr_levels.index(min_level) if min_level in cefr_levels else 0
-            def _cefr_idx(l):
-                return cefr_levels.index(l) if l in cefr_levels else 0
-            gender_filter = filter_gender.strip() if filter_gender else req.get('Gender')
-            age_from = filter_age_from.strip() or (req.get('AgeFrom') and str(req.get('AgeFrom')))
-            age_to = filter_age_to.strip() or (req.get('AgeTo') and str(req.get('AgeTo')))
-            location_filter = filter_location.strip() or req.get('Location')
-            graduation_filter = filter_graduation.strip()
+            try:
+                req = selected_request
+                # القيم من الفلتر أو من طلب العميل
+                min_level = filter_cefr.strip() if filter_cefr else (req.get('EnglishLevel') or 'A0')
+                req_idx = cefr_levels.index(min_level) if min_level in cefr_levels else 0
+                def _cefr_idx(l):
+                    return cefr_levels.index(l) if l in cefr_levels else 0
+                gender_filter = filter_gender.strip() if filter_gender else req.get('Gender')
+                age_from = filter_age_from.strip() or (req.get('AgeFrom') and str(req.get('AgeFrom')))
+                age_to = filter_age_to.strip() or (req.get('AgeTo') and str(req.get('AgeTo')))
+                location_filter = filter_location.strip() or req.get('Location')
+                graduation_filter = filter_graduation.strip()
 
-            base_sql = """
-                SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
-                FROM Candidates C
-                LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
-                LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
-                WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
-                AND NOT EXISTS (SELECT 1 FROM Matches M WHERE M.CandidateID = C.CandidateID AND M.RequestID = ?
-                    AND M.Status NOT IN ('Rejected'))
-            """
-            params = [selected_request_id]
-            if gender_filter and str(gender_filter).lower() not in ('any', 'none', ''):
-                base_sql += " AND (C.Gender = ? OR C.Gender IS NULL)"
-                params.append(gender_filter)
-            if graduation_filter and str(graduation_filter).lower() not in ('any', 'none', ''):
-                base_sql += " AND (C.GraduationStatus = ? OR C.GraduationStatus IS NULL)"
-                params.append(graduation_filter)
-            all_cands = query_db(base_sql, tuple(params))
-            # فلترة العمر والمنطقة في الذاكرة (تعمل حتى لو لم تكن الأعمدة في الاستعلام)
-            def _passes_filters(c):
-                if age_from and age_from.isdigit():
-                    a = c.get('Age')
-                    if a is not None:
-                        try:
-                            if int(a) < int(age_from):
-                                return False
-                        except (ValueError, TypeError):
-                            pass
-                if age_to and age_to.isdigit():
-                    a = c.get('Age')
-                    if a is not None:
-                        try:
-                            if int(a) > int(age_to):
-                                return False
-                        except (ValueError, TypeError):
-                            pass
-                if location_filter:
-                    addr = (c.get('Address') or c.get('Location') or '')
-                    if addr and location_filter.lower() not in str(addr).lower():
-                        return False
-                return True
-            for cand in (all_cands or []):
-                if not _passes_filters(cand):
-                    continue
-                cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
-                cand_idx = _cefr_idx(cand_level)
-                if cand_idx >= req_idx:
-                    filtered_by_request.append({'cand': cand, 'score': cand_idx - req_idx})
+                base_sql = """
+                    SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
+                    FROM Candidates C
+                    LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
+                    LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
+                    WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
+                    AND NOT EXISTS (SELECT 1 FROM Matches M WHERE M.CandidateID = C.CandidateID AND M.RequestID = ?
+                        AND M.Status NOT IN ('Rejected'))
+                """
+                params = [selected_request_id]
+                if gender_filter and str(gender_filter).lower() not in ('any', 'none', ''):
+                    base_sql += " AND (C.Gender = ? OR C.Gender IS NULL)"
+                    params.append(gender_filter)
+                all_cands = query_db(base_sql, tuple(params))
+                # فلترة العمر والمنطقة ومتخرج في الذاكرة (تعمل حتى لو لم تكن الأعمدة في الاستعلام)
+                def _passes_filters(c):
+                    if age_from and age_from.isdigit():
+                        a = c.get('Age')
+                        if a is not None:
+                            try:
+                                if int(a) < int(age_from):
+                                    return False
+                            except (ValueError, TypeError):
+                                pass
+                    if age_to and age_to.isdigit():
+                        a = c.get('Age')
+                        if a is not None:
+                            try:
+                                if int(a) > int(age_to):
+                                    return False
+                            except (ValueError, TypeError):
+                                pass
+                    if location_filter:
+                        addr = (c.get('Address') or c.get('Location') or '')
+                        if addr and location_filter.lower() not in str(addr).lower():
+                            return False
+                    if graduation_filter and str(graduation_filter).lower() not in ('any', 'none', ''):
+                        gs = (c.get('GraduationStatus') or '').strip().lower()
+                        want = str(graduation_filter).strip().lower()
+                        if gs and gs != want:
+                            return False
+                        # إذا القيمة فارغة: نعاملها كمطابقة (كما في SQL: OR GraduationStatus IS NULL)
+                    return True
+                for cand in (all_cands or []):
+                    if not _passes_filters(cand):
+                        continue
+                    cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
+                    cand_idx = _cefr_idx(cand_level)
+                    if cand_idx >= req_idx:
+                        filtered_by_request.append({'cand': cand, 'score': cand_idx - req_idx})
+            except Exception as ex:
+                import traceback
+                traceback.print_exc()
+                flash(f'خطأ في تطبيق الفلاتر: {str(ex)}', 'danger')
+                filtered_by_request = []
 
     return render_template('allocation/matching.html', 
                            open_requests=open_requests, 
@@ -1703,6 +1719,14 @@ def allocation_confirm_match():
     if not req_id or not cand_id:
         flash('Missing request_id or candidate_id.', 'danger')
         return redirect(url_for('allocation_matching'))
+    # التحقق من صلاحية الترشيح حسب AllocatorRole في طلب العميل
+    req_row = query_db("SELECT AllocatorRole FROM ClientRequests WHERE RequestID = ?", (req_id,), one=True)
+    if req_row and req_row.get('AllocatorRole'):
+        allowed_role = req_row['AllocatorRole'].strip()
+        user_role = (g.user.get('Role') or '').strip()
+        if user_role != allowed_role:
+            flash('ليس لديك الصلاحية: هذا الطلب يتطلب موافقة ' + allowed_role + ' فقط.', 'danger')
+            return redirect(url_for('allocation_matching'))
     notes = request.form.get('notes', '')
     feedback = request.form.get('allocator_feedback', '')
 
@@ -2330,29 +2354,38 @@ def add_request():
     smoker = f.get('smoker')
     appearance = f.get('appearance_level')
     physical = f.get('physical_traits')
+    allocator_role = (f.get('allocator_role') or '').strip() or None
 
-    query_db("""
-        INSERT INTO ClientRequests (
-            ClientID, JobTitle, NeededCount, Status,
-            SalaryFrom, SalaryTo, Gender, Nationality, AgeFrom, AgeTo,
-            Location, ShiftType, WorkingConditions,
-            EducationLevel, ExperienceYears, EnglishLevel, ThirdLanguage, ComputerLevel,
-            Requirements, SoftSkills, Smoker, AppearanceLevel, PhysicalTraits
-        ) VALUES (
-            ?, ?, ?, 'Open',
-            ?, ?, ?, ?, ?, ?,
-            ?, ?, ?,
-            ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?
-        )
-    """, (
-        client_id, title, count,
-        salary_from, salary_to, gender, nationality, age_from, age_to,
-        location, shift, conditions,
-        education, experience, english, lang3, comp,
-        reqs, soft, smoker, appearance, physical
-    ))
-    
+    try:
+        query_db("""
+            INSERT INTO ClientRequests (
+                ClientID, JobTitle, NeededCount, Status,
+                SalaryFrom, SalaryTo, Gender, Nationality, AgeFrom, AgeTo,
+                Location, ShiftType, WorkingConditions,
+                EducationLevel, ExperienceYears, EnglishLevel, ThirdLanguage, ComputerLevel,
+                Requirements, SoftSkills, Smoker, AppearanceLevel, PhysicalTraits, AllocatorRole
+            ) VALUES (
+                ?, ?, ?, 'Open',
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?
+            )
+        """, (
+            client_id, title, count,
+            salary_from, salary_to, gender, nationality, age_from, age_to,
+            location, shift, conditions,
+            education, experience, english, lang3, comp,
+            reqs, soft, smoker, appearance, physical, allocator_role
+        ))
+    except Exception as e:
+        err = str(e)
+        if 'AllocatorRole' in err or 'Invalid column' in err or 'column' in err.lower():
+            flash('خطأ في قاعدة البيانات: عمود AllocatorRole غير موجود. أعد تشغيل التطبيق لتطبيق التحديثات.', 'danger')
+        else:
+            flash('خطأ في حفظ طلب العميل: ' + err[:80], 'danger')
+        return redirect(url_for('manage_requests'))
+
     flash('New Job Order Created Successfully', 'success')
     return redirect(url_for('manage_requests'))
 
@@ -3342,6 +3375,7 @@ def candidate_profile(candidate_id):
         candidate_invoices=candidate_invoices,
         talent_feedback_training=talent_feedback_training,
         talent_feedback_recruitment=talent_feedback_recruitment,
+        recruiter_feedback=(cand.get('RecruiterFeedback') or '') if cand else '',
     )
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):
@@ -3891,10 +3925,10 @@ def training_sales_exam_fee():
             cursor.close()
         return redirect(url_for('training_sales_exam_fee'))
 
-    # GET: عرض قائمة المهتمين بالتدريب ونموذج إدخال الفاتورة
+    # GET: عرض قائمة المهتمين بالتدريب ونموذج إدخال الفاتورة (20 الأحدث — البحث يجلب عبر API)
     try:
         leads = query_db("""
-            SELECT C.CandidateID, C.FullName, C.Phone, C.Email
+            SELECT TOP 20 C.CandidateID, C.FullName, C.Phone, C.Email
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
             ORDER BY C.CreatedAt DESC
@@ -4021,7 +4055,7 @@ def training_sales_course_fee():
 
     try:
         leads = query_db("""
-            SELECT C.CandidateID, C.FullName, C.Phone, C.Email
+            SELECT TOP 20 C.CandidateID, C.FullName, C.Phone, C.Email
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
             ORDER BY C.CreatedAt DESC
@@ -4466,6 +4500,23 @@ def graduate_student():
     flash(f'Student Graduated with status: {status}', 'success')
     return redirect(request.referrer)
 
+@app.route('/api/candidates/search')
+@login_required
+def api_candidates_search():
+    """جلب أقرب 20 مرشح لمطابقة البحث — للانضمام إلى دورة / الفوترة"""
+    q = (request.args.get('q') or '').strip()
+    limit = min(20, int(request.args.get('limit') or 20))
+    context = request.args.get('context', '')  # training = للفوترة/تدريب فقط
+    extra = ""
+    params_extra = []
+    if context == 'training':
+        extra = " AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')"
+    if not q or len(q) < 2:
+        return jsonify({'results': []})
+    base = "SELECT TOP (?) C.CandidateID, C.FullName, C.Phone FROM Candidates C WHERE (C.FullName LIKE ? OR C.Phone LIKE ?)" + extra + " ORDER BY C.FullName"
+    rows = query_db(base, (limit, f'%{q}%', f'%{q}%') + tuple(params_extra)) or []
+    return jsonify({'results': [{'id': r['CandidateID'], 'text': f"{r['FullName']} — {r['Phone'] or ''}"} for r in rows]})
+
 @app.route('/training/batch/<int:batch_id>')
 @login_required
 @role_required(['Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Trainer', 'TrainingLead'])
@@ -4473,7 +4524,8 @@ def batch_details(batch_id):
     batch = query_db("SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID JOIN Trainers T ON B.TrainerID = T.TrainerID JOIN Classrooms R ON B.RoomID = R.RoomID WHERE B.BatchID = ?", (batch_id,), one=True)
     if not batch: return redirect(url_for('training_index'))
     students = query_db("SELECT E.*, C.FullName, C.Phone FROM Enrollments E JOIN Candidates C ON E.CandidateID = C.CandidateID WHERE E.BatchID = ?", (batch_id,))
-    candidates = query_db('SELECT * FROM Candidates')
+    # أول 20 مرشح للعرض الافتراضي — البحث يحمّل عبر API عند الكتابة
+    candidates = query_db('SELECT TOP 20 CandidateID, FullName, Phone FROM Candidates ORDER BY FullName')
     return render_template('training/batch_details.html', batch=batch, students=students or [], candidates=candidates or [])
 
 @app.route('/training/notes/<int:enrollment_id>', methods=['GET', 'POST'])

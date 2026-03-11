@@ -50,7 +50,7 @@
     <div class="col-md-8">
 
         <!-- 0. المصدر وقناة الاستقطاب -->
-        {% if recruiter_name or source_channel or placement_reason or marketing_assessment %}
+        {% if recruiter_name or source_channel or placement_reason or marketing_assessment or recruiter_feedback %}
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0">
                 <h5 class="mb-0 text-info"><i class="fas fa-user-tag"></i> المصدر وقناة الاستقطاب</h5>
@@ -60,6 +60,7 @@
                 {% if source_channel %}<p class="mb-1"><strong>قناة المصدر:</strong> {{ source_channel }}</p>{% endif %}
                 {% if placement_reason %}<p class="mb-1"><strong>سبب التنسيب:</strong> {{ placement_reason }}</p>{% endif %}
                 {% if marketing_assessment %}<p class="mb-1"><strong>تقييم التسويق:</strong> {{ marketing_assessment }}</p>{% endif %}
+                {% if recruiter_feedback %}<p class="mb-0 mt-2 pt-2 border-top"><strong>ملاحظات الريكروتر:</strong> {{ recruiter_feedback }}</p>{% endif %}
             </div>
         </div>
         {% endif %}
@@ -128,14 +129,21 @@
         </div>
         {% endif %}
 
-        <!-- 0d. ملاحظات مختبر المواهب للتوظيف (اختبارات التوظيف — مستويات مختلفة عن التدريب) -->
+        <!-- 0d. ملاحظات TA للتوظيف — فقرة منفصلة + جدول التفاصيل -->
         {% if talent_feedback_recruitment %}
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white border-bottom-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 text-primary"><i class="fas fa-briefcase"></i> ملاحظات مختبر المواهب للتوظيف <small class="text-muted fs-6">تقييمات المرشح للتوظيف</small></h5>
+                <h5 class="mb-0 text-primary"><i class="fas fa-briefcase"></i> ملاحظات TA <small class="text-muted fs-6">مختبر المواهب للتوظيف</small></h5>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#infoModalTalentRecruitment" title="شرح"><i class="fas fa-info-circle"></i></button>
             </div>
             <div class="card-body">
+                {% set ta_with_notes = talent_feedback_recruitment|selectattr('Comments')|list %}
+                {% if ta_with_notes %}
+                <div class="alert alert-light border mb-3">
+                    <strong>ملاحظات TA:</strong>
+                    <p class="mb-0 mt-1">{% for fb in ta_with_notes %}{{ fb.Comments }}{% if not loop.last %} — {% endif %}{% endfor %}</p>
+                </div>
+                {% endif %}
                 <table class="table table-sm table-hover">
                     <thead class="table-light">
                         <tr>

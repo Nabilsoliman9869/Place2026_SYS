@@ -120,6 +120,20 @@
                                 </div>
                             </div>
                             <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">المخول بالترشيح <small class="text-muted">من له حق الترشيح لطلب العميل</small></label>
+                                    <select name="allocator_role" class="form-select">
+                                        <option value="">-- أي مخوّل (افتراضي) --</option>
+                                        <option value="Allocator">Allocator</option>
+                                        <option value="AllocationSpecialist">Allocation Specialist</option>
+                                        <option value="AllocationManager">Allocation Manager</option>
+                                        <option value="Manager">Manager</option>
+                                        <option value="AccountManager">Account Manager</option>
+                                    </select>
+                                    <div class="form-text">بعض العملاء يتطلبون موافقة اللوكيشن مانجر فقط على الترشيحات</div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Headcount Needed</label>
                                     <input type="number" name="needed_count" class="form-control" value="10" min="1">
