@@ -358,6 +358,16 @@ def init_system():
             AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'RecruiterFeedback' AND Object_ID = Object_ID(N'Candidates'))
                 ALTER TABLE Candidates ADD RecruiterFeedback NVARCHAR(MAX);
         """)
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'RecruiterFeedbackBy' AND Object_ID = Object_ID(N'Candidates'))
+                ALTER TABLE Candidates ADD RecruiterFeedbackBy INT NULL;
+        """)
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'RecruiterFeedbackDate' AND Object_ID = Object_ID(N'Candidates'))
+                ALTER TABLE Candidates ADD RecruiterFeedbackDate DATETIME NULL;
+        """)
         
         # Explicitly Commit Schema Changes
         cursor.commit()
@@ -1226,9 +1236,9 @@ def recruiter_evaluate_candidate():
         
     query_db("""
         UPDATE Candidates 
-        SET Status = ?, IsReferredToTraining = ?, RecruiterFeedback = ?, CurrentCEFR = ?, EmploymentStatus = ?
+        SET Status = ?, IsReferredToTraining = ?, RecruiterFeedback = ?, RecruiterFeedbackBy = ?, RecruiterFeedbackDate = ?, CurrentCEFR = ?, EmploymentStatus = ?
         WHERE CandidateID = ?
-    """, (new_status, is_referred, feedback, lang_level, emp_status, cand_id))
+    """, (new_status, is_referred, feedback, session.get('user_id'), datetime.utcnow(), lang_level, emp_status, cand_id))
     
     flash('Candidate Evaluated Successfully', 'success')
     return redirect(url_for('recruiter_workbench'))
@@ -1477,6 +1487,18 @@ def view_candidate_profile(cand_id):
         flash('Candidate not found', 'danger')
         return redirect(request.referrer)
     recruiter_feedback = (cand.get('RecruiterFeedback') or '') if cand else ''
+    recruiter_feedback_by_name = None
+    recruiter_feedback_date = None
+    if cand and cand.get('RecruiterFeedbackBy'):
+        try:
+            rfb = query_db('SELECT FullName, Username FROM Users_1 WHERE UserID = ?', (cand['RecruiterFeedbackBy'],), one=True)
+            if rfb:
+                recruiter_feedback_by_name = rfb.get('FullName') or rfb.get('Username') or ''
+        except Exception:
+            pass
+    if cand and cand.get('RecruiterFeedbackDate'):
+        rd = cand['RecruiterFeedbackDate']
+        recruiter_feedback_date = rd.strftime('%Y-%m-%d %H:%M') if hasattr(rd, 'strftime') else str(rd)[:16]
     talent_feedback_recruitment = []
     try:
         all_fb = query_db('''
@@ -1493,7 +1515,10 @@ def view_candidate_profile(cand_id):
                 talent_feedback_recruitment.append(fb)
     except Exception:
         pass
-    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback, talent_feedback_recruitment=talent_feedback_recruitment or [])
+    marketing_assessment = (cand.get('MarketingAssessment') or '') if cand else ''
+    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback,
+        recruiter_feedback_by_name=recruiter_feedback_by_name, recruiter_feedback_date=recruiter_feedback_date,
+        talent_feedback_recruitment=talent_feedback_recruitment or [], marketing_assessment=marketing_assessment)
 
 def check_expired_appointments():
     # Helper to expire old 'Booked' slots (e.g. yesterday)
@@ -3373,6 +3398,20 @@ def candidate_profile(candidate_id):
                 talent_feedback_recruitment.append(fb)
     except Exception:
         pass
+    # اسم وتاريخ من أدخل ملاحظات الريكروتر
+    recruiter_feedback_by_name = None
+    recruiter_feedback_date = None
+    if cand and cand.get('RecruiterFeedbackBy'):
+        try:
+            rfb = query_db('SELECT FullName, Username FROM Users_1 WHERE UserID = ?', (cand['RecruiterFeedbackBy'],), one=True)
+            if rfb:
+                recruiter_feedback_by_name = rfb.get('FullName') or rfb.get('Username') or ''
+        except Exception:
+            pass
+    if cand and cand.get('RecruiterFeedbackDate'):
+        rd = cand['RecruiterFeedbackDate']
+        recruiter_feedback_date = rd.strftime('%Y-%m-%d %H:%M') if hasattr(rd, 'strftime') else str(rd)[:16]
+
     return render_template(
         'profile.html',
         cand=cand,
@@ -3392,6 +3431,8 @@ def candidate_profile(candidate_id):
         talent_feedback_training=talent_feedback_training,
         talent_feedback_recruitment=talent_feedback_recruitment,
         recruiter_feedback=(cand.get('RecruiterFeedback') or '') if cand else '',
+        recruiter_feedback_by_name=recruiter_feedback_by_name,
+        recruiter_feedback_date=recruiter_feedback_date,
     )
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):

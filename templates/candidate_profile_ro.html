@@ -29,32 +29,40 @@
                 
                 <!-- Recruitment Details -->
                 <div class="col-md-8">
-                    <h5 class="text-muted border-bottom pb-2">Recruitment Details</h5>
+                    <h5 class="text-muted border-bottom pb-2">Recruitment Details تفاصيل التوظيف</h5>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="text-muted small">Recruiter</label>
+                            <label class="text-muted small">Recruiter الريكروتر</label>
                             <p class="fw-bold">{{ cand.AgentName or 'System' }}</p>
                         </div>
                         <div class="col-md-6">
-                            <label class="text-muted small">Campaign</label>
+                            <label class="text-muted small">Campaign الحملة</label>
                             <p class="fw-bold">{{ cand.CampaignName or 'General' }}</p>
                         </div>
                         <div class="col-md-6">
-                            <label class="text-muted small">Interest Date</label>
+                            <label class="text-muted small">Interest Date تاريخ الاهتمام</label>
                             <p class="fw-bold">{{ cand.CreatedAt.strftime('%Y-%m-%d') if cand.CreatedAt else '-' }}</p>
                         </div>
                         <div class="col-md-12">
-                            <label class="text-muted small">Initial Marketing Assessment</label>
-                            <div class="alert alert-light border">{{ cand.MarketingAssessment or 'No notes recorded.' }}</div>
-                        </div>
-                        <div class="col-md-12">
-                            <label class="text-muted small">ملاحظات الريكروتر</label>
-                            <div class="alert alert-info border">{% if recruiter_feedback %}{{ recruiter_feedback }}{% else %}<span class="text-muted">لا توجد ملاحظات مسجلة</span>{% endif %}</div>
+                            <label class="text-muted small">ملاحظات الريكروتر Recruiter Notes</label>
+                            <div class="alert alert-info border">
+                                {% if recruiter_feedback %}{{ recruiter_feedback }}
+                                {% if recruiter_feedback_by_name or recruiter_feedback_date %}
+                                <p class="mb-0 mt-1 text-muted small">Entered by المدخل: {{ recruiter_feedback_by_name or '-' }} | Date التاريخ: {{ recruiter_feedback_date or '-' }}</p>
+                                {% endif %}
+                                {% else %}<span class="text-muted">لا توجد ملاحظات مسجلة No notes recorded</span>{% endif %}
+                            </div>
                         </div>
                     </div>
                     
-                    <h5 class="text-muted border-bottom pb-2 mt-4">ملاحظات TA (مختبر المواهب للتوظيف)</h5>
+                    <h5 class="text-muted border-bottom pb-2 mt-4">ملاحظات مختبر المواهب للتوظيف TA Recruitment Notes</h5>
                     <div class="row g-3">
+                        {% if marketing_assessment %}
+                        <div class="col-12">
+                            <label class="text-muted small">ملاحظات من اختبار الموهبة Notes from Talent Test</label>
+                            <div class="alert alert-light border">{{ marketing_assessment }}</div>
+                        </div>
+                        {% endif %}
                         {% if talent_feedback_recruitment %}
                         <div class="col-12">
                             {% for fb in talent_feedback_recruitment %}
@@ -65,18 +73,20 @@
                             {% endfor %}
                         </div>
                         {% else %}
-                        <p class="text-muted small mb-0">لا توجد تقييمات توظيف. <a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}">الملف الكامل</a></p>
+                        {% if not marketing_assessment %}
+                        <p class="text-muted small mb-0">لا توجد تقييمات توظيف No TA recruitment evaluations. <a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}">الملف الكامل Full Profile</a></p>
+                        {% endif %}
                         {% endif %}
                     </div>
 
-                    <h5 class="text-muted border-bottom pb-2 mt-4">Talent Assessment</h5>
+                    <h5 class="text-muted border-bottom pb-2 mt-4">Talent Assessment تقييم الموهبة</h5>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="text-muted small">CEFR Level</label>
+                            <label class="text-muted small">CEFR Level المستوى</label>
                             <p class="fw-bold fs-5 text-primary">{{ cand.CurrentCEFR or 'Not Assessed' }}</p>
                         </div>
                         <div class="col-md-6">
-                            <label class="text-muted small">Ready for Matching?</label>
+                            <label class="text-muted small">Ready for Matching? جاهز للمطابقة؟</label>
                             <p class="fw-bold {{ 'text-success' if cand.IsReadyForMatching else 'text-danger' }}">
                                 {{ 'Yes' if cand.IsReadyForMatching else 'No' }}
                             </p>

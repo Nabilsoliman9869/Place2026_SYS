@@ -25,7 +25,7 @@
                         {% for i in interviews %}
                         <tr>
                             <td>
-                                <span class="badge bg-primary fs-6">{{ i.InterviewDate.strftime('%Y-%m-%d %H:%M') }}</span>
+                                <span class="badge bg-primary fs-6">{{ i.InterviewDate.strftime('%Y-%m-%d %H:%M') if i.InterviewDate else 'TBD' }}</span>
                             </td>
                             <td>
                                 <strong>{{ i.FullName }}</strong><br>
