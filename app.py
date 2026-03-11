@@ -1477,7 +1477,23 @@ def view_candidate_profile(cand_id):
         flash('Candidate not found', 'danger')
         return redirect(request.referrer)
     recruiter_feedback = (cand.get('RecruiterFeedback') or '') if cand else ''
-    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback)
+    talent_feedback_recruitment = []
+    try:
+        all_fb = query_db('''
+            SELECT E.Comments, E.CEFR_Level, E.Decision, E.EvaluationDate, E.EvaluationType, U.FullName AS EvaluatorName
+            FROM Evaluations E
+            LEFT JOIN TASchedules T ON E.SlotID = T.SlotID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.CandidateID = ?
+            ORDER BY E.EvaluationDate DESC
+        ''', (cand_id,)) or []
+        for fb in all_fb:
+            et = (fb.get('EvaluationType') or '').strip()
+            if et != 'Training':
+                talent_feedback_recruitment.append(fb)
+    except Exception:
+        pass
+    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback, talent_feedback_recruitment=talent_feedback_recruitment or [])
 
 def check_expired_appointments():
     # Helper to expire old 'Booked' slots (e.g. yesterday)

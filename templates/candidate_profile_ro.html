@@ -47,14 +47,28 @@
                             <label class="text-muted small">Initial Marketing Assessment</label>
                             <div class="alert alert-light border">{{ cand.MarketingAssessment or 'No notes recorded.' }}</div>
                         </div>
-                        {% if recruiter_feedback %}
                         <div class="col-md-12">
                             <label class="text-muted small">ملاحظات الريكروتر</label>
-                            <div class="alert alert-info border">{{ recruiter_feedback }}</div>
+                            <div class="alert alert-info border">{% if recruiter_feedback %}{{ recruiter_feedback }}{% else %}<span class="text-muted">لا توجد ملاحظات مسجلة</span>{% endif %}</div>
                         </div>
-                        {% endif %}
                     </div>
                     
+                    <h5 class="text-muted border-bottom pb-2 mt-4">ملاحظات TA (مختبر المواهب للتوظيف)</h5>
+                    <div class="row g-3">
+                        {% if talent_feedback_recruitment %}
+                        <div class="col-12">
+                            {% for fb in talent_feedback_recruitment %}
+                            <div class="alert alert-light border small mb-2">
+                                <strong>{{ (fb.EvaluationDate|string)[:10] if fb.EvaluationDate else '-' }}</strong> — {{ fb.EvaluatorName or '-' }} | {{ fb.CEFR_Level or '-' }} | {{ fb.Decision or '-' }}
+                                {% if fb.Comments %}<p class="mb-0 mt-1">{{ fb.Comments }}</p>{% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">لا توجد تقييمات توظيف. <a href="{{ url_for('candidate_profile', candidate_id=cand.CandidateID) }}">الملف الكامل</a></p>
+                        {% endif %}
+                    </div>
+
                     <h5 class="text-muted border-bottom pb-2 mt-4">Talent Assessment</h5>
                     <div class="row g-3">
                         <div class="col-md-6">
