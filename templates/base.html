@@ -337,13 +337,13 @@
                 <i class="fas fa-random"></i>
                 <span class="link-text"><span class="en-bold">Matching Center</span> <span class="ar-normal">مركز المطابقة</span></span>
             </a>
-            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager']) %}
-            <a href="{{ url_for('allocator_dashboard') }}" class="nav-link">
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist', 'AccountManager']) %}
+            <a href="{{ url_for('allocation_matching') }}" class="nav-link {{ 'active' if request.endpoint == 'allocation_matching' else '' }}">
                 <i class="fas fa-chart-line"></i>
                 <span class="link-text"><span class="en-bold">Manager Dash</span></span>
             </a>
             {% endif %}
-            <a href="{{ url_for('match_candidates') }}" class="nav-link">
+            <a href="{{ url_for('allocation_matching') }}" class="nav-link {{ 'active' if request.endpoint == 'allocation_matching' else '' }}">
                 <i class="fas fa-people-arrows"></i>
                 <span class="link-text"><span class="en-bold">Matching</span> <span class="ar-normal">مطابقة</span></span>
             </a>

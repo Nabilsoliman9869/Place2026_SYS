@@ -2273,41 +2273,13 @@ def add_request():
 
 @app.route('/recruitment/matching')
 @login_required
-@role_required(['Recruitment', 'Manager', 'AllocationManager', 'AllocationSpecialist', 'Allocator'])
+@role_required(['Recruiter', 'RecruitmentManager', 'Manager', 'AllocationManager', 'AllocationSpecialist', 'Allocator', 'AccountManager'])
 def match_candidates():
+    """إعادة توجيه لمركز المطابقة الموحد /allocation/matching (مع تمرير request_id إن وُجد)."""
     req_id = request.args.get('request_id')
-    
-    # Advanced Filtering Logic
-    filter_sql = "WHERE Status IN ('Ready', 'Imported')" # Default
-    params = []
-    
-    selected_request = None
     if req_id:
-        selected_request = query_db("SELECT * FROM ClientRequests WHERE RequestID=?", (req_id,), one=True)
-        if selected_request:
-            # Apply Filters based on Request
-            # 1. English Level
-            if selected_request['EnglishLevel'] and selected_request['EnglishLevel'] != 'Any':
-                filter_sql += " AND (CurrentCEFR = ? OR CurrentCEFR >= ?)"
-                params.extend([selected_request['EnglishLevel'], selected_request['EnglishLevel']])
-            
-            # 2. Gender
-            if selected_request['Gender'] and selected_request['Gender'] != 'Any':
-                 # Assuming Candidates has Gender field (If not, we assume simple filter for now)
-                 pass 
-            
-            # 3. Location (Area)
-            if selected_request['Location']:
-                 filter_sql += " AND (Address LIKE ?)"
-                 params.append(f"%{selected_request['Location']}%")
-
-            # 4. Age (Requires BirthDate in Candidates, currently missing, skipping logic to avoid crash)
-            
-    candidates = query_db(f"SELECT * FROM Candidates {filter_sql}", params)
-    
-    requests = query_db("SELECT CR.*, C.CompanyName FROM ClientRequests CR JOIN Clients C ON CR.ClientID = C.ClientID WHERE CR.Status = 'Open'")
-    
-    return render_template('recruitment/matching.html', requests=requests or [], candidates=candidates or [], selected_request=selected_request)
+        return redirect(url_for('allocation_matching', request_id=req_id))
+    return redirect(url_for('allocation_matching'))
 
 @app.route('/corporate/finance/<int:client_id>')
 @login_required
@@ -2537,21 +2509,10 @@ def account_manager_dashboard():
 
 @app.route('/recruitment/allocator_dashboard')
 @login_required
-@role_required(['Allocator', 'AllocationManager', 'Manager'])
+@role_required(['Allocator', 'AllocationManager', 'Manager', 'AllocationSpecialist', 'AccountManager'])
 def allocator_dashboard():
-    # Allocator focuses on Quality & Data Recycling
-    # Show candidates ready for matching but not submitted yet
-    ready_candidates = query_db("SELECT * FROM Candidates WHERE Status='Ready' AND CandidateID NOT IN (SELECT CandidateID FROM Matches)")
-    
-    # Calculate Metrics for the Dashboard Template
-    metrics = {
-        'total_requests': query_db("SELECT COUNT(*) as c FROM ClientRequests", one=True)['c'],
-        'open_requests': query_db("SELECT COUNT(*) as c FROM ClientRequests WHERE Status='Open'", one=True)['c'],
-        'candidates_matched': query_db("SELECT COUNT(*) as c FROM Matches", one=True)['c'],
-        'successful_placements': query_db("SELECT COUNT(*) as c FROM Matches WHERE Status='Accepted'", one=True)['c']
-    }
-    
-    return render_template('recruitment/dashboard.html', candidates=ready_candidates or [], metrics=metrics)
+    """إعادة توجيه الألوكيتر إلى مركز المطابقة (شاشة الترشيح الرئيسية)."""
+    return redirect(url_for('allocation_matching'))
 @app.route('/recruitment/distribute', methods=['GET', 'POST'])
 @login_required
 @role_required(['RecruitmentManager', 'Manager', 'AllocationManager', 'AccountManager'])
