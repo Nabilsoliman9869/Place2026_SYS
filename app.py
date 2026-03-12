@@ -831,8 +831,8 @@ def test_connection():
 @app.route('/login', methods=('GET', 'POST'))
 def login():
     if request.method == 'POST':
-        username = (request.form['username'] or '').strip()
-        password = request.form.get('password', '')
+        username = (request.form['username'] or '').strip().replace('\ufeff', '')
+        password = (request.form.get('password', '') or '').strip()
         # قبول "المطور" أو "dev" كمستخدم مطور
         if username.lower() in ('dev', 'المطور', 'developer'):
             username = 'dev'
@@ -847,7 +847,8 @@ def login():
             except: pass
 
         try:
-            user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
+            # بحث في جدول المستخدمين (بدون حساسية لحالة الأحرف)
+            user = query_db('SELECT * FROM Users_1 WHERE LOWER(RTRIM(Username)) = LOWER(?)', (username,), one=True)
             if user is None and username in ('train_coord', 'trainer1', 'train_mgr', 'train_head', 'train_lead', 'train_sales', 'salma', 'ta_train'):
                 ensure_training_users()
                 user = query_db('SELECT * FROM Users_1 WHERE Username = ?', (username,), one=True)
