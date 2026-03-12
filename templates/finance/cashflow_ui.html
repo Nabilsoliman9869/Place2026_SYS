@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block page_title %}التدفق النقدي الزكي{% endblock %}
+{% block content %}
+<style>
+    .cf-card { background: #fff; border: 1px solid #dee2e6; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .cf-card .hd { padding: 14px 16px; border-bottom: 1px solid #eee; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+    .cf-card .bd { padding: 16px; }
+    .cf-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .cf-table th, .cf-table td { padding: 10px 12px; text-align: right; border-bottom: 1px solid #eee; }
+    .cf-table th { background: #f8f9fa; color: #495057; font-weight: 600; }
+    .cf-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .cf-field { flex: 1; min-width: 180px; }
+    .cf-field label { display: block; font-size: 0.8rem; color: #6c757d; margin-bottom: 4px; }
+    .tile { padding: 12px 16px; border-radius: 10px; border: 1px solid #dee2e6; cursor: pointer; transition: all 0.2s; display: inline-block; margin-left: 8px; }
+    .tile:hover { background: #e9ecef; border-color: #adb5bd; }
+    .tile.active { background: #3498db; color: #fff; border-color: #3498db; }
+    .tile.recp { border-color: #28a745; }
+    .tile.recp.active { background: #28a745; color: #fff; }
+</style>
+
+<div class="mb-4">
+    <h4><i class="fas fa-wallet text-success"></i> التدفق النقدي الزكي <span class="badge bg-secondary">{{ user.name or 'المحاسب' }}</span></h4>
+</div>
+
+<div class="cf-card">
+    <div class="hd">
+        <span>إضافة سند (قبض / صرف)</span>
+        <span>
+            <span class="tile recp active" id="tileRecp" onclick="setType('RECP')">قبض</span>
+            <span class="tile" id="tileDisb" onclick="setType('DISB')">صرف</span>
+        </span>
+    </div>
+    <div class="bd">
+        <form id="voucherForm">
+            <input type="hidden" id="voucherType" name="type" value="RECP">
+            <div class="cf-row">
+                <div class="cf-field">
+                    <label>التاريخ</label>
+                    <input type="date" id="voucherDate" name="date" class="form-control" required>
+                </div>
+                <div class="cf-field">
+                    <label>الحساب الرئيسي (صندوق/بنك)</label>
+                    <select id="mainAccount" name="mainAccount" class="form-select" required>
+                        <option value="">-- اختر الحساب --</option>
+                    </select>
+                </div>
+                <div class="cf-field">
+                    <label>المرجع / رقم الشيك</label>
+                    <input type="text" id="voucherRef" name="ref" class="form-control" placeholder="اختياري">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-field" style="flex: 2;">
+                    <label>البيان / الملاحظات</label>
+                    <input type="text" id="voucherNotes" name="notes" class="form-control" placeholder="وصف السند">
+                </div>
+                <div class="cf-field">
+                    <label>المستفيد (عميل/مورد)</label>
+                    <input type="text" id="voucherAgent" name="agent" class="form-control" placeholder="اختياري - ابحث بالاسم">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-field">
+                    <label>الحساب (المستفيد/المصدر)</label>
+                    <select id="lineAccount" name="account" class="form-select" required>
+                        <option value="">-- اختر الحساب --</option>
+                    </select>
+                </div>
+                <div class="cf-field">
+                    <label>المبلغ</label>
+                    <input type="number" id="voucherAmount" name="amount" class="form-control" step="0.01" min="0" required placeholder="0.00">
+                </div>
+                <div class="cf-field">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> حفظ السند
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="cf-card">
+    <div class="hd">آخر السندات</div>
+    <div class="bd">
+        <div id="transactionsWrap">
+            <div class="text-muted">جاري التحميل...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    document.getElementById('voucherDate').valueAsDate = new Date();
+    const API_ACCOUNTS = '{{ url_for("api_cashflow_accounts_sub") }}';
+    const API_TRANS = '{{ url_for("api_cashflow_transactions") }}';
+    const API_CREATE = '{{ url_for("api_cashflow_create_transaction") }}';
+    const API_NEXT = '{{ url_for("api_cashflow_next_number") }}';
+
+    function setType(t) {
+        document.getElementById('voucherType').value = t;
+        document.getElementById('tileRecp').classList.toggle('active', t === 'RECP');
+        document.getElementById('tileDisb').classList.toggle('active', t === 'DISB');
+        document.getElementById('tileRecp').classList.remove('active');
+        document.getElementById('tileDisb').classList.remove('active');
+        document.getElementById('tile' + (t === 'RECP' ? 'Recp' : 'Disb')).classList.add('active');
+    }
+    window.setType = setType;
+
+    function loadAccounts() {
+        fetch(API_ACCOUNTS, { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(d => {
+                const acc = d.accounts || [];
+                const sel1 = document.getElementById('mainAccount');
+                const sel2 = document.getElementById('lineAccount');
+                [sel1, sel2].forEach(s => {
+                    s.innerHTML = '<option value="">-- اختر الحساب --</option>' + acc.map(a => '<option value="' + (a.CardCode + '-' + a.AccountName) + '">' + (a.DisplayName || a.AccountName) + '</option>').join('');
+                });
+            })
+            .catch(() => {});
+    }
+
+    function loadTransactions() {
+        const wrap = document.getElementById('transactionsWrap');
+        fetch(API_TRANS + '?limit=30', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(d => {
+                const rows = d.data || [];
+                if (rows.length === 0) {
+                    wrap.innerHTML = '<div class="text-muted py-4 text-center">لا توجد سندات.</div>';
+                    return;
+                }
+                wrap.innerHTML = '<table class="cf-table"><thead><tr><th>رقم السند</th><th>التاريخ</th><th>النوع</th><th>البيان</th><th>المبلغ</th></tr></thead><tbody>' +
+                    rows.map(r => '<tr><td>' + (r.BondNumber || '') + '</td><td>' + (r.BondDate || '') + '</td><td>' + (r.type_name || 'سند') + '</td><td>' + (r.Notes || '') + '</td><td>' + Number(r.total || 0).toLocaleString() + '</td></tr>').join('') +
+                    '</tbody></table>';
+            })
+            .catch(() => { wrap.innerHTML = '<div class="text-danger">فشل تحميل السندات</div>'; });
+    }
+
+    document.getElementById('voucherForm').onsubmit = function (e) {
+        e.preventDefault();
+        const type = document.getElementById('voucherType').value;
+        const account = document.getElementById('lineAccount').value;
+        const mainAccount = document.getElementById('mainAccount').value;
+        const amount = parseFloat(document.getElementById('voucherAmount').value) || 0;
+        if (!mainAccount || !account || amount <= 0) {
+            alert('يرجى ملء الحقول المطلوبة والمبلغ');
+            return;
+        }
+        const payload = {
+            type: type,
+            date: document.getElementById('voucherDate').value,
+            ref: document.getElementById('voucherRef').value,
+            notes: document.getElementById('voucherNotes').value,
+            agent: document.getElementById('voucherAgent').value,
+            mainAccount: mainAccount,
+            items: [{ account: account, db: type === 'DISB' ? amount : 0, cr: type === 'RECP' ? amount : 0, desc: document.getElementById('voucherNotes').value }]
+        };
+        fetch(API_CREATE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    alert(d.message || 'تم الحفظ بنجاح');
+                    document.getElementById('voucherAmount').value = '';
+                    document.getElementById('voucherNotes').value = '';
+                    loadTransactions();
+                } else {
+                    alert(d.message || 'فشل الحفظ');
+                }
+            })
+            .catch(() => alert('خطأ في الاتصال'));
+    };
+
+    loadAccounts();
+    loadTransactions();
+})();
+</script>
+{% endblock %}

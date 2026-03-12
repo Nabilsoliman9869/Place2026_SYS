@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+{% block page_title %}التقارير المالية{% endblock %}
+{% block content %}
+<style>
+    .cf-status { margin-bottom: 12px; font-size: 0.9rem; }
+    .cf-status.ok { color: #28a745; }
+    .cf-status.err { color: #dc3545; }
+    .report-card { background: #fff; border: 1px solid #dee2e6; border-radius: 12px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .report-card h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #eee; font-size: 1rem; color: #2c3e50; }
+    .report-list { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; }
+    .report-btn { padding: 12px 20px; border: 1px solid #dee2e6; border-radius: 8px; background: #f8f9fa; color: #212529; cursor: pointer; transition: all 0.2s; min-width: 150px; text-align: center; font-weight: 600; }
+    .report-btn:hover { background: #3498db; color: #fff; border-color: #3498db; transform: translateY(-2px); }
+    .filters { padding: 16px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+    .filter-item { display: flex; flex-direction: column; gap: 5px; }
+    .filter-item label { font-size: 0.8rem; color: #6c757d; }
+    .result-container { overflow: auto; max-height: 70vh; border-top: 1px solid #eee; }
+    .report-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .report-table th, .report-table td { padding: 10px 14px; text-align: right; border-bottom: 1px solid #eee; }
+    .report-table th { background: #f8f9fa; color: #495057; font-weight: 600; position: sticky; top: 0; }
+    .report-table tr:hover { background: #f8f9fa; }
+    .toolbar { padding: 10px 16px; display: flex; gap: 10px; justify-content: flex-end; background: #f8f9fa; }
+</style>
+
+<div class="mb-3">
+    <h4><i class="fas fa-chart-bar text-primary"></i> التقارير المالية والمخزنية</h4>
+    <div id="status" class="cf-status">جاهز</div>
+</div>
+
+<div class="report-card" id="balancesCard">
+    <h2>أرصدة سريعة: الصندوق / البنك / العهد</h2>
+    <div id="balancesWrap" style="display:flex; flex-wrap:wrap; gap:12px; padding:16px;">
+        <div class="text-muted small">جاري تحميل الأرصدة...</div>
+    </div>
+</div>
+
+<div class="report-card">
+    <h2>اختر التقرير</h2>
+    <div class="report-list" id="reportList">
+        <div class="text-muted">جاري تحميل القائمة...</div>
+    </div>
+</div>
+
+<div class="report-card" id="filtersCard" style="display:none;">
+    <h2 id="filterTitle">معايير التقرير</h2>
+    <div class="filters">
+        <div class="filter-item" id="f_dates">
+            <label>الفترة</label>
+            <div style="display:flex; gap:10px">
+                <input type="date" id="fromDate" class="form-control" title="من تاريخ">
+                <input type="date" id="toDate" class="form-control" title="إلى تاريخ">
+            </div>
+        </div>
+        <div class="filter-item" id="f_account" style="display:none;">
+            <label>الحساب</label>
+            <select id="accountGuide" class="form-select">
+                <option value="">-- اختر الحساب --</option>
+            </select>
+        </div>
+        <div class="filter-item" id="f_agent" style="display:none;">
+            <label>العميل</label>
+            <select id="agentGuide" class="form-select">
+                <option value="">-- اختر --</option>
+            </select>
+        </div>
+        <div class="filter-item" id="f_product" style="display:none;">
+            <label>الصنف</label>
+            <select id="productGuide" class="form-select">
+                <option value="">-- اختر --</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label>&nbsp;</label>
+            <button id="btnRun" class="btn btn-primary">عرض التقرير</button>
+        </div>
+    </div>
+</div>
+
+<div class="report-card" id="resultCard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee">
+        <h2 id="resultTitle" style="border:none">النتيجة</h2>
+        <div class="toolbar">
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportToExcel()">تصدير Excel</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="printReport()">طباعة</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeReport()">إغلاق</button>
+        </div>
+    </div>
+    <div class="result-container">
+        <table class="report-table">
+            <thead id="reportThead"></thead>
+            <tbody id="reportTbody"></tbody>
+        </table>
+    </div>
+    <div id="reportFooter" style="padding:10px; font-weight:bold; color:#28a745;"></div>
+</div>
+
+<script>
+(function () {
+    const API_BASE = '{{ url_for("api_reports_list") }}';
+    let REPORTS_META = [];
+    let CURRENT_REPORT = null;
+
+    function setStatus(msg, type) {
+        const el = document.getElementById('status');
+        el.textContent = msg;
+        el.className = 'cf-status ' + (type || '');
+    }
+
+    function loadBalancesDashboard() {
+        const wrap = document.getElementById('balancesWrap');
+        if (!wrap) return;
+        fetch(API_BASE + '/account-balances', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status === 401 ? 'يجب تسجيل الدخول' : 'فشل ' + r.status)))
+            .then(d => {
+                if (!d || d.success === false) throw new Error(d && d.message ? d.message : 'فشل');
+                const items = d.items || [];
+                wrap.innerHTML = items.length === 0 ? '<div class="text-muted small">لا توجد حسابات مطابقة.</div>' : '';
+                items.forEach(it => {
+                    const kindLabel = it.kind === 'cash' ? 'رصيد الصندوق' : it.kind === 'bank' ? 'رصيد البنك' : it.kind === 'advance' ? 'رصيد العهد' : 'رصيد';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'report-btn';
+                    btn.style.minWidth = '180px';
+                    btn.innerHTML = '<div class="small text-muted">' + kindLabel + '</div><div class="fw-bold">' + Number(it.balance || 0).toLocaleString(undefined, {minimumFractionDigits:2}) + '</div><div class="small text-muted">' + (it.code || '') + ' - ' + (it.name || '') + '</div>';
+                    btn.onclick = () => openLedgerForAccount(it.guide, it.name || it.code || kindLabel);
+                    wrap.appendChild(btn);
+                });
+            })
+            .catch(e => { wrap.innerHTML = '<div class="text-danger small">' + (e.message || 'خطأ') + '</div>'; });
+    }
+
+    function loadReports() {
+        const wrap = document.getElementById('reportList');
+        setStatus('جاري تحميل...', '');
+        fetch(API_BASE, { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('فشل ' + r.status)))
+            .then(d => {
+                const list = d.reports || [];
+                REPORTS_META = list;
+                wrap.innerHTML = '';
+                list.forEach(r => {
+                    const btn = document.createElement('button');
+                    btn.className = 'report-btn';
+                    btn.textContent = r.name || r.name_ar;
+                    btn.onclick = () => selectReport(r);
+                    wrap.appendChild(btn);
+                });
+                setStatus('تم تحميل ' + list.length + ' تقرير.', 'ok');
+            })
+            .catch(e => { wrap.innerHTML = '<span class="text-danger">' + e.message + '</span>'; setStatus('خطأ', 'err'); });
+    }
+
+    function selectReport(r) {
+        CURRENT_REPORT = r;
+        document.getElementById('resultCard').style.display = 'none';
+        document.getElementById('filtersCard').style.display = 'block';
+        document.getElementById('filterTitle').textContent = 'إعدادات: ' + (r.name || r.name_ar);
+        const params = r.params || [];
+        document.getElementById('f_dates').style.display = params.includes('from_date') ? 'flex' : 'none';
+        document.getElementById('f_account').style.display = params.includes('account_guide') ? 'flex' : 'none';
+        document.getElementById('f_agent').style.display = params.includes('agent_guide') ? 'flex' : 'none';
+        document.getElementById('f_product').style.display = params.includes('product_guide') ? 'flex' : 'none';
+        if (params.includes('from_date')) {
+            const now = new Date();
+            document.getElementById('fromDate').value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+            document.getElementById('toDate').value = now.toISOString().slice(0,10);
+        }
+        if (params.includes('account_guide')) loadOptions('accountGuide', 'general_ledger');
+        if (params.includes('agent_guide')) loadOptions('agentGuide', 'customer_statement');
+        if (params.includes('product_guide')) loadOptions('productGuide', 'item_movement');
+        document.getElementById('btnRun').onclick = () => runCurrentReport();
+        if (params.length === 0) runCurrentReport();
+    }
+
+    function loadOptions(elId, reportId) {
+        const sel = document.getElementById(elId);
+        if (sel.options.length > 1) return;
+        sel.innerHTML = '<option>جاري التحميل...</option>';
+        fetch(API_BASE + '/' + reportId + '/run', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(d => {
+                sel.innerHTML = '<option value="">-- اختر --</option>';
+                if (d.rows) d.rows.forEach(row => {
+                    const op = document.createElement('option');
+                    op.value = row[0];
+                    op.innerText = row.slice(1).join(' - ');
+                    sel.appendChild(op);
+                });
+            })
+            .catch(() => { sel.innerHTML = '<option value="">-- خطأ --</option>'; });
+    }
+
+    function runCurrentReport(extraParams) {
+        if (!CURRENT_REPORT) return;
+        const params = new URLSearchParams();
+        if (document.getElementById('f_dates').style.display !== 'none') {
+            params.append('from_date', document.getElementById('fromDate').value);
+            params.append('to_date', document.getElementById('toDate').value);
+        }
+        ['account_guide','agent_guide','product_guide'].forEach((k,i) => {
+            const sel = document.getElementById(['accountGuide','agentGuide','productGuide'][i]);
+            if (sel && sel.style.display !== 'none' && sel.value) params.append(k, sel.value);
+        });
+        if (extraParams) Object.keys(extraParams).forEach(k => params.set(k, extraParams[k]));
+        setStatus('جاري التشغيل...', '');
+        fetch(API_BASE + '/' + CURRENT_REPORT.id + '/run?' + params.toString(), { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success === false) throw new Error(d.message || 'فشل');
+                if (d.message && !d.rows) { setStatus(d.message, 'err'); return; }
+                renderTable(d.columns, d.rows);
+                setStatus('تم عرض ' + (d.rows ? d.rows.length : 0) + ' سجل.', 'ok');
+            })
+            .catch(e => setStatus('خطأ: ' + e.message, 'err'));
+    }
+
+    function renderTable(cols, rows) {
+        const thead = document.getElementById('reportThead');
+        const tbody = document.getElementById('reportTbody');
+        if (!cols || !rows) return;
+        thead.innerHTML = '<tr>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr>';
+        tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="' + cols.length + '" class="text-center p-4">لا توجد بيانات.</td></tr>' : rows.map(row => '<tr>' + row.map(c => '<td>' + (c !== null ? c : '') + '</td>').join('') + '</tr>').join('');
+        document.getElementById('resultTitle').textContent = CURRENT_REPORT.name || CURRENT_REPORT.name_ar;
+        document.getElementById('reportFooter').textContent = 'العدد: ' + rows.length;
+        document.getElementById('resultCard').style.display = 'block';
+        document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function openLedgerForAccount(guide, name) {
+        if (!guide) return;
+        const now = new Date();
+        const to = now.toISOString().slice(0,10);
+        const from = new Date(now.getTime() - 29*86400000).toISOString().slice(0,10);
+        CURRENT_REPORT = REPORTS_META.find(r => r.id === 'general_ledger') || { id: 'general_ledger', name: 'دفتر الأستاذ', params: ['account_guide','from_date','to_date'] };
+        document.getElementById('filtersCard').style.display = 'block';
+        document.getElementById('resultCard').style.display = 'none';
+        document.getElementById('filterTitle').textContent = 'دفتر الأستاذ: ' + (name || '');
+        document.getElementById('f_dates').style.display = 'flex';
+        document.getElementById('f_account').style.display = 'flex';
+        document.getElementById('f_agent').style.display = 'none';
+        document.getElementById('f_product').style.display = 'none';
+        document.getElementById('fromDate').value = from;
+        document.getElementById('toDate').value = to;
+        const sel = document.getElementById('accountGuide');
+        sel.innerHTML = '<option value="' + guide + '">' + (name || guide) + '</option>';
+        sel.value = guide;
+        document.getElementById('btnRun').onclick = () => runCurrentReport();
+        runCurrentReport({ account_guide: guide, from_date: from, to_date: to });
+    }
+
+    window.closeReport = () => document.getElementById('resultCard').style.display = 'none';
+    window.printReport = () => { const w = window.open('','_blank'); w.document.write('<html dir="rtl"><head><title>' + (document.getElementById('resultTitle').textContent) + '</title><style>body{font-family:sans-serif} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:5px;text-align:right} th{background:#eee}</style></head><body><h2>' + document.getElementById('resultTitle').textContent + '</h2>' + document.querySelector('.result-container').innerHTML + '</body></html>'); w.document.close(); w.print(); };
+    window.exportToExcel = () => {
+        const rows = [Array.from(document.querySelectorAll('#reportThead th')).map(th => th.innerText)];
+        document.querySelectorAll('#reportTbody tr').forEach(tr => { rows.push(Array.from(tr.querySelectorAll('td')).map(td => (t=td.innerText, t.includes(',') ? '"'+t+'"' : t))); });
+        const blob = new Blob(["\uFEFF" + rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'report.csv'; a.click();
+    };
+
+    loadReports();
+    loadBalancesDashboard();
+})();
+</script>
+{% endblock %}

@@ -3197,7 +3197,7 @@ def add_sales_invoice():
 # --- FINANCE ---
 @app.route('/finance/index')
 @login_required
-@role_required(['Manager', 'Finance', 'RecruitmentManager', 'TrainingManager'])
+@role_required(['Manager', 'Finance'])
 def finance_index():
     gen_sales = query_db('SELECT * FROM GeneralSales ORDER BY SaleDate DESC')
     total_gen = sum(x['Amount'] for x in gen_sales) if gen_sales else 0
@@ -3222,6 +3222,188 @@ def finance_index():
                            corp_inv=corp_inv or [], 
                            stud_pay=stud_pay or [],
                            total_gen=total_gen, total_corp=total_corp, total_stud=total_stud, grand_total=grand_total)
+
+# --- التدفق النقدي الزكي + التقارير (من Nuit للمحاسب إسلام) ---
+@app.route('/finance/cashflow')
+@login_required
+@role_required(['Manager', 'Finance'])
+def finance_cashflow_ui():
+    user = {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}
+    return render_template('finance/cashflow_ui.html', user=user)
+
+@app.route('/finance/reports')
+@login_required
+@role_required(['Manager', 'Finance'])
+def finance_reports_page():
+    return render_template('finance/reports_dashboard.html')
+
+# APIs التدفق النقدي
+@app.route('/api/cashflow/accounts/sub')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_accounts_sub():
+    from services.voucher_manager import get_sub_accounts
+    accounts = get_sub_accounts()
+    return jsonify({"accounts": accounts})
+
+@app.route('/api/cashflow/transactions')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_transactions():
+    from services.voucher_manager import get_recent_transactions
+    limit = request.args.get('limit', 30, type=int)
+    data = get_recent_transactions(limit=limit)
+    return jsonify({"ok": True, "data": data})
+
+@app.route('/api/cashflow/transactions', methods=['POST'])
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_create_transaction():
+    from services.voucher_manager import save_voucher_transaction
+    try:
+        payload = request.get_json() or {}
+        if request.form:
+            import json
+            h = request.form.get('header')
+            l = request.form.get('lines')
+            payload = json.loads(h) if h else {}
+            payload['items'] = json.loads(l) if l else []
+        result = save_voucher_transaction(payload)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route('/api/cashflow/agents/search')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_agents_search():
+    from services.voucher_manager import search_agents_quick
+    q = request.args.get('search_text', '').strip()
+    agents = search_agents_quick(q)
+    return jsonify({"agents": agents})
+
+@app.route('/api/cashflow/next-number')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_next_number():
+    from services.voucher_manager import get_next_bond_number, TYPE_RECEIPT, TYPE_PAYMENT
+    t = request.args.get('type', 'DISB')
+    gid = TYPE_PAYMENT if t == 'DISB' else TYPE_RECEIPT
+    n = get_next_bond_number(gid)
+    return jsonify({"next": n})
+
+# APIs التقارير
+REPORTS_META = [
+    {"id": "trial_balance", "name": "ميزان المراجعة", "params": ["from_date", "to_date"]},
+    {"id": "general_ledger", "name": "دفتر الأستاذ العام", "params": ["account_guide", "from_date", "to_date"]},
+    {"id": "customer_statement", "name": "كشف حساب عميل", "params": ["agent_guide", "from_date", "to_date"]},
+    {"id": "item_movement", "name": "تقرير حركة صنف", "params": ["product_guide", "from_date", "to_date"]},
+    {"id": "inventory", "name": "تقرير جرد (مبيعات)", "params": []},
+    {"id": "accounts_list", "name": "قائمة الحسابات", "params": []},
+    {"id": "bonds_list", "name": "قائمة السندات", "params": []},
+    {"id": "entries_list", "name": "قائمة القيود", "params": []},
+]
+
+@app.route('/api/reports')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_reports_list():
+    return jsonify({"reports": REPORTS_META})
+
+def _run_report(report_id, from_date=None, to_date=None, account_guide=None, agent_guide=None, product_guide=None):
+    fd = from_date or "1900-01-01"
+    td = to_date or "2099-12-31"
+    db = get_db()
+    if not db: return {"success": False, "message": "فشل الاتصال"}
+    cur = db.cursor()
+    try:
+        if report_id == "accounts_list":
+            cur.execute("SELECT CardCode, AccountName, LatinName FROM TBL004 WHERE AccountName IS NOT NULL ORDER BY CardCode")
+            rows = cur.fetchall()
+            cols = [c[0] for c in cur.description]
+            return {"success": True, "columns": ["رقم الحساب", "اسم الحساب", "الاسم اللاتيني"], "rows": [[r[0] or "", r[1] or "", r[2] or ""] for r in rows]}
+        if report_id == "trial_balance":
+            cur.execute("""
+                SELECT a.CardCode, a.AccountName, ISNULL(SUM(d.Debit),0) AS TotalDebit, ISNULL(SUM(d.Credit),0) AS TotalCredit,
+                    ISNULL(SUM(d.Debit),0)-ISNULL(SUM(d.Credit),0) AS Balance
+                FROM TBL004 a LEFT JOIN TBL012 d ON d.AccountGuide = a.CardGuide LEFT JOIN TBL011 h ON h.CardGuide = d.MainGuide
+                WHERE a.AccountName IS NOT NULL AND (h.EntryDate IS NULL OR (CONVERT(date, h.EntryDate) >= ? AND CONVERT(date, h.EntryDate) <= ?))
+                GROUP BY a.CardGuide, a.CardCode, a.AccountName
+                HAVING ISNULL(SUM(d.Debit),0) <> 0 OR ISNULL(SUM(d.Credit),0) <> 0
+                ORDER BY a.CardCode
+            """, (fd, td))
+            rows = cur.fetchall()
+            return {"success": True, "columns": ["رقم الحساب", "اسم الحساب", "إجمالي مدين", "إجمالي دائن", "الرصيد"],
+                    "rows": [[r[0] or "", r[1] or "", float(r[2] or 0), float(r[3] or 0), float(r[4] or 0)] for r in rows]}
+        if report_id == "general_ledger":
+            if not account_guide:
+                cur.execute("SELECT TOP 50 CardGuide, CardCode, AccountName FROM TBL004 WHERE AccountName IS NOT NULL ORDER BY CardCode")
+                rows = cur.fetchall()
+                return {"success": True, "columns": ["CardGuide", "رقم الحساب", "اسم الحساب"], "rows": [[str(r[0]), r[1] or "", r[2] or ""] for r in rows], "message": "اختر حساباً لعرض دفتر الأستاذ"}
+            cur.execute("""
+                SELECT h.EntryNumber, FORMAT(h.EntryDate,'yyyy-MM-dd'), h.Notes, d.Description, d.Debit, d.Credit
+                FROM TBL012 d INNER JOIN TBL011 h ON h.CardGuide = d.MainGuide
+                WHERE d.AccountGuide = ? AND CONVERT(date, h.EntryDate) >= ? AND CONVERT(date, h.EntryDate) <= ?
+                ORDER BY h.EntryDate, h.EntryNumber
+            """, (account_guide, fd, td))
+            rows = cur.fetchall()
+            bal = 0.0
+            out = []
+            for r in rows:
+                db_v, cr_v = float(r[4] or 0), float(r[5] or 0)
+                bal += db_v - cr_v
+                out.append([r[0], r[1] or "", r[2] or "", r[3] or "", db_v, cr_v, round(bal, 2)])
+            return {"success": True, "columns": ["رقم القيد", "التاريخ", "ملاحظات", "البيان", "مدين", "دائن", "الرصيد"], "rows": out}
+        if report_id == "bonds_list":
+            cur.execute("SELECT TOP 200 b.BondNumber, FORMAT(b.BondDate,'yyyy-MM-dd'), b.Notes, e.EntryName FROM TBL010 b LEFT JOIN TBL009 e ON e.CardGuide = b.MainGuide ORDER BY b.BondDate DESC")
+            rows = cur.fetchall()
+            return {"success": True, "columns": ["رقم السند", "التاريخ", "ملاحظات", "النوع"], "rows": [[r[0], r[1] or "", r[2] or "", r[3] or ""] for r in rows]}
+        if report_id == "entries_list":
+            cur.execute("SELECT TOP 200 EntryNumber, FORMAT(EntryDate,'yyyy-MM-dd'), Notes FROM TBL011 ORDER BY EntryDate DESC")
+            rows = cur.fetchall()
+            return {"success": True, "columns": ["رقم القيد", "التاريخ", "ملاحظات"], "rows": [[r[0], r[1] or "", r[2] or ""] for r in rows]}
+        return {"success": False, "message": "تقرير غير معروف"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    finally:
+        cur.close()
+
+@app.route('/api/reports/account-balances')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_reports_account_balances():
+    db = get_db()
+    if not db: return jsonify({"success": False, "message": "فشل الاتصال"})
+    try:
+        cur = db.cursor()
+        cur.execute("""
+            SELECT a.CardGuide, a.CardCode, a.AccountName,
+                CASE WHEN a.AccountName LIKE N'%%صندوق%%' THEN N'cash' WHEN a.AccountName LIKE N'%%بنك%%' THEN N'bank' WHEN a.AccountName LIKE N'%%عهد%%' THEN N'advance' ELSE N'other' END AS Kind,
+                ISNULL(SUM(d.Debit),0) - ISNULL(SUM(d.Credit),0) AS Balance
+            FROM TBL004 a LEFT JOIN TBL012 d ON d.AccountGuide = a.CardGuide LEFT JOIN TBL011 h ON h.CardGuide = d.MainGuide
+            WHERE a.AccountName IS NOT NULL AND (a.AccountName LIKE N'%%صندوق%%' OR a.AccountName LIKE N'%%بنك%%' OR a.AccountName LIKE N'%%عهد%%')
+            GROUP BY a.CardGuide, a.CardCode, a.AccountName
+            HAVING ISNULL(SUM(d.Debit),0) <> 0 OR ISNULL(SUM(d.Credit),0) <> 0
+            ORDER BY a.CardCode
+        """)
+        cols = [c[0] for c in cur.description]
+        items = []
+        for r in cur.fetchall():
+            d = dict(zip(cols, r))
+            items.append({"guide": str(d.get("CardGuide","")), "code": str(d.get("CardCode","")), "name": d.get("AccountName",""), "kind": d.get("Kind","other"), "balance": float(d.get("Balance") or 0)})
+        return jsonify({"success": True, "items": items})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+    finally:
+        cur.close()
+
+@app.route('/api/reports/<report_id>/run')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_reports_run(report_id):
+    res = _run_report(report_id, request.args.get('from_date'), request.args.get('to_date'),
+                      request.args.get('account_guide'), request.args.get('agent_guide'), request.args.get('product_guide'))
+    return jsonify(res)
 
 @app.route('/campaigns/create', methods=['GET', 'POST'])
 @login_required
@@ -3904,7 +4086,7 @@ def _create_training_fee_invoice_tbl022_023(cursor, amount, notes, pay_method=0)
 
 @app.route('/training/sales/exam-fee', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'Finance'])
 def training_sales_exam_fee():
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
@@ -4010,7 +4192,7 @@ def training_sales_exam_fee():
 
 @app.route('/training/sales/exam-fee/<int:invoice_id>/print')
 @login_required
-@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager', 'Finance'])
 def training_sales_exam_fee_print(invoice_id):
     inv = query_db("""
         SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I
@@ -4032,7 +4214,7 @@ def training_sales_exam_fee_print(invoice_id):
 
 @app.route('/training/sales/course-fee', methods=['GET', 'POST'])
 @login_required
-@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'Finance'])
 def training_sales_course_fee():
     if request.method == 'POST':
         candidate_id = request.form.get('candidate_id')
@@ -4137,7 +4319,7 @@ def training_sales_course_fee():
 
 @app.route('/training/sales/course-fee/<int:invoice_id>/print')
 @login_required
-@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager'])
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator', 'TrainingManager', 'Finance'])
 def training_sales_course_fee_print(invoice_id):
     inv = query_db("""
         SELECT I.*, C.FullName, C.Phone FROM InvoiceHeaders I

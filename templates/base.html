@@ -498,14 +498,34 @@
             {% endif %}
 
             <!-- ============================================= -->
-            <!-- المالية: للمدير و Finance ومدير التدريب (احصائية الماليات والفواتير) -->
+            <!-- المالية: للمدير والمحاسب (Finance) فقط — ماليات فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Finance', 'TrainingManager']) %}
+            {% if check_role_access(['Manager', 'Finance']) %}
             <div class="sidebar-section-label"><span class="en-bold">Finance</span> <span class="ar-normal">المالية</span></div>
             <a href="{{ url_for('finance_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">
+                <i class="fas fa-tachometer-alt"></i>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">داش بورد المحاسب</span></span>
+            </a>
+            <a href="{{ url_for('finance_cashflow_ui') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_cashflow_ui' else '' }}">
+                <i class="fas fa-wallet"></i>
+                <span class="link-text"><span class="en-bold">Smart CashFlow</span> <span class="ar-normal">التدفق النقدي الزكي</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_exam_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text"><span class="en-bold">Finance</span> <span class="ar-normal">الحسابات</span></span>
+                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_course_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
+                <i class="fas fa-file-invoice"></i>
+                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
+            </a>
+            <a href="{{ url_for('finance_reports_page') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_reports_page' else '' }}">
+                <i class="fas fa-chart-bar"></i>
+                <span class="link-text"><span class="en-bold">Reports</span> <span class="ar-normal">التقارير</span></span>
             </a>
             {% endif %}
 
@@ -689,7 +709,9 @@
                 account_manager_dashboard: { title: 'لوحة مدير الحسابات', body: 'طلبات العملاء، المقابلات، وتسجيل النتائج (مقبول/مرفوض).' },
                 training_index: { title: 'الأكاديمية / التدريب', body: 'إدارة الدورات والمجموعات (Waves). إنشاء Batches وتسجيل الحضور.' },
                 wave_details: { title: 'تفاصيل المجموعة', body: 'عرض الطلاب والتقارير الأسبوعية لهذه المجموعة التدريبية.' },
-                finance_index: { title: 'المالية', body: 'نظرة على إيرادات العملاء والتدريب والفواتير.' },
+                finance_index: { title: 'داش بورد المحاسب', body: 'نظرة على إيرادات العملاء والتدريب والفواتير.' },
+                finance_cashflow_ui: { title: 'التدفق النقدي الزكي', body: 'إضافة سندات قبض وصرف، وعرض آخر السندات.' },
+                finance_reports_page: { title: 'التقارير المالية', body: 'ميزان المراجعة، دفتر الأستاذ، قائمة الحسابات والسندات.' },
                 global_search: { title: 'البحث العام', body: 'ابحث عن مرشح (هاتف)، عميل، أو مجموعة تدريبية من مكان واحد.' },
                 admin_users: { title: 'إدارة المستخدمين', body: 'إضافة وتعديل مستخدمي النظام وصلاحياتهم.' }
             };
