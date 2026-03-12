@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-# ثوابت أنواع السندات
+# ثوابت أنواع السندات (توافق Place 2026 / Nuit)
 TYPE_RECEIPT = "3BCA1E9B-1EE2-460D-B552-252CDD568A55"   # قبض
 TYPE_PAYMENT = "E61AEE0C-193F-498D-8827-5B0977321FF7"   # صرف
+TYPE_JOURNAL = "4E2840D9-BFA3-4D9E-BB18-46B699169045"   # قيد يومية
 DEFAULT_CURRENCY = "48554FE9-C3F9-4BA8-B746-2026E0DEE92B"
 
 def _row_val(row, key, default=None):
@@ -166,35 +167,105 @@ def save_voucher_transaction(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
         if db: db.rollback()
         return {"success": False, "message": str(e)}
 
-def get_recent_transactions(limit: int = 30, conn=None) -> List[Dict[str, Any]]:
-    """آخر السندات من TBL010."""
+def save_journal_entry(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
+    """حفظ قيد يومية (TBL011 رأس + TBL012 تفاصيل)."""
     db = conn or get_conn()
-    if not db: return []
+    if not db: return {"success": False, "message": "لا يوجد اتصال بقاعدة البيانات"}
     try:
         cur = db.cursor()
+        card_guide = str(uuid.uuid4()).upper()
+        try:
+            cur.execute("SELECT MAX(EntryNumber) FROM TBL011")
+            row = cur.fetchone()
+            entry_number = int((row[0] if row else 0) or 0) + 1
+        except Exception:
+            entry_number = 1
+        try:
+            bond_date = datetime.strptime(data.get("date", ""), "%Y-%m-%d")
+        except Exception:
+            bond_date = datetime.now()
+        notes = (data.get("notes") or "").strip()
+        currency = data.get("currency") or DEFAULT_CURRENCY
+        items = data.get("items") or []
         cur.execute("""
-            SELECT TOP (?) t10.CardGuide, t10.BondNumber, t10.BondDate, t10.MainGuide, t10.Notes,
+            INSERT INTO TBL011 (CardGuide, EntryNumber, Rate, EntryDate, CurrencyGuide, Notes)
+            VALUES (?, ?, 1, ?, ?, ?)
+        """, (card_guide, entry_number, bond_date, currency, notes))
+        for item in items:
+            line_acct = resolve_account_guid(item.get("account"), db)
+            if not line_acct:
+                raise ValueError(f"حساب غير صحيح: {item.get('account')}")
+            db_val = float(item.get("db") or 0)
+            cr_val = float(item.get("cr") or 0)
+            cur.execute("""
+                INSERT INTO TBL012 (MainGuide, AccountGuide, CurrencyGuide, Description, Debit, Credit, DebitRate, CreditRate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (card_guide, line_acct, currency, (item.get("desc") or notes)[:500], db_val, cr_val, db_val, cr_val))
+        db.commit()
+        return {"success": True, "message": "تم حفظ القيد بنجاح", "EntryNumber": entry_number, "CardGuide": card_guide}
+    except Exception as e:
+        if db: db.rollback()
+        return {"success": False, "message": str(e)}
+
+
+def get_recent_transactions(limit: int = 30, conn=None) -> List[Dict[str, Any]]:
+    """آخر السندات والقيود من TBL010 (قبض/صرف) + TBL011 (قيد يومية)."""
+    db = conn or get_conn()
+    if not db: return []
+    lim = min(max(1, int(limit)), 100)
+    try:
+        cur = db.cursor()
+        # 1. سندات قبض/صرف (TBL010 + TBL038)
+        cur.execute("""
+            SELECT TOP (?) t10.CardGuide, t10.BondNumber AS Num, t10.BondDate AS Dt, t10.Notes,
                 (SELECT ISNULL(SUM(DebitRate + CreditRate), 0) FROM TBL038 WHERE MainGuide = t10.CardGuide) AS Total,
-                t9.EntryName
+                t9.EntryName AS TypeName
             FROM TBL010 t10
             LEFT JOIN TBL009 t9 ON t10.MainGuide = t9.CardGuide
             ORDER BY t10.BondDate DESC, t10.BondNumber DESC
-        """, (min(max(1, int(limit)), 100),))
+        """, (lim,))
         cols = [c[0] for c in cur.description]
         out = []
         for row in cur.fetchall():
             r = dict(zip(cols, row))
-            dt = r.get("BondDate")
+            dt = r.get("Dt") or r.get("BondDate")
             dt_str = dt.strftime("%Y-%m-%d") if hasattr(dt, "strftime") else str(dt or "")[:10]
             out.append({
                 "CardGuide": str(r.get("CardGuide", "")),
-                "BondNumber": r.get("BondNumber"),
+                "BondNumber": r.get("Num"),
+                "EntryNumber": None,
                 "BondDate": dt_str,
-                "type_name": r.get("EntryName") or "سند",
+                "type_name": r.get("TypeName") or "سند",
                 "Notes": r.get("Notes") or "",
                 "total": float(r.get("Total") or 0),
             })
-        return out
+        # 2. قيود يومية (TBL011 + TBL012)
+        try:
+            cur.execute("""
+                SELECT TOP (?) t11.CardGuide, t11.EntryNumber AS Num, t11.EntryDate AS Dt,
+                    (SELECT ISNULL(SUM(DebitRate + CreditRate), 0) FROM TBL012 WHERE MainGuide = t11.CardGuide) AS Total,
+                    N'قيد يومية' AS TypeName, 'journal' AS Source
+                FROM TBL011 t11
+                ORDER BY t11.EntryDate DESC, t11.EntryNumber DESC
+            """, (lim,))
+            cols2 = [c[0] for c in cur.description]
+            for row in cur.fetchall():
+                r = dict(zip(cols2, row))
+                dt = r.get("Dt")
+                dt_str = dt.strftime("%Y-%m-%d") if hasattr(dt, "strftime") else str(dt or "")[:10]
+                out.append({
+                    "CardGuide": str(r.get("CardGuide", "")),
+                    "BondNumber": None,
+                    "EntryNumber": r.get("Num"),
+                    "BondDate": dt_str,
+                    "type_name": r.get("TypeName") or "قيد يومية",
+                    "Notes": "",
+                    "total": float(r.get("Total") or 0),
+                })
+        except Exception:
+            pass  # TBL011/TBL012 قد لا تكون موجودة
+        out.sort(key=lambda x: (x.get("BondDate") or x.get("EntryDate", ""), x.get("BondNumber") or x.get("EntryNumber") or 0), reverse=True)
+        return out[:lim]
     except Exception:
         return []
 

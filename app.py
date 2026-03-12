@@ -3313,7 +3313,7 @@ def api_cashflow_transactions():
 @login_required
 @role_required(['Manager', 'Finance'])
 def api_cashflow_create_transaction():
-    from services.voucher_manager import save_voucher_transaction
+    from services.voucher_manager import save_voucher_transaction, save_journal_entry
     try:
         payload = request.get_json() or {}
         if request.form:
@@ -3322,7 +3322,11 @@ def api_cashflow_create_transaction():
             l = request.form.get('lines')
             payload = json.loads(h) if h else {}
             payload['items'] = json.loads(l) if l else []
-        result = save_voucher_transaction(payload)
+        v_type = payload.get('type', 'DISB')
+        if v_type == 'JRNL':
+            result = save_journal_entry(payload)
+        else:
+            result = save_voucher_transaction(payload)
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 400
