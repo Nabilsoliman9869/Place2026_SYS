@@ -3364,7 +3364,13 @@ def api_cashflow_next_number():
 @login_required
 @role_required(['Manager', 'Finance'])
 def api_currencies():
-    return jsonify({"currencies": [{"CardGuide": "48554FE9-C3F9-4BA8-B746-2026E0DEE92B", "CurrencyName": "ريال سعودي", "Rate": 1}]})
+    from services.voucher_manager import get_currencies, get_default_currency
+    rows = get_currencies()
+    if not rows:
+        return jsonify({"currencies": [{"CardGuide": get_default_currency(), "CurrencyName": "ريال سعودي", "Rate": 1}]})
+    return jsonify({
+        "currencies": [{"CardGuide": str(r.get("CardGuide", "")), "CurrencyName": r.get("CurrencyName", ""), "Rate": float(r.get("Rate") or 1)} for r in rows]
+    })
 
 @app.route('/api/cashflow/config', methods=['GET', 'POST'])
 @login_required
