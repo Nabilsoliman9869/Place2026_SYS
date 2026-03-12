@@ -270,6 +270,8 @@
         </div>
 
         <div class="sidebar-nav">
+            <!-- إسلام/المحاسب: المالية فقط — بدون Marketing/Sales/Account Mgmt/Allocation/Recruitment/Training/Talent/Admin -->
+            {% if not is_accountant_sidebar() %}
             <a href="{{ url_for('dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'dashboard' else '' }}">
                 <i class="fas fa-home"></i>
@@ -324,6 +326,41 @@
             <a href="{{ url_for('create_ad_campaign') }}" class="nav-link">
                 <i class="fas fa-bullhorn"></i>
                 <span class="link-text"><span class="en-bold">Campaigns</span> <span class="ar-normal">حملات</span></span>
+            </a>
+            {% endif %}
+
+            <!-- نهاية ما يراه غير المحاسب: Dashboard, Marketing, Sales, Account Management -->
+            {% endif %}
+
+            <!-- ============================================= -->
+            <!-- المالية: للمدير والمحاسب (Finance) فقط — يظهر بعد Account Management -->
+            <!-- ============================================= -->
+            {% if check_role_access(['Manager', 'Finance']) %}
+            <div class="sidebar-section-label"><span class="en-bold">Finance</span> <span class="ar-normal">المالية</span></div>
+            <a href="{{ url_for('finance_index') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">
+                <i class="fas fa-tachometer-alt"></i>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">داش بورد المحاسب</span></span>
+            </a>
+            <a href="{{ url_for('finance_cashflow_ui') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_cashflow_ui' else '' }}">
+                <i class="fas fa-wallet"></i>
+                <span class="link-text"><span class="en-bold">Smart CashFlow</span> <span class="ar-normal">التدفق النقدي الزكي</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_exam_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_course_fee') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
+                <i class="fas fa-file-invoice"></i>
+                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
+            </a>
+            <a href="{{ url_for('finance_reports_page') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'finance_reports_page' else '' }}">
+                <i class="fas fa-chart-bar"></i>
+                <span class="link-text"><span class="en-bold">Reports</span> <span class="ar-normal">التقارير</span></span>
             </a>
             {% endif %}
 
@@ -495,38 +532,6 @@
                 <span class="link-text"><span class="en-bold">Conduct Tests</span> <span class="ar-normal">اختبارات توظيف</span></span>
             </a>
             {% endif %}
-            {% endif %}
-
-            <!-- ============================================= -->
-            <!-- المالية: للمدير والمحاسب (Finance) فقط — ماليات فقط -->
-            <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Finance']) %}
-            <div class="sidebar-section-label"><span class="en-bold">Finance</span> <span class="ar-normal">المالية</span></div>
-            <a href="{{ url_for('finance_index') }}"
-                class="nav-link {{ 'active' if request.endpoint == 'finance_index' else '' }}">
-                <i class="fas fa-tachometer-alt"></i>
-                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">داش بورد المحاسب</span></span>
-            </a>
-            <a href="{{ url_for('finance_cashflow_ui') }}"
-                class="nav-link {{ 'active' if request.endpoint == 'finance_cashflow_ui' else '' }}">
-                <i class="fas fa-wallet"></i>
-                <span class="link-text"><span class="en-bold">Smart CashFlow</span> <span class="ar-normal">التدفق النقدي الزكي</span></span>
-            </a>
-            <a href="{{ url_for('training_sales_exam_fee') }}"
-                class="nav-link {{ 'active' if request.endpoint == 'training_sales_exam_fee' else '' }}">
-                <i class="fas fa-file-invoice-dollar"></i>
-                <span class="link-text"><span class="en-bold">Exam Fee</span> <span class="ar-normal">تحصيل رسوم امتحان</span></span>
-            </a>
-            <a href="{{ url_for('training_sales_course_fee') }}"
-                class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
-                <i class="fas fa-file-invoice"></i>
-                <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
-            </a>
-            <a href="{{ url_for('finance_reports_page') }}"
-                class="nav-link {{ 'active' if request.endpoint == 'finance_reports_page' else '' }}">
-                <i class="fas fa-chart-bar"></i>
-                <span class="link-text"><span class="en-bold">Reports</span> <span class="ar-normal">التقارير</span></span>
-            </a>
             {% endif %}
 
             <!-- ============================================= -->

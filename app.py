@@ -163,6 +163,14 @@ def check_role_access(required_roles):
 # Register for Jinja templates
 app.jinja_env.globals.update(check_role_access=check_role_access)
 
+def is_accountant_sidebar():
+    """إسلام أو المحاسب: يرى المالية فقط — بدون Marketing/Sales/Account Mgmt/Allocation/Recruitment/Training/Talent/Admin"""
+    if g.user is None: return False
+    if g.user.get('Role') == 'Finance': return True
+    if (g.user.get('Username') or '').strip().lower() == 'islam': return True
+    return False
+app.jinja_env.globals.update(is_accountant_sidebar=is_accountant_sidebar)
+
 # --- Finance & Blocking Logic Helpers ---
 def get_student_balance(candidate_id, batch_id):
     # Calculate Total Fee vs Total Paid
@@ -868,6 +876,7 @@ def login():
             session.clear()
             session['user_id'] = user['UserID']
             session['role'] = user['Role']
+            session['username'] = (user.get('Username') or '').strip()
             uc = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in dict(user).items()}
             session['_user_cache'] = {'id': user['UserID'], 'user': uc, 't': time.time()}
             return redirect(url_for('dashboard'))
@@ -1326,6 +1335,7 @@ def dashboard():
     # --- 4b. Marketing & Finance (حسب الهيكل) ---
     if role == 'Marketing': return redirect(url_for('daily_marketing_sheet'))
     if role == 'Finance': return redirect(url_for('finance_index'))
+    if (g.user.get('Username') or '').strip().lower() == 'islam': return redirect(url_for('finance_index'))
     
     # --- 5. Training Department ---
     if role in ['TrainingSales', 'TrainingSalesCoordinator']: return redirect(url_for('training_sales_dashboard'))
