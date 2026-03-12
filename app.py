@@ -3233,13 +3233,42 @@ def finance_index():
                            stud_pay=stud_pay or [],
                            total_gen=total_gen, total_corp=total_corp, total_stud=total_stud, grand_total=grand_total)
 
-# --- التدفق النقدي الزكي + التقارير (من Nuit للمحاسب إسلام) ---
+# --- التدفق النقدي الزكي + التقارير (من Nuit — مسار معفى: يفتح الصفحة مباشرة، دخول مدمج إن لزم) ---
 @app.route('/finance/cashflow')
-@login_required
-@role_required(['Manager', 'Finance'])
 def finance_cashflow_ui():
-    user = {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}
+    """مثل Nuit: الصفحة تفتح مباشرة. إن لم يكن المستخدم مسجلاً تظهر طبقة دخول مدمجة داخل الصفحة."""
+    user = None
+    if g.user:
+        user = {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}
     return render_template('finance/cashflow_ui_nuit.html', user=user)
+
+
+@app.route('/api/cashflow/login', methods=['POST'])
+def api_cashflow_login():
+    """لوجن شاشة الصرف والقبض — نفس حسابات اللوجن الرئيسي (مثل Nuit). معفى من login_required."""
+    try:
+        data = request.get_json() or {}
+        username = (data.get('username') or '').strip().replace('\ufeff', '')
+        password = (data.get('password') or '').strip()
+        if not username:
+            return jsonify({"ok": False, "msg": "اسم المستخدم مطلوب"})
+        user = query_db('SELECT * FROM Users_1 WHERE LOWER(RTRIM(Username)) = LOWER(?)', (username,), one=True)
+        if not user or user['Password'] != password:
+            return jsonify({"ok": False, "msg": "خطأ في اسم المستخدم أو كلمة المرور"})
+        session.clear()
+        session['user_id'] = user['UserID']
+        session['role'] = user['Role']
+        session['username'] = (user.get('Username') or '').strip()
+        return jsonify({
+            "ok": True,
+            "user": {
+                "id": user['UserID'],
+                "name": (user.get('FullName') or user.get('Username') or '').strip(),
+                "role": user.get('Role', 'Finance')
+            }
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
 
 @app.route('/finance/reports')
 @login_required
@@ -3249,8 +3278,10 @@ def finance_reports_page():
 
 # APIs التدفق النقدي — توافق Nuit
 @app.route('/api/cashflow/me')
-@login_required
 def api_cashflow_me():
+    """مثل Nuit: يعيد المستخدم إن وجد، و 401 JSON إن لم يكن مسجلاً (لا redirect)."""
+    if not g.user:
+        return jsonify({"ok": False, "msg": "غير مسجل"}), 401
     return jsonify({"ok": True, "user": {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}})
 
 @app.route('/api/accounts/sub')

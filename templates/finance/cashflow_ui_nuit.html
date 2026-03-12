@@ -710,8 +710,8 @@
     </style>
 
     <div class="cf-wrapper" style="background:#0b1020">
-        <!-- Login Overlay -->
-        <div class="loginOverlay" id="loginOverlay">
+        <!-- Login Overlay (يُخفى تلقائياً عند وجود المستخدم من الخادم) -->
+        <div class="loginOverlay {{ 'hidden' if user else '' }}" id="loginOverlay">
             <div class="loginCard">
                 <h2 style="font-size:18px; margin-bottom:16px">تسجيل الدخول — الصرف والقبض</h2>
                 <div class="field">
