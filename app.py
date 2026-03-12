@@ -3239,7 +3239,7 @@ def finance_index():
 @role_required(['Manager', 'Finance'])
 def finance_cashflow_ui():
     user = {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}
-    return render_template('finance/cashflow_ui.html', user=user)
+    return render_template('finance/cashflow_ui_nuit.html', user=user)
 
 @app.route('/finance/reports')
 @login_required
@@ -3247,7 +3247,20 @@ def finance_cashflow_ui():
 def finance_reports_page():
     return render_template('finance/reports_dashboard.html')
 
-# APIs التدفق النقدي
+# APIs التدفق النقدي — توافق Nuit
+@app.route('/api/cashflow/me')
+@login_required
+def api_cashflow_me():
+    return jsonify({"ok": True, "user": {"id": session.get('user_id'), "name": (g.user or {}).get('FullName') or (g.user or {}).get('Username', ''), "role": (g.user or {}).get('Role', 'Finance')}})
+
+@app.route('/api/accounts/sub')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_accounts_sub_alias():
+    from services.voucher_manager import get_sub_accounts
+    accounts = get_sub_accounts()
+    return jsonify({"accounts": accounts})
+
 @app.route('/api/cashflow/accounts/sub')
 @login_required
 @role_required(['Manager', 'Finance'])
@@ -3301,6 +3314,33 @@ def api_cashflow_next_number():
     gid = TYPE_PAYMENT if t == 'DISB' else TYPE_RECEIPT
     n = get_next_bond_number(gid)
     return jsonify({"next": n})
+
+@app.route('/api/currencies')
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_currencies():
+    return jsonify({"currencies": [{"CardGuide": "48554FE9-C3F9-4BA8-B746-2026E0DEE92B", "CurrencyName": "ريال سعودي", "Rate": 1}]})
+
+@app.route('/api/cashflow/config', methods=['GET', 'POST'])
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_cashflow_config():
+    uid = str(session.get('user_id', ''))
+    if request.method == 'GET':
+        try:
+            from services.voucher_manager import get_cashflow_config
+            cfg = get_cashflow_config(uid)
+            return jsonify({"config": cfg or {}})
+        except Exception:
+            return jsonify({"config": {}})
+    try:
+        cfg = request.get_json() or {}
+        cfg = cfg.get('config', cfg)
+        from services.voucher_manager import save_cashflow_config
+        save_cashflow_config(uid, cfg)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)}), 400
 
 # APIs التقارير
 REPORTS_META = [

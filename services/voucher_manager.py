@@ -131,7 +131,7 @@ def save_voucher_transaction(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
             bond_date = datetime.now()
         notes = data.get("notes") or ""
         ref = data.get("ref") or ""
-        header_acct = resolve_account_guid(data.get("mainAccount"), db)
+        header_acct = resolve_account_guid(data.get("mainAccount") or data.get("mainAcct"), db)
         if not header_acct:
             return {"success": False, "message": "الحساب الرئيسي غير صحيح"}
         currency = data.get("currency") or DEFAULT_CURRENCY
@@ -197,6 +197,48 @@ def get_recent_transactions(limit: int = 30, conn=None) -> List[Dict[str, Any]]:
         return out
     except Exception:
         return []
+
+def get_cashflow_config(user_id: str, conn=None) -> Optional[Dict]:
+    """جلب ConfigJson من CashflowUserConfig."""
+    db = conn or get_conn()
+    if not db: return None
+    try:
+        cur = db.cursor()
+        cur.execute("SELECT ConfigJson FROM CashflowUserConfig WHERE UserId = ?", (str(user_id or "").strip(),))
+        row = cur.fetchone()
+        if not row: return None
+        raw = row[0] if isinstance(row, (tuple, list)) else (row.get("ConfigJson") if isinstance(row, dict) else None)
+        if not raw: return None
+        import json
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+
+def save_cashflow_config(user_id: str, config: Dict, conn=None) -> bool:
+    """حفظ ConfigJson في CashflowUserConfig (يتطلب تشغيل scripts/create_cashflow_config_table.sql)."""
+    db = conn or get_conn()
+    if not db: return False
+    try:
+        import json
+        uid = str(user_id or "").strip()
+        js = json.dumps(config or {}, ensure_ascii=False)
+        cur = db.cursor()
+        try:
+            cur.execute("UPDATE CashflowUserConfig SET ConfigJson = ?, UpdatedAt = GETDATE() WHERE UserId = ?", (js, uid))
+            if cur.rowcount and cur.rowcount > 0:
+                db.commit()
+                return True
+            cur.execute("INSERT INTO CashflowUserConfig (UserId, ConfigJson, UpdatedAt) VALUES (?, ?, GETDATE())", (uid, js))
+            db.commit()
+            return True
+        except Exception as tbl_err:
+            if "CashflowUserConfig" in str(tbl_err) or "Invalid object" in str(tbl_err):
+                pass  # Table may not exist
+            raise
+    except Exception:
+        try: db.rollback()
+        except: pass
+        return False
 
 def search_agents_quick(search_text: str, conn=None) -> List[Dict[str, Any]]:
     """بحث العملاء من TBL016."""

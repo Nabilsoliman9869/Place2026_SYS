@@ -1,6 +1,8 @@
 {% extends 'base.html' %}
-{% block page_title %}التقارير المالية{% endblock %}
+{% block page_title %}التقارير المالية والمخزنية{% endblock %}
 {% block content %}
+<!-- نسخة من Nuit — أرصدة سريعة، قائمة تقارير، ثيم داكن -->
+<div class="reports-page-dark" style="background:#0b1020;min-height:calc(100vh - 100px);margin:-20px -20px -20px -20px;padding:20px;color:#e8eeff">
 <style>
     .cf-status { margin-bottom: 12px; font-size: 0.9rem; }
     .cf-status.ok { color: #28a745; }
@@ -9,7 +11,9 @@
     .report-card h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #eee; font-size: 1rem; color: #2c3e50; }
     .report-list { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; }
     .report-btn { padding: 12px 20px; border: 1px solid #dee2e6; border-radius: 8px; background: #f8f9fa; color: #212529; cursor: pointer; transition: all 0.2s; min-width: 150px; text-align: center; font-weight: 600; }
-    .report-btn:hover { background: #3498db; color: #fff; border-color: #3498db; transform: translateY(-2px); }
+    .report-btn:hover { background: #7c5cff; color: #fff; border-color: #7c5cff; transform: translateY(-2px); }
+    .report-card { background: rgba(16,26,51,0.9); border-color: rgba(255,255,255,0.08); }
+    .report-btn { background: rgba(11,16,32,0.5); color: #e8eeff; }
     .filters { padding: 16px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
     .filter-item { display: flex; flex-direction: column; gap: 5px; }
     .filter-item label { font-size: 0.8rem; color: #6c757d; }
@@ -260,4 +264,5 @@
     loadBalancesDashboard();
 })();
 </script>
+</div>
 {% endblock %}
