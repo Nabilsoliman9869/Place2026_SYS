@@ -1,10 +1,9 @@
-{% extends "base.html" %}
+{% extends "layout_cashflow.html" %}
 
-{% block page_title %}التدفق النقدي الزكي — Smart CashFlow{% endblock %}
+{% block title %}التدفق النقدي الزكي — Smart CashFlow{% endblock %}
 {% block content %}
-<!-- نسخة كاملة من Nuit ERP — المعالَج الذكي، أوامر صوتية، عمليات مفضلة، ثيم داكن -->
-<div dir="rtl" class="cf-page-dark" style="background:#0b1020;min-height:calc(100vh - 100px);margin:-20px -20px -20px -20px;padding:20px;">
-<div class="font-sans">
+<!-- قالب مستقل بدون Turbo — مثل Nuit بالضبط، الأزرار تعمل -->
+<div dir="rtl" class="font-sans" style="min-height:100vh; padding:20px;">
     <style>
         :root {
             --bg: #0b1020;
@@ -592,13 +591,14 @@
             text-overflow: ellipsis;
         }
 
-        width: 100%;
-        max-width: 400px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .03));
-        border: 1px solid var(--line);
-        border-radius: var(--r);
-        padding: 24px;
-        box-shadow: var(--shadow);
+        .loginCard {
+            width: 100%;
+            max-width: 400px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .03));
+            border: 1px solid var(--line);
+            border-radius: var(--r);
+            padding: 24px;
+            box-shadow: var(--shadow);
         }
 
         @media print {
@@ -1108,7 +1108,6 @@
         </div>
     </div>
 </div>
-</div>
 
 <script>
     window.__SCF_SERVER_USER__ = {{ (user | tojson) if user else 'null' }};
@@ -1176,11 +1175,7 @@
         }
     }
 
-    // يعمل مع التحميل الكامل و Turbo — منع التشغيل المزدوج
-    let _booted = false;
-    function runBootstrap() { if (!_booted) { _booted = true; bootstrap(); } }
-    document.addEventListener('DOMContentLoaded', runBootstrap);
-    document.addEventListener('turbo:load', runBootstrap);
+    document.addEventListener('DOMContentLoaded', () => { bootstrap(); });
 
     async function fetchCurrencies() {
         try {
@@ -1366,8 +1361,8 @@
     }
 
     function bindEvents() {
-        // --- تفويض الأحداث (Event Delegation) للأزرار — مثل Nuit بالكامل ---
-        if (el('loginBtn')) el('loginBtn').onclick = async () => {
+        // --- نفس Nuit بالضبط: ربط مباشر بدون Turbo ---
+        el('loginBtn').onclick = async () => {
             const usr = el('loginUser').value;
             const pwd = el('loginPass').value;
             if (!usr) return;
@@ -1390,18 +1385,15 @@
                 el('loginError').innerText = 'خطأ اتصال أو بيانات خاطئة';
             }
         };
-        el('logoutBtn').onclick = () => {
-            location.href = '/logout';
-        };
-
+        el('logoutBtn').onclick = () => { location.href = '/logout'; };
         if (el('dashBtn')) el('dashBtn').onclick = () => { location.href = '{{ url_for("finance_index") }}'; };
 
-        const b1 = el('btnNext1'); if (b1) b1.onclick = () => goStep(2);
-        const br = el('btnReset'); if (br) br.onclick = resetAll;
-        const b2 = el('btnNext2'); if (b2) b2.onclick = () => goStep(3);
-        const bb2 = el('btnBack2'); if (bb2) bb2.onclick = () => goStep(1);
-        const b3 = el('btnNext3'); if (b3) b3.onclick = () => goStep(4);
-        const bb3 = el('btnBack3'); if (bb3) bb3.onclick = () => goStep(2);
+        el('btnNext1').onclick = () => goStep(2);
+        el('btnReset').onclick = resetAll;
+        el('btnNext2').onclick = () => goStep(3);
+        el('btnBack2').onclick = () => goStep(1);
+        el('btnNext3').onclick = () => goStep(4);
+        el('btnBack3').onclick = () => goStep(2);
 
         // Agent Search (تحميل العميل من TBL016 في رأس السند)
         el('vAgent').oninput = async (e) => {
@@ -1424,35 +1416,31 @@
             } catch (e) { }
         };
 
-        const ba = el('btnAddLine'); if (ba) ba.onclick = addLine;
-        const b4 = el('btnNext4'); if (b4) b4.onclick = () => { buildJson(); goStep(5); };
-        const bb4 = el('btnBack4'); if (bb4) bb4.onclick = () => goStep(3);
-        const bsub = el('btnSubmit'); if (bsub) bsub.onclick = submitVoucher;
-        const bb5 = el('btnBack5'); if (bb5) bb5.onclick = () => goStep(4);
+        el('btnAddLine').onclick = addLine;
+        el('btnNext4').onclick = () => { buildJson(); goStep(5); };
+        el('btnBack4').onclick = () => goStep(3);
+        el('btnSubmit').onclick = submitVoucher;
+        el('btnBack5').onclick = () => goStep(4);
 
-        // تفويض الأحداث للنوع (صرف/قبض/قيد) — يعمل حتى مع Turbo أو تأخير التحميل
-        const step1 = el('step1');
-        if (step1) step1.addEventListener('click', function typeTileClick(e) {
-            const t = e.target.closest('.tile[data-act="type"]');
-            if (!t) return;
-            els('.tile[data-act="type"]').forEach(x => x.classList.remove('active'));
-            t.classList.add('active');
-            state.data.type = t.dataset.val;
-            if (state.data.type === 'JRNL') setTimeout(() => goStep(3), 200);
-            else setTimeout(() => goStep(2), 200);
+        // النوع: صرف / قبض / قيد — نفس Nuit
+        els('.tile[data-act="type"]').forEach(t => {
+            t.onclick = () => {
+                els('.tile[data-act="type"]').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                state.data.type = t.dataset.val;
+                if (state.data.type === 'JRNL') setTimeout(() => goStep(3), 200);
+                else setTimeout(() => goStep(2), 200);
+            };
         });
-        const step2 = el('step2');
-        if (step2) step2.addEventListener('click', function channelTileClick(e) {
-            const t = e.target.closest('.tile[data-act="channel"]');
-            if (!t) return;
-            els('.tile[data-act="channel"]').forEach(x => x.classList.remove('active'));
-            t.classList.add('active');
-            state.data.channel = t.dataset.val;
-            renderAccountSelect();
+        els('.tile[data-act="channel"]').forEach(t => {
+            t.onclick = () => {
+                els('.tile[data-act="channel"]').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                state.data.channel = t.dataset.val;
+                renderAccountSelect();
+            };
         });
-        // Auto-advance on Account Selection?
-        const ap = el('accountPick');
-        if (ap) ap.onchange = () => {
+        el('accountPick').onchange = () => {
             // If channel is NOT Bank, we can go next.
             // If Bank, we wait for Subtype.
             if (state.data.channel !== 'BANK') {
@@ -1470,11 +1458,11 @@
             };
         });
 
-        const sb = el('settingsBtn'); if (sb) sb.onclick = () => { el('settingsBackdrop').classList.add('show'); el('settingsDrawer').classList.add('show'); };
-        const closeSet = () => { const bd = el('settingsBackdrop'); const sd = el('settingsDrawer'); if (bd) bd.classList.remove('show'); if (sd) sd.classList.remove('show'); };
-        const cs = el('closeSettings'); if (cs) cs.onclick = closeSet;
-        const bd = el('settingsBackdrop'); if (bd) bd.onclick = closeSet;
-        const ss = el('saveSettings'); if (ss) ss.onclick = () => {
+        el('settingsBtn').onclick = () => { el('settingsBackdrop').classList.add('show'); el('settingsDrawer').classList.add('show'); };
+        const closeSet = () => { el('settingsBackdrop').classList.remove('show'); el('settingsDrawer').classList.remove('show'); };
+        el('closeSettings').onclick = closeSet;
+        el('settingsBackdrop').onclick = closeSet;
+        el('saveSettings').onclick = () => {
             parseSettingsUI();
             ensureReceiptPaymentQuickButtons();
             try { localStorage.setItem(configKey(), JSON.stringify(state.config)); } catch (e) { }
@@ -1484,7 +1472,7 @@
             renderAccountSelect();
             if (el('favButtons')) renderFavorites();
         };
-        const brf = el('btnRefreshList'); if (brf) brf.onclick = fetchRecent;
+        el('btnRefreshList').onclick = fetchRecent;
     }
 
     function getCurrentQuickButtons() {
