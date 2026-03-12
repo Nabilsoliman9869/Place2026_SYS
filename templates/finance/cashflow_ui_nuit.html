@@ -1684,6 +1684,11 @@
         if (ch === 'CASH') list = (cfg && cfg.cash && cfg.cash.length) ? cfg.cash : state.config.cash;
         else if (ch === 'BANK') list = (cfg && cfg.bank && cfg.bank.length) ? cfg.bank : state.config.bank;
         else if (ch === 'ADV') list = (cfg && cfg.adv && cfg.adv.length) ? cfg.adv : state.config.adv;
+        // مثل Nuit: إن كانت القائمة فارغة استخدم common أو كل الحسابات
+        if (!list || list.length === 0) {
+            list = (state.config.common && state.config.common.length) ? state.config.common
+                : (state.allAccounts && state.allAccounts.length) ? state.allAccounts.map(mapAcct) : [];
+        }
         list.forEach(item => {
             const opt = document.createElement('option');
             opt.value = item.code;

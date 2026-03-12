@@ -36,16 +36,18 @@ def get_conn():
         return None
 
 def get_sub_accounts(conn=None) -> List[Dict[str, Any]]:
-    """دليل الحسابات الفرعية (TBL004)."""
+    """دليل الحسابات (TBL004) — مثل Nuit: يعيد كل الحسابات القابلة للاستخدام."""
     db = conn or get_conn()
     if not db: return []
     try:
         cur = db.cursor()
+        # محاولة الحسابات الفرعية أولاً، إن لم يوجد فكل الحسابات
         cur.execute("""
             SELECT CardGuide, AccountName, CardCode, MainAccount
             FROM TBL004
-            WHERE CardGuide <> MainAccount AND AccountName IS NOT NULL
-            ORDER BY CardCode
+            WHERE (AccountName IS NOT NULL AND RTRIM(AccountName) <> '')
+               OR (CardCode IS NOT NULL AND RTRIM(CAST(CardCode AS NVARCHAR(50))) <> '')
+            ORDER BY CardCode, AccountName
         """)
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
