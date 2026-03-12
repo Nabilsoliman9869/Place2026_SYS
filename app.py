@@ -3288,17 +3288,27 @@ def api_cashflow_me():
 @login_required
 @role_required(['Manager', 'Finance'])
 def api_accounts_sub_alias():
-    from services.voucher_manager import get_sub_accounts
-    accounts = get_sub_accounts()
-    return jsonify({"accounts": accounts})
+    from services.voucher_manager import get_head_accounts, get_detail_accounts
+    head = get_head_accounts()
+    detail = get_detail_accounts()
+    return jsonify({
+        "headAccounts": head,
+        "detailAccounts": detail,
+        "accounts": head if head else detail  # توافق مع الكود القديم
+    })
 
 @app.route('/api/cashflow/accounts/sub')
 @login_required
 @role_required(['Manager', 'Finance'])
 def api_cashflow_accounts_sub():
-    from services.voucher_manager import get_sub_accounts
-    accounts = get_sub_accounts()
-    return jsonify({"accounts": accounts})
+    from services.voucher_manager import get_head_accounts, get_detail_accounts
+    head = get_head_accounts()
+    detail = get_detail_accounts()
+    return jsonify({
+        "headAccounts": head,
+        "detailAccounts": detail,
+        "accounts": head if head else detail  # توافق مع الكود القديم
+    })
 
 @app.route('/api/cashflow/transactions')
 @login_required

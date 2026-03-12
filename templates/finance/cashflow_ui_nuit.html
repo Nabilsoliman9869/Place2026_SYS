@@ -1127,6 +1127,8 @@
             quickButtons: Array(20).fill(null)
         },
         allAccounts: [],
+        headAccounts: [],
+        detailAccounts: [],
         user: null,
         isInternalTransfer: false
     };
@@ -1208,9 +1210,12 @@
             const r = await fetch('/api/accounts/sub', { credentials: 'same-origin' });
             if (!r.ok) { if (r.status === 401) showLogin(); return; }
             const j = await r.json();
-            if (j.accounts) {
-                state.allAccounts = j.accounts;
+            // رؤوس الحسابات (الحساب/الصندوق) + حسابات التفاصيل (تفاصيل القيد) — مثل Nuit
+            state.headAccounts = j.headAccounts || [];
+            state.detailAccounts = j.detailAccounts || [];
+            state.allAccounts = state.headAccounts.length ? state.headAccounts : (j.accounts || state.detailAccounts);
 
+            if (state.headAccounts.length || state.detailAccounts.length || (j.accounts && j.accounts.length)) {
                 ensureReceiptPaymentQuickButtons();
                 var hasStoredConfig = localStorage.getItem(configKey());
                 var serverCfg = (state.user && state.user.id) ? await fetchConfigFromServer() : null;
@@ -1220,10 +1225,11 @@
                     try { localStorage.setItem(configKey(), JSON.stringify(state.config)); } catch (e) { }
                     updateSettingsUI();
                 } else if (!hasStoredConfig) {
-                    state.config.cash = state.allAccounts.filter(a => a.AccountName.includes('صندوق') || a.AccountName.includes('نقدية')).map(mapAcct);
-                    state.config.bank = state.allAccounts.filter(a => a.AccountName.includes('بنك') || a.AccountName.includes('مصرف')).map(mapAcct);
-                    state.config.adv = state.allAccounts.filter(a => a.AccountName.includes('عهدة')).map(mapAcct);
-                    state.config.common = state.allAccounts.slice(0, 50).map(mapAcct);
+                    var src = state.headAccounts.length ? state.headAccounts : state.allAccounts;
+                    state.config.cash = src.filter(a => a.AccountName.includes('صندوق') || a.AccountName.includes('نقدية')).map(mapAcct);
+                    state.config.bank = src.filter(a => a.AccountName.includes('بنك') || a.AccountName.includes('مصرف')).map(mapAcct);
+                    state.config.adv = src.filter(a => a.AccountName.includes('عهدة')).map(mapAcct);
+                    state.config.common = src.slice(0, 50).map(mapAcct);
                     if (state.config.receipt) { state.config.receipt.cash = state.config.cash.slice(); state.config.receipt.bank = state.config.bank.slice(); state.config.receipt.adv = state.config.adv.slice(); state.config.receipt.common = state.config.common.slice(); }
                     if (state.config.payment) { state.config.payment.cash = state.config.cash.slice(); state.config.payment.bank = state.config.bank.slice(); state.config.payment.adv = state.config.adv.slice(); state.config.payment.common = state.config.common.slice(); }
                     updateSettingsUI();
@@ -1234,7 +1240,7 @@
                 }
 
                 buildDatalist();
-                toast('تم تحميل ' + state.allAccounts.length + ' حساب بنجاح', 'ok');
+                toast('تم تحميل ' + (state.headAccounts.length + state.detailAccounts.length) + ' حساب بنجاح', 'ok');
             }
         } catch (e) {
             toast('فشل تحميل الحسابات: ' + e.message, 'bad');
@@ -1687,6 +1693,7 @@
         // مثل Nuit: إن كانت القائمة فارغة استخدم common أو كل الحسابات
         if (!list || list.length === 0) {
             list = (state.config.common && state.config.common.length) ? state.config.common
+                : (state.headAccounts && state.headAccounts.length) ? state.headAccounts.map(mapAcct)
                 : (state.allAccounts && state.allAccounts.length) ? state.allAccounts.map(mapAcct) : [];
         }
         list.forEach(item => {
@@ -1868,7 +1875,10 @@
         if (state.isInternalTransfer) {
             source = [...state.config.cash, ...state.config.bank, ...state.config.adv];
         } else {
-            source = state.allAccounts.length > 0 ? state.allAccounts.map(mapAcct) : [...state.config.cash, ...state.config.bank, ...state.config.adv, ...state.config.common];
+            // تفاصيل القيد: حسابات تفصيلية فقط (يسمح بالقيود) — مثل Nuit
+            source = (state.detailAccounts && state.detailAccounts.length) ? state.detailAccounts.map(mapAcct)
+                : (state.allAccounts && state.allAccounts.length) ? state.allAccounts.map(mapAcct)
+                : [...state.config.cash, ...state.config.bank, ...state.config.adv, ...state.config.common];
         }
 
         // UX FIX: Show Name in input, store GUID internally via lookup logic

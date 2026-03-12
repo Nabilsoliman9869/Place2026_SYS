@@ -9,6 +9,7 @@ TYPE_RECEIPT = "3BCA1E9B-1EE2-460D-B552-252CDD568A55"   # قبض
 TYPE_PAYMENT = "E61AEE0C-193F-498D-8827-5B0977321FF7"   # صرف
 TYPE_JOURNAL = "4E2840D9-BFA3-4D9E-BB18-46B699169045"   # قيد يومية
 DEFAULT_CURRENCY = "48554FE9-C3F9-4BA8-B746-2026E0DEE92B"
+ROOT_ACCOUNT_GUID = "6D258853-41BE-4550-B9D9-07C902FDFCCF"   # الحساب الجذر — رؤوس تحته
 
 def _row_val(row, key, default=None):
     if row is None: return default
@@ -35,32 +36,56 @@ def get_conn():
     except Exception:
         return None
 
-def get_sub_accounts(conn=None) -> List[Dict[str, Any]]:
-    """دليل الحسابات (TBL004) — مثل Nuit: يعيد كل الحسابات القابلة للاستخدام."""
+def _format_account(r: Dict) -> Dict[str, Any]:
+    """تنسيق صف الحساب للاستجابة."""
+    return {
+        "CardGuide": str(r.get("CardGuide", "")),
+        "AccountName": r.get("AccountName", ""),
+        "CardCode": str(r.get("CardCode", "")),
+        "DisplayName": f"{r.get('CardCode','')}-{r.get('AccountName','')}"
+    }
+
+def get_head_accounts(conn=None) -> List[Dict[str, Any]]:
+    """رؤوس الحسابات (الحساب/الصندوق) — أبناء الحساب الجذر مباشرة، مثل Nuit."""
     db = conn or get_conn()
     if not db: return []
     try:
         cur = db.cursor()
-        # محاولة الحسابات الفرعية أولاً، إن لم يوجد فكل الحسابات
         cur.execute("""
             SELECT CardGuide, AccountName, CardCode, MainAccount
             FROM TBL004
-            WHERE (AccountName IS NOT NULL AND RTRIM(AccountName) <> '')
-               OR (CardCode IS NOT NULL AND RTRIM(CAST(CardCode AS NVARCHAR(50))) <> '')
+            WHERE MainAccount = ?
+              AND (AccountName IS NOT NULL AND RTRIM(AccountName) <> '')
             ORDER BY CardCode, AccountName
-        """)
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-        return [{
-            "CardGuide": str(r.get("CardGuide", "")),
-            "AccountName": r.get("AccountName", ""),
-            "CardCode": str(r.get("CardCode", "")),
-            "DisplayName": f"{r.get('CardCode','')}-{r.get('AccountName','')}"
-        } for r in rows]
+        """, (ROOT_ACCOUNT_GUID,))
+        return [_format_account(dict(zip([c[0] for c in cur.description], r))) for r in cur.fetchall()]
     except Exception:
         return []
-    # لا نغلق g.db — إدارة Flask
-    # finally: ...
+
+def get_detail_accounts(conn=None) -> List[Dict[str, Any]]:
+    """حسابات التفاصيل (تفاصيل القيد) — حسابات تفصيلية يسمح بالقيود عليها فقط، مثل Nuit.
+    شرط: CardGuide لا يظهر أبداً في MainAccount — أي لا يوجد حساب فرعي تحته."""
+    db = conn or get_conn()
+    if not db: return []
+    try:
+        cur = db.cursor()
+        cur.execute("""
+            SELECT t.CardGuide, t.AccountName, t.CardCode, t.MainAccount
+            FROM TBL004 t
+            WHERE (t.AccountName IS NOT NULL AND RTRIM(t.AccountName) <> '')
+              AND NOT EXISTS (SELECT 1 FROM TBL004 c WHERE c.MainAccount = t.CardGuide)
+            ORDER BY t.CardCode, t.AccountName
+        """)
+        return [_format_account(dict(zip([c[0] for c in cur.description], r))) for r in cur.fetchall()]
+    except Exception:
+        return []
+
+def get_sub_accounts(conn=None) -> List[Dict[str, Any]]:
+    """للتوافق مع API القديم — يعيد head + detail معاً (يُفضّل استدعاء get_head_accounts/get_detail_accounts)."""
+    head = get_head_accounts(conn)
+    if head:
+        return head
+    return get_detail_accounts(conn)
 
 def get_next_bond_number(main_guide: str, conn=None) -> int:
     db = conn or get_conn()
