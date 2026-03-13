@@ -1881,23 +1881,34 @@
         if (state.isInternalTransfer) {
             source = [...state.config.cash, ...state.config.bank, ...state.config.adv];
         } else {
-            // تفاصيل القيد: حسابات تفصيلية فقط (يسمح بالقيود) — مثل Nuit
             source = (state.detailAccounts && state.detailAccounts.length) ? state.detailAccounts.map(mapAcct)
                 : (state.allAccounts && state.allAccounts.length) ? state.allAccounts.map(mapAcct)
                 : [...state.config.cash, ...state.config.bank, ...state.config.adv, ...state.config.common];
         }
-
-        // UX FIX: Show Name in input, store GUID internally via lookup logic
-        // We set value=Name, and we will lookup GUID by Name on save/add.
+        // مثل Nuit: خريطة اسم→GUID لتحويل الاختيار إلى GUID عند الحفظ
+        state.nameToGuidMap = new Map();
         const unique = new Map();
-        source.forEach(x => unique.set(x.name, x)); // Key by Name to ensure uniqueness
+        source.forEach(x => {
+            unique.set(x.name, x);
+            if (x.code) state.nameToGuidMap.set(x.name, x.code);
+        });
 
         unique.forEach(x => {
             const op = document.createElement('option');
-            op.value = x.name; // Display Name to user!
-            // op.dataset.guid = x.code; // Not supported in standard datalist selection easily, we'll lookup by name
+            op.value = x.name;
+            op.dataset.guid = x.code || '';
             dl.appendChild(op);
         });
+    }
+
+    function resolveAccountToGuid(val) {
+        if (!val || !String(val).trim()) return null;
+        val = String(val).trim();
+        if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val)) return val;
+        if (state.nameToGuidMap && state.nameToGuidMap.has(val)) return state.nameToGuidMap.get(val);
+        const src = state.detailAccounts || state.allAccounts || [];
+        const m = src.find(a => (a.DisplayName || a.AccountName || '') === val || (a.CardCode || '') === val);
+        return m ? m.CardGuide : null;
     }
 
     function calcTotals() {
@@ -2115,8 +2126,14 @@
         const lineCards = els('#linesContainer > .cf-card');
         for (let i = 0; i < lineCards.length; i++) {
             const d = lineCards[i];
+            const acctVal = d.querySelector('.lineAcct').value;
+            const accountGuid = resolveAccountToGuid(acctVal);
+            if (!accountGuid) {
+                toast('حساب غير صحيح في السطر ' + (i + 1) + ': اختر من القائمة', 'bad');
+                return;
+            }
             const line = {
-                account: d.querySelector('.lineAcct').value,
+                account: accountGuid,
                 db: parseFloat(d.querySelector('.lineDb').value || 0),
                 cr: parseFloat(d.querySelector('.lineCr').value || 0),
                 desc: d.querySelector('.lineDesc').value

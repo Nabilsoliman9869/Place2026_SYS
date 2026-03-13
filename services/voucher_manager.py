@@ -137,24 +137,9 @@ def resolve_account_guid(val: str, conn=None) -> Optional[str]:
     if not db: return None
     try:
         cur = db.cursor()
-        # 1. البحث بالمطابقة الكاملة
         cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE CardCode = ? OR AccountName = ? OR AccountName LIKE ?", (val, val, f"%{val}%"))
         row = cur.fetchone()
-        if row: return str(row[0])
-        # 2. تنسيق DisplayName: كود-اسم (مثل 1002001002001-البنك العربي)
-        if "-" in val:
-            parts = val.split("-", 1)
-            code_part = (parts[0] or "").strip()
-            name_part = (parts[1] or "").strip()
-            if code_part:
-                cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE CardCode = ?", (code_part,))
-                row = cur.fetchone()
-                if row: return str(row[0])
-            if name_part:
-                cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE AccountName = ? OR AccountName LIKE ?", (name_part, f"%{name_part}%"))
-                row = cur.fetchone()
-                if row: return str(row[0])
-        return None
+        return str(row[0]) if row else None
     except Exception:
         return None
 
