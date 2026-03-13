@@ -1296,18 +1296,20 @@
 
     function updateSettingsUI() {
         ensureReceiptPaymentQuickButtons();
-        el('cfgCash').value = JSON.stringify(state.config.cash || [], null, 1);
-        el('cfgBank').value = JSON.stringify(state.config.bank || [], null, 1);
-        el('cfgAdv').value = JSON.stringify(state.config.adv || [], null, 1);
-        el('cfgCommon').value = JSON.stringify(state.config.common || [], null, 1);
-        if (el('cfgCashRecv')) el('cfgCashRecv').value = JSON.stringify(state.config.receipt.cash || [], null, 1);
-        if (el('cfgBankRecv')) el('cfgBankRecv').value = JSON.stringify(state.config.receipt.bank || [], null, 1);
-        if (el('cfgAdvRecv')) el('cfgAdvRecv').value = JSON.stringify(state.config.receipt.adv || [], null, 1);
-        if (el('cfgCommonRecv')) el('cfgCommonRecv').value = JSON.stringify(state.config.receipt.common || [], null, 1);
-        if (el('cfgCashPay')) el('cfgCashPay').value = JSON.stringify(state.config.payment.cash || [], null, 1);
-        if (el('cfgBankPay')) el('cfgBankPay').value = JSON.stringify(state.config.payment.bank || [], null, 1);
-        if (el('cfgAdvPay')) el('cfgAdvPay').value = JSON.stringify(state.config.payment.adv || [], null, 1);
-        if (el('cfgCommonPay')) el('cfgCommonPay').value = JSON.stringify(state.config.payment.common || [], null, 1);
+        var safe = function (v) { return Array.isArray(v) ? v : []; };
+        var cfg = el('cfgCash'); if (cfg) cfg.value = JSON.stringify(safe(state.config.cash), null, 1);
+        cfg = el('cfgBank'); if (cfg) cfg.value = JSON.stringify(safe(state.config.bank), null, 1);
+        cfg = el('cfgAdv'); if (cfg) cfg.value = JSON.stringify(safe(state.config.adv), null, 1);
+        cfg = el('cfgCommon'); if (cfg) cfg.value = JSON.stringify(safe(state.config.common), null, 1);
+        var r = state.config.receipt || {}, p = state.config.payment || {};
+        if (el('cfgCashRecv')) el('cfgCashRecv').value = JSON.stringify(safe(r.cash), null, 1);
+        if (el('cfgBankRecv')) el('cfgBankRecv').value = JSON.stringify(safe(r.bank), null, 1);
+        if (el('cfgAdvRecv')) el('cfgAdvRecv').value = JSON.stringify(safe(r.adv), null, 1);
+        if (el('cfgCommonRecv')) el('cfgCommonRecv').value = JSON.stringify(safe(r.common), null, 1);
+        if (el('cfgCashPay')) el('cfgCashPay').value = JSON.stringify(safe(p.cash), null, 1);
+        if (el('cfgBankPay')) el('cfgBankPay').value = JSON.stringify(safe(p.bank), null, 1);
+        if (el('cfgAdvPay')) el('cfgAdvPay').value = JSON.stringify(safe(p.adv), null, 1);
+        if (el('cfgCommonPay')) el('cfgCommonPay').value = JSON.stringify(safe(p.common), null, 1);
     }
 
     async function loadConfig() {
@@ -1468,7 +1470,7 @@
             };
         });
 
-        el('settingsBtn').onclick = () => { el('settingsBackdrop').classList.add('show'); el('settingsDrawer').classList.add('show'); };
+        el('settingsBtn').onclick = () => { ensureReceiptPaymentQuickButtons(); updateSettingsUI(); el('settingsBackdrop').classList.add('show'); el('settingsDrawer').classList.add('show'); };
         const closeSet = () => { el('settingsBackdrop').classList.remove('show'); el('settingsDrawer').classList.remove('show'); };
         el('closeSettings').onclick = closeSet;
         el('settingsBackdrop').onclick = closeSet;

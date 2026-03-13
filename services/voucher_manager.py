@@ -125,7 +125,7 @@ def get_next_bond_number(main_guide: str, conn=None) -> int:
         return 1
 
 def resolve_account_guid(val: str, conn=None) -> Optional[str]:
-    """تحويل كود/اسم الحساب إلى CardGuide."""
+    """تحويل كود/اسم الحساب إلى CardGuide — يدعم DisplayName (كود-الاسم) أو CardCode أو AccountName."""
     if not val or not str(val).strip(): return None
     val = str(val).strip()
     try:
@@ -137,9 +137,23 @@ def resolve_account_guid(val: str, conn=None) -> Optional[str]:
     if not db: return None
     try:
         cur = db.cursor()
+        # 1. البحث بالمطابقة الكاملة
         cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE CardCode = ? OR AccountName = ? OR AccountName LIKE ?", (val, val, f"%{val}%"))
         row = cur.fetchone()
         if row: return str(row[0])
+        # 2. تنسيق DisplayName: كود-اسم (مثل 1002001002001-البنك العربي)
+        if "-" in val:
+            parts = val.split("-", 1)
+            code_part = (parts[0] or "").strip()
+            name_part = (parts[1] or "").strip()
+            if code_part:
+                cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE CardCode = ?", (code_part,))
+                row = cur.fetchone()
+                if row: return str(row[0])
+            if name_part:
+                cur.execute("SELECT TOP 1 CardGuide FROM TBL004 WHERE AccountName = ? OR AccountName LIKE ?", (name_part, f"%{name_part}%"))
+                row = cur.fetchone()
+                if row: return str(row[0])
         return None
     except Exception:
         return None
