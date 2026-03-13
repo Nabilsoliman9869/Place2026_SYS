@@ -3325,13 +3325,15 @@ def api_cashflow_transactions():
 def api_cashflow_create_transaction():
     from services.voucher_manager import save_voucher_transaction, save_journal_entry
     try:
-        payload = request.get_json() or {}
+        payload = {}
         if request.form:
             import json
             h = request.form.get('header')
             l = request.form.get('lines')
             payload = json.loads(h) if h else {}
             payload['items'] = json.loads(l) if l else []
+        else:
+            payload = request.get_json(silent=True) or {}
         v_type = payload.get('type', 'DISB')
         if v_type == 'JRNL':
             result = save_journal_entry(payload)
@@ -3385,7 +3387,7 @@ def api_cashflow_config():
         except Exception:
             return jsonify({"config": {}})
     try:
-        cfg = request.get_json() or {}
+        cfg = request.get_json(silent=True) or {}
         cfg = cfg.get('config', cfg)
         from services.voucher_manager import save_cashflow_config
         save_cashflow_config(uid, cfg)

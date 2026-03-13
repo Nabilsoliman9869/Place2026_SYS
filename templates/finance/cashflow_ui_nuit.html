@@ -1262,6 +1262,10 @@
             if (Array.isArray(arr)) for (var i = 0; i < Math.min(20, arr.length); i++) out[i] = arr[i];
             return out;
         };
+        if (!Array.isArray(state.config.cash)) state.config.cash = [];
+        if (!Array.isArray(state.config.bank)) state.config.bank = [];
+        if (!Array.isArray(state.config.adv)) state.config.adv = [];
+        if (!Array.isArray(state.config.common)) state.config.common = [];
         if (!state.config.receipt) state.config.receipt = { cash: [], bank: [], adv: [], common: [], quickButtons: pad20([]) };
         else state.config.receipt.quickButtons = pad20(state.config.receipt.quickButtons);
         if (!state.config.payment) state.config.payment = { cash: [], bank: [], adv: [], common: [], quickButtons: pad20([]) };
@@ -1292,10 +1296,10 @@
 
     function updateSettingsUI() {
         ensureReceiptPaymentQuickButtons();
-        el('cfgCash').value = JSON.stringify(state.config.cash, null, 1);
-        el('cfgBank').value = JSON.stringify(state.config.bank, null, 1);
-        el('cfgAdv').value = JSON.stringify(state.config.adv, null, 1);
-        el('cfgCommon').value = JSON.stringify(state.config.common, null, 1);
+        el('cfgCash').value = JSON.stringify(state.config.cash || [], null, 1);
+        el('cfgBank').value = JSON.stringify(state.config.bank || [], null, 1);
+        el('cfgAdv').value = JSON.stringify(state.config.adv || [], null, 1);
+        el('cfgCommon').value = JSON.stringify(state.config.common || [], null, 1);
         if (el('cfgCashRecv')) el('cfgCashRecv').value = JSON.stringify(state.config.receipt.cash || [], null, 1);
         if (el('cfgBankRecv')) el('cfgBankRecv').value = JSON.stringify(state.config.receipt.bank || [], null, 1);
         if (el('cfgAdvRecv')) el('cfgAdvRecv').value = JSON.stringify(state.config.receipt.adv || [], null, 1);
