@@ -168,7 +168,7 @@ def resolve_agent_guid(conn, agent_val: str) -> Optional[str]:
     return None
 
 def save_voucher_transaction(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
-    """حفظ سند قبض أو صرف."""
+    """حفظ سند قبض أو صرف — مثل Nuit: MAX(BondNumber) من TBL010 لنفس MainGuide (TBL009) + 1."""
     db = conn or get_conn()
     if not db: return {"success": False, "message": "لا يوجد اتصال بقاعدة البيانات"}
     try:
@@ -180,44 +180,58 @@ def save_voucher_transaction(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
         bond_number = get_next_bond_number(main_guide, db)
         try:
             bond_date = datetime.strptime(data.get("date", ""), "%Y-%m-%d")
-        except:
+        except Exception:
             bond_date = datetime.now()
-        notes = data.get("notes") or ""
-        ref = data.get("ref") or ""
+        bond_dt = bond_date  # datetime للتخزين
+        notes = (data.get("notes") or "").strip()[:255]
+        ref = (data.get("ref") or "").strip()[:255]
         header_acct = resolve_account_guid(data.get("mainAccount") or data.get("mainAcct"), db)
         if not header_acct:
-            return {"success": False, "message": "الحساب الرئيسي غير صحيح"}
+            return {"success": False, "message": "الحساب الرئيسي غير صحيح — اختر حساباً من القائمة"}
+        items = data.get("items") or []
+        if not items:
+            return {"success": False, "message": "أضف سطراً تفصيلياً على الأقل (حساب + مدين أو دائن)"}
         currency = data.get("currency") or get_default_currency()
         agent_guide = resolve_agent_guid(db, data.get("agent"))
-        try:
-            cur.execute("""
-                INSERT INTO TBL010 (CardGuide, MainGuide, BondNumber, BondDate, CurrencyGuide, Rate, AccountGuide, DocumentNumber, Notes, AgentGuide)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-            """, (card_guide, main_guide, bond_number, bond_date, currency, header_acct, ref, notes, agent_guide))
-        except Exception as col_err:
-            if "AgentGuide" in str(col_err):
-                cur.execute("""
-                    INSERT INTO TBL010 (CardGuide, MainGuide, BondNumber, BondDate, CurrencyGuide, Rate, AccountGuide, DocumentNumber, Notes)
-                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-                """, (card_guide, main_guide, bond_number, bond_date, currency, header_acct, ref, notes))
-            else:
-                raise
-        for item in data.get("items", []):
-            line_acct = resolve_account_guid(item.get("account"), db)
+
+        # TBL010 — الأعمدة المطلوبة (مثل Nuit)
+        cur.execute("""
+            INSERT INTO TBL010 (
+                CardGuide, MainGuide, BondNumber, BondNumber2, BondDate, BondDate2,
+                DoneIn, InsertedIn, CurrencyGuide, Rate, AccountGuide, DocumentNumber, Notes, AgentGuide,
+                TimeLength, Posted, Collected, Boolean01, Boolean02, Security,
+                Value, Value2, Value3, CardType
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?,
+                0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0)
+        """, (card_guide, main_guide, bond_number, bond_number, bond_dt, bond_dt,
+              bond_dt, bond_dt, currency, header_acct, ref, notes, agent_guide))
+        for item in items:
+            line_acct = resolve_account_guid(item.get("account") or item.get("acct"), db)
             if not line_acct:
-                raise ValueError(f"حساب غير صحيح: {item.get('account')}")
+                raise ValueError(f"حساب غير صحيح: {item.get('account') or item.get('acct')}")
             amount = float(item.get("db") or 0) + float(item.get("cr") or 0)
             debit = 0 if is_receipt else amount
             credit = amount if is_receipt else 0
+            row_guide = str(uuid.uuid4()).upper()
+            line_notes = (item.get("desc") or notes or "")[:255]
             cur.execute("""
-                INSERT INTO TBL038 (MainGuide, AccountGuide, CurrencyGuide, DebitRate, CreditRate, Notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (card_guide, line_acct, currency, debit, credit, item.get("desc") or notes))
+                INSERT INTO TBL038 (
+                    MainGuide, RowGuide, AccountGuide, CurrencyGuide,
+                    TruncatedValue, TruncatedValueRate, AffectCost,
+                    Debit, Credit, DebitRate, CreditRate, Collected, Notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, ?)
+            """, (card_guide, row_guide, line_acct, currency, amount, amount, debit, credit, debit, credit, line_notes))
         db.commit()
         return {"success": True, "message": "تم حفظ السند بنجاح", "BondNumber": bond_number, "CardGuide": card_guide}
     except Exception as e:
-        if db: db.rollback()
-        return {"success": False, "message": str(e)}
+        if db:
+            try: db.rollback()
+            except Exception: pass
+        err_msg = str(e)
+        return {"success": False, "message": err_msg if err_msg else "خطأ غير معروف أثناء الحفظ"}
 
 def save_journal_entry(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
     """حفظ قيد يومية (TBL011 رأس + TBL012 تفاصيل)."""

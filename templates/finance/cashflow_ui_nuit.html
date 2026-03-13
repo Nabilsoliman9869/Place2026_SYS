@@ -2138,13 +2138,15 @@
                 body: formData,
                 credentials: 'same-origin'
             });
-            const j = await r.json();
+            let j = {};
+            try { j = await r.json(); } catch (_) { j = {}; }
+            if (r.status === 401) { showLogin(); toast('يرجى تسجيل الدخول', 'bad'); return; }
 
             if (j.ok || j.success) {
-                toast('تم الحفظ: ' + (j.BondNumber || j.EntryNumber || 'Success'), 'ok');
+                toast('تم الحفظ: سند رقم ' + (j.BondNumber || j.EntryNumber || '—'), 'ok');
                 setTimeout(resetAll, 1500);
             } else {
-                toast('خطأ: ' + (j.message || j.msg), 'bad');
+                toast('خطأ: ' + (j.message || j.msg || 'فشل الحفظ'), 'bad');
             }
         } catch (e) {
             toast('خطأ اتصال: ' + e.message, 'bad');
