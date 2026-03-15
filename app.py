@@ -4010,12 +4010,13 @@ def training_sales_book_slot(candidate_id):
         return redirect(url_for('training_sales_index'))
     if request.method == 'POST':
         slot_id = request.form.get('slot_id')
+        test_mode = request.form.get('test_mode', 'Online')  # أون لاين أو أون سايت — مثل اختبار المواهب
         if slot_id:
             try:
                 query_db("""
-                    UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType='Training'
+                    UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
                     WHERE SlotID=? AND Status='Available'
-                """, (candidate_id, session.get('user_id'), int(slot_id)))
+                """, (candidate_id, session.get('user_id'), test_mode, int(slot_id)))
                 flash('تم حجز موعد اختبار مواهب التدريب بنجاح.', 'success')
             except Exception as e:
                 flash('خطأ عند الحجز: ' + str(e)[:80], 'danger')
