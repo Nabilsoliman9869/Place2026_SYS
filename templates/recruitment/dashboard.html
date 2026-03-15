@@ -50,6 +50,41 @@
     </div>
 </div>
 
+<!-- مقابلات التالنت اليوم — أولاً لسهولة الوصول -->
+<div class="card shadow-sm mb-4 border-warning">
+    <div class="card-header bg-warning bg-opacity-25 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-dark"><i class="fas fa-microphone-alt me-2"></i> <span class="en-bold">Talent Interviews Today</span> <span class="ar-normal">مقابلات التالنت اليوم</span></h5>
+        <span class="badge bg-warning text-dark fs-6">{{ talent_interviews_today|length }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>الوقت</th>
+                    <th>المرشح</th>
+                    <th>الهاتف</th>
+                    <th>الحالة</th>
+                    <th>المختبر</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in talent_interviews_today %}
+                <tr style="cursor:pointer" ondblclick="window.location='{{ url_for('candidate_profile', candidate_id=t.CandidateID) }}'" title="دبل كليك لفتح ملف المرشح">
+                    <td>{{ t.SlotTime or '-' }}</td>
+                    <td class="fw-bold">{{ t.FullName }}</td>
+                    <td>{{ t.Phone or '-' }}</td>
+                    <td><span class="badge bg-{{ 'success' if t.Status=='Completed' else 'warning text-dark' }}">{{ t.Status }}</span></td>
+                    <td><small>{{ t.EvaluatorName or '-' }}</small></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted py-3">لا توجد مقابلات تالنت اليوم للمرشحين المحوّلين منك.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer small text-muted py-2">دبل كليك على الصف لفتح ملف المرشح</div>
+</div>
+
 <!-- Workflow Shortcuts -->
 <div class="row mb-4">
     <div class="col-12">
@@ -101,41 +136,6 @@
             </div>
         </div>
     </div>
-</div>
-
-<!-- مقابلات التالنت اليوم -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 text-primary"><i class="fas fa-microphone-alt"></i> <span class="en-bold">Talent Interviews Today</span> <span class="ar-normal">مقابلات التالنت اليوم</span></h5>
-        <span class="badge bg-warning text-dark">{{ talent_interviews_today|length }}</span>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>الوقت</th>
-                    <th>المرشح</th>
-                    <th>الهاتف</th>
-                    <th>الحالة</th>
-                    <th>المختبر</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in talent_interviews_today %}
-                <tr style="cursor:pointer" ondblclick="window.location='{{ url_for('candidate_profile', candidate_id=t.CandidateID) }}'" title="دبل كليك لفتح ملف المرشح">
-                    <td>{{ t.SlotTime or '-' }}</td>
-                    <td class="fw-bold">{{ t.FullName }}</td>
-                    <td>{{ t.Phone or '-' }}</td>
-                    <td><span class="badge bg-{{ 'success' if t.Status=='Completed' else 'warning text-dark' }}">{{ t.Status }}</span></td>
-                    <td><small>{{ t.EvaluatorName or '-' }}</small></td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" class="text-center text-muted py-3">لا توجد مقابلات تالنت اليوم للمرشحين المحوّلين منك.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="card-footer small text-muted">دبل كليك على الصف لفتح ملف المرشح</div>
 </div>
 
 <!-- My Assigned Candidates -->
