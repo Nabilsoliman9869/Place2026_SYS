@@ -1612,13 +1612,32 @@ _MAX_REQUESTS_FOR_MATCHES = 30
 _MAX_CANDIDATES_FOR_MATCHES = 150
 _MAX_PROPOSED_MATCHES = 80
 
+def _ensure_allocator_role_column():
+    """إضافة عمود AllocatorRole إن لم يكن موجوداً."""
+    db = get_db()
+    if not db:
+        return
+    cur = db.cursor()
+    try:
+        cur.execute("""
+            IF EXISTS (SELECT 1 FROM sysobjects WHERE name='ClientRequests' AND xtype='U')
+            AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='AllocatorRole' AND Object_ID=Object_ID(N'ClientRequests'))
+            ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(500)
+        """)
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except: pass
+    try: cur.close()
+    except: pass
+
 @app.route('/allocation/matching', methods=['GET', 'POST'])
 @login_required
 @role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_matching():
+    _ensure_allocator_role_column()
     selected_client_id = request.args.get('client_id')
     selected_request_id = request.args.get('request_id')
-    # عند اختيار عميل+طلب: تخطي حساب AI Matches الثقيل — المستخدم يعتمد على Matching Candidates
     skip_heavy_matches = bool(selected_client_id and selected_request_id)
 
     open_requests = query_db("""
@@ -1825,47 +1844,45 @@ def allocation_matching():
 @login_required
 @role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
 def allocation_confirm_match():
-    req_id = request.form.get('request_id')
-    cand_id = request.form.get('candidate_id')
-    if not req_id or not cand_id:
-        flash('Missing request_id or candidate_id.', 'danger')
-        return redirect(url_for('allocation_matching'))
-    # التحقق من صلاحية الترشيح حسب AllocatorRole في طلب العميل (يمكن تحديد أكثر من دور)
-    req_row = query_db("SELECT AllocatorRole FROM ClientRequests WHERE RequestID = ?", (req_id,), one=True)
-    if req_row and req_row.get('AllocatorRole'):
-        allowed_roles = [r.strip() for r in req_row['AllocatorRole'].split(',') if r and r.strip()]
-        user_role = (g.user.get('Role') or '').strip()
-        if allowed_roles and user_role not in allowed_roles:
-            flash('ليس لديك الصلاحية: هذا الطلب يتطلب أحد الأدوار التالية فقط: ' + ', '.join(allowed_roles) + '.', 'danger')
-            return redirect(url_for('allocation_matching'))
-    notes = request.form.get('notes', '')
-    feedback = request.form.get('allocator_feedback', '')
-
-    # لا يسمح للمرشح بأكثر من ترشيحيَن نشطيَن في نفس الوقت — إلا إذا رُفض في أحدهم
-    active_statuses = ("Approved", "Interview Scheduled", "Confirmed by Candidate", "2nd Interview Pending", "Offer Stage", "Interview", "Accepted")
-    placeholders = ','.join('?' for _ in active_statuses)
     try:
-        active_count = query_db(
-            "SELECT COUNT(*) as c FROM Matches WHERE CandidateID = ? AND Status IN (" + placeholders + ")",
-            (cand_id,) + active_statuses, one=True
-        )['c']
-        if active_count >= 2:
-            flash('لا يمكن ترشيح هذا المرشح — لديه بالفعل ترشيحيْن نشطين. يجب تسجيل رفض في أحد المقابلات أولاً لتحرير الشاغر.', 'warning')
+        req_id = request.form.get('request_id')
+        cand_id = request.form.get('candidate_id')
+        if not req_id or not cand_id:
+            flash('Missing request_id or candidate_id.', 'danger')
             return redirect(url_for('allocation_matching'))
-    except Exception:
-        pass
+        _ensure_allocator_role_column()
+        req_row = query_db("SELECT AllocatorRole FROM ClientRequests WHERE RequestID = ?", (req_id,), one=True)
+        if req_row and req_row.get('AllocatorRole'):
+            allowed_roles = [r.strip() for r in req_row['AllocatorRole'].split(',') if r and r.strip()]
+            user_role = (g.user.get('Role') or '').strip()
+            if allowed_roles and user_role not in allowed_roles:
+                flash('ليس لديك الصلاحية: هذا الطلب يتطلب أحد الأدوار التالية فقط: ' + ', '.join(allowed_roles) + '.', 'danger')
+                return redirect(url_for('allocation_matching'))
+        notes = request.form.get('notes', '')
+        feedback = request.form.get('allocator_feedback', '')
 
-    try:
+        active_statuses = ("Approved", "Interview Scheduled", "Confirmed by Candidate", "2nd Interview Pending", "Offer Stage", "Interview", "Accepted")
+        placeholders = ','.join('?' for _ in active_statuses)
+        try:
+            active_count = query_db(
+                "SELECT COUNT(*) as c FROM Matches WHERE CandidateID = ? AND Status IN (" + placeholders + ")",
+                (cand_id,) + active_statuses, one=True
+            )['c']
+            if active_count >= 2:
+                flash('لا يمكن ترشيح هذا المرشح — لديه بالفعل ترشيحيْن نشطين. يجب تسجيل رفض في أحد المقابلات أولاً لتحرير الشاغر.', 'warning')
+                return redirect(url_for('allocation_matching'))
+        except Exception:
+            pass
+
         query_db("""
             INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
             VALUES (?, ?, 'Approved', ?, ?, ?)
         """, (cand_id, req_id, session['user_id'], notes, feedback))
-    except Exception as e:
-        flash('خطأ: جدول Matches يحتاج أعمدة AllocatorID, ReviewNotes, AllocatorFeedback. شغّل سكربت add_matches_columns.sql على قاعدة البيانات.', 'danger')
+        flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
         return redirect(url_for('allocation_matching'))
-
-    flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
-    return redirect(url_for('allocation_matching'))
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:80], 'danger')
+        return redirect(url_for('allocation_matching'))
 
 @app.route('/allocation/schedule_interview/<int:match_id>', methods=['POST'])
 @login_required
@@ -2468,21 +2485,7 @@ def add_request():
     allocator_roles = f.getlist('allocator_role')
     allocator_role = ','.join(r.strip() for r in allocator_roles if r and r.strip()) if allocator_roles else None
 
-    db = get_db()
-    if db:
-        cur = db.cursor()
-        try:
-            cur.execute("""
-                IF EXISTS (SELECT 1 FROM sysobjects WHERE name='ClientRequests' AND xtype='U')
-                AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='AllocatorRole' AND Object_ID=Object_ID(N'ClientRequests'))
-                ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(500)
-            """)
-            db.commit()
-        except Exception:
-            try: db.rollback()
-            except: pass
-        try: cur.close()
-        except: pass
+    _ensure_allocator_role_column()
 
     try:
         query_db("""
