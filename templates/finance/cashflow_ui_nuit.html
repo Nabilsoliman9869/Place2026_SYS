@@ -2103,12 +2103,14 @@
         }
 
         // Prepare Payload
+        var vDate = el('vDate');
+        var dateVal = (vDate && vDate.value) ? vDate.value : new Date().toISOString().split('T')[0];
         const h = {
             type: state.data.type,
             channel: state.data.channel,
             bankSub: state.data.bankSub,
-            mainAccount: el('accountPick').value, // Renamed to mainAccount
-            date: el('vDate').value,
+            mainAccount: el('accountPick').value,
+            date: dateVal,
             currency: el('vCurr').value,
             rate: el('vRate').value,
             notes: el('vDesc').value, // Renamed to notes

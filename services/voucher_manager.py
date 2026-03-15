@@ -178,10 +178,11 @@ def save_voucher_transaction(data: Dict[str, Any], conn=None) -> Dict[str, Any]:
         card_guide = str(uuid.uuid4()).upper()
         bond_number = get_next_bond_number(main_guide, db)
         try:
-            bond_date = datetime.strptime(data.get("date", ""), "%Y-%m-%d")
+            d = (data.get("date") or "").strip()
+            bond_date = datetime.strptime(d, "%Y-%m-%d") if d else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         except Exception:
-            bond_date = datetime.now()
-        bond_dt = bond_date  # datetime للتخزين
+            bond_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        bond_dt = bond_date
         notes = (data.get("notes") or "").strip()[:255]
         ref = (data.get("ref") or "").strip()[:255]
         header_acct = resolve_account_guid(data.get("mainAccount") or data.get("mainAcct"), db)
