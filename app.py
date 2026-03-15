@@ -359,7 +359,11 @@ def init_system():
             IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'PhysicalTraits' AND Object_ID = Object_ID(N'ClientRequests'))
                 ALTER TABLE ClientRequests ADD PhysicalTraits NVARCHAR(MAX);
             IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'AllocatorRole' AND Object_ID = Object_ID(N'ClientRequests'))
-                ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(100);
+                ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(500);
+        """)
+        cursor.execute("""
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'AllocatorRole' AND Object_ID = Object_ID(N'ClientRequests'))
+            ALTER TABLE ClientRequests ALTER COLUMN AllocatorRole NVARCHAR(500);
         """)
         cursor.execute("""
             IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
@@ -1826,13 +1830,13 @@ def allocation_confirm_match():
     if not req_id or not cand_id:
         flash('Missing request_id or candidate_id.', 'danger')
         return redirect(url_for('allocation_matching'))
-    # التحقق من صلاحية الترشيح حسب AllocatorRole في طلب العميل
+    # التحقق من صلاحية الترشيح حسب AllocatorRole في طلب العميل (يمكن تحديد أكثر من دور)
     req_row = query_db("SELECT AllocatorRole FROM ClientRequests WHERE RequestID = ?", (req_id,), one=True)
     if req_row and req_row.get('AllocatorRole'):
-        allowed_role = req_row['AllocatorRole'].strip()
+        allowed_roles = [r.strip() for r in req_row['AllocatorRole'].split(',') if r and r.strip()]
         user_role = (g.user.get('Role') or '').strip()
-        if user_role != allowed_role:
-            flash('ليس لديك الصلاحية: هذا الطلب يتطلب موافقة ' + allowed_role + ' فقط.', 'danger')
+        if allowed_roles and user_role not in allowed_roles:
+            flash('ليس لديك الصلاحية: هذا الطلب يتطلب أحد الأدوار التالية فقط: ' + ', '.join(allowed_roles) + '.', 'danger')
             return redirect(url_for('allocation_matching'))
     notes = request.form.get('notes', '')
     feedback = request.form.get('allocator_feedback', '')
@@ -2461,7 +2465,8 @@ def add_request():
     smoker = f.get('smoker')
     appearance = f.get('appearance_level')
     physical = f.get('physical_traits')
-    allocator_role = (f.get('allocator_role') or '').strip() or None
+    allocator_roles = f.getlist('allocator_role')
+    allocator_role = ','.join(r.strip() for r in allocator_roles if r and r.strip()) if allocator_roles else None
 
     try:
         query_db("""
