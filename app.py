@@ -1633,7 +1633,7 @@ def _ensure_allocator_role_column():
 
 @app.route('/allocation/matching', methods=['GET', 'POST'])
 @login_required
-@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager', 'Recruiter'])
 def allocation_matching():
     _ensure_allocator_role_column()
     selected_client_id = request.args.get('client_id')
@@ -1842,7 +1842,7 @@ def allocation_matching():
 
 @app.route('/allocation/confirm_match', methods=['POST'])
 @login_required
-@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager'])
+@role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager', 'Recruiter'])
 def allocation_confirm_match():
     try:
         req_id = request.form.get('request_id')
