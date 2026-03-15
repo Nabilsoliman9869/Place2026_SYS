@@ -367,7 +367,7 @@
             <!-- ============================================= -->
             <!-- الترشيح (Allocation): للمدير والمسكّن فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist', 'AccountManager']) %}
+            {% if check_role_access(['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist', 'AccountManager', 'Recruiter']) %}
             <div class="sidebar-section-label"><span class="en-bold">Allocation</span> <span class="ar-normal">الترشيح</span></div>
             <a href="{{ url_for('allocation_matching') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'allocation_matching' else '' }}">
