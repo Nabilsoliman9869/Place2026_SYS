@@ -2122,7 +2122,8 @@ def _safe_int(val, default=0):
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_evaluate(slot_id):
     slot = query_db("""
-        SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CurrentCEFR
+        SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CurrentCEFR,
+               C.RecruiterFeedback, C.MarketingAssessment
         FROM TASchedules T 
         JOIN Candidates C ON T.CandidateID = C.CandidateID 
         WHERE T.SlotID = ?
@@ -2695,8 +2696,19 @@ def recruiter_dashboard():
         WHERE C.SalesAgentID = ?
         ORDER BY M.MatchDate DESC
     """, (user_id,))
-    
-    return render_template('recruitment/dashboard.html', metrics=metrics, recent_matches=recent_matches or [])
+
+    # مقابلات التالنت اليوم — المرشحون المحوّلون من هذا الريكروتر
+    talent_interviews_today = query_db("""
+        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+        FROM TASchedules T
+        JOIN Candidates C ON T.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+        WHERE C.SalesAgentID = ? AND CAST(T.SlotDate AS DATE) = ? AND T.Status IN ('Booked', 'Completed')
+        ORDER BY T.SlotTime
+    """, (user_id, today))
+
+    return render_template('recruitment/dashboard.html', metrics=metrics, recent_matches=recent_matches or [],
+                          talent_interviews_today=talent_interviews_today or [])
 
 @app.route('/recruiter/hiring_onboarding')
 @login_required

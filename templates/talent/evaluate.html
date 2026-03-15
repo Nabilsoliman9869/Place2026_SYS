@@ -22,6 +22,17 @@
                                 <strong>Type:</strong> <span class="badge bg-info">{{ eval_type }}</span>
                             </div>
                         </div>
+                        {% if slot.RecruiterFeedback or slot.MarketingAssessment %}
+                        <hr class="my-2">
+                        <div class="small">
+                            {% if slot.RecruiterFeedback %}
+                            <div class="mb-1"><strong class="text-info">ملاحظات الريكروتر Recruiter Notes:</strong> {{ slot.RecruiterFeedback }}</div>
+                            {% endif %}
+                            {% if slot.MarketingAssessment %}
+                            <div><strong class="text-secondary">تقييم التسويق Marketing:</strong> {{ slot.MarketingAssessment }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
 
                     <form action="" method="POST">
