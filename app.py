@@ -1636,6 +1636,9 @@ def _ensure_allocator_role_column():
 @role_required(['Allocator', 'AllocationManager', 'AllocationSpecialist', 'Manager', 'AccountManager', 'Recruiter'])
 def allocation_matching():
     _ensure_allocator_role_column()
+    role = session.get('role')
+    user_id = session.get('user_id')
+    is_recruiter = (role == 'Recruiter')
     selected_client_id = request.args.get('client_id')
     selected_request_id = request.args.get('request_id')
     skip_heavy_matches = bool(selected_client_id and selected_request_id)
@@ -1647,13 +1650,19 @@ def allocation_matching():
         WHERE CR.Status IN ('Open', 'Pending', 'Active')
     """) or []
 
-    ready_candidates = query_db("""
+    # الريكروتر يرى فقط المرشحين الذين سجّلهم (SalesAgentID)؛ المستويات الأعلى ترى الكل
+    ready_candidates_sql = """
         SELECT C.*, U.Username as AgentName, Camp.Name as CampaignName
         FROM Candidates C
         LEFT JOIN Users_1 U ON C.SalesAgentID = U.UserID
         LEFT JOIN Campaigns Camp ON C.CampaignID = Camp.CampaignID
         WHERE C.Status IN ('Ready_For_Matching', 'Ready', 'Imported')
-    """) or []
+    """
+    if is_recruiter and user_id:
+        ready_candidates_sql += " AND C.SalesAgentID = ?"
+        ready_candidates = query_db(ready_candidates_sql, (user_id,)) or []
+    else:
+        ready_candidates = query_db(ready_candidates_sql) or []
 
     matches_proposed = []
     if not skip_heavy_matches and open_requests and ready_candidates:
@@ -1696,14 +1705,20 @@ def allocation_matching():
                     matches_proposed.append({'req': req, 'cand': cand, 'score': cand_val - req_val})
 
     # 4. Fetch Approved Matches (Waiting for Interview Scheduling)
-    approved_matches = query_db("""
+    # الريكروتر يرى فقط المطابقات لمرشحيه؛ المستويات الأعلى ترى الكل
+    approved_matches_sql = """
         SELECT M.*, C.FullName, C.Phone, CR.JobTitle, Cl.CompanyName
         FROM Matches M
         JOIN Candidates C ON M.CandidateID = C.CandidateID
         JOIN ClientRequests CR ON M.RequestID = CR.RequestID
         JOIN Clients Cl ON CR.ClientID = Cl.ClientID
         WHERE M.Status = 'Approved'
-    """)
+    """
+    if is_recruiter and user_id:
+        approved_matches_sql += " AND C.SalesAgentID = ?"
+        approved_matches = query_db(approved_matches_sql, (user_id,)) or []
+    else:
+        approved_matches = query_db(approved_matches_sql) or []
 
     # 5. Matching by Client/Request — عميل → طلب → فلاتر حسب بيانات طلب العميل
     # الفلاتر المتفق عليها: العمر، المنطقة، اللغة، الجنس، متخرج ام لا
@@ -1774,6 +1789,9 @@ def allocation_matching():
                         AND M.Status NOT IN ('Rejected'))
                 """
                 params = [selected_request_id]
+                if is_recruiter and user_id:
+                    base_sql += " AND C.SalesAgentID = ?"
+                    params.append(user_id)
                 if gender_filter and str(gender_filter).lower() not in ('any', 'none', ''):
                     base_sql += " AND (C.Gender = ? OR C.Gender IS NULL)"
                     params.append(gender_filter)
@@ -1825,6 +1843,7 @@ def allocation_matching():
                            ready_candidates=ready_candidates,
                            matches=matches_proposed,
                            approved_matches=approved_matches or [],
+                           is_recruiter=is_recruiter,
                            clients=clients or [],
                            selected_client_id=selected_client_id,
                            selected_request_id=selected_request_id,
@@ -1857,6 +1876,12 @@ def allocation_confirm_match():
             user_role = (g.user.get('Role') or '').strip()
             if allowed_roles and user_role not in allowed_roles:
                 flash('ليس لديك الصلاحية: هذا الطلب يتطلب أحد الأدوار التالية فقط: ' + ', '.join(allowed_roles) + '.', 'danger')
+                return redirect(url_for('allocation_matching'))
+        # الريكروتر لا يستطيع ترشيح مرشح لم يسجّله
+        if (g.user.get('Role') or '').strip() == 'Recruiter':
+            cand_row = query_db("SELECT SalesAgentID FROM Candidates WHERE CandidateID = ?", (cand_id,), one=True)
+            if not cand_row or cand_row.get('SalesAgentID') != session.get('user_id'):
+                flash('لا يمكنك ترشيح هذا المرشح — لا يظهر ضمن مرشحيك المسجّلين.', 'danger')
                 return redirect(url_for('allocation_matching'))
         notes = request.form.get('notes', '')
         feedback = request.form.get('allocator_feedback', '')
