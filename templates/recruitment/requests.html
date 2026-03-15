@@ -121,15 +121,30 @@
                             </div>
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label fw-bold">المخول بالترشيح <small class="text-muted">من له حق الترشيح لطلب العميل (يمكن اختيار أكثر من دور)</small></label>
-                                    <select name="allocator_role" class="form-select" multiple size="4">
-                                        <option value="Allocator">Allocator</option>
-                                        <option value="AllocationSpecialist">Allocation Specialist</option>
-                                        <option value="AllocationManager">Allocation Manager</option>
-                                        <option value="Manager">Manager</option>
-                                        <option value="AccountManager">Account Manager</option>
-                                    </select>
-                                    <div class="form-text">امسك Ctrl (أو Cmd) لاختيار أكثر من دور. إن لم تختر أي شيء = أي مخوّل.</div>
+                                    <label class="form-label fw-bold">المخول بالترشيح <small class="text-muted">من له حق الترشيح لطلب العميل</small></label>
+                                    <div class="border rounded p-3 bg-light">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="allocator_role" value="Allocator" id="arAllocator">
+                                            <label class="form-check-label" for="arAllocator">Allocator</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="allocator_role" value="AllocationSpecialist" id="arSpec">
+                                            <label class="form-check-label" for="arSpec">Allocation Specialist</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="allocator_role" value="AllocationManager" id="arMgr">
+                                            <label class="form-check-label" for="arMgr">Allocation Manager</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="allocator_role" value="Manager" id="arManager">
+                                            <label class="form-check-label" for="arManager">Manager</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="allocator_role" value="AccountManager" id="arAcc">
+                                            <label class="form-check-label" for="arAcc">Account Manager</label>
+                                        </div>
+                                    </div>
+                                    <div class="form-text">اختر واحداً أو أكثر. إن لم تختر أي شيء = أي مخوّل.</div>
                                 </div>
                             </div>
                             <div class="row mb-3">

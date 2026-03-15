@@ -2468,6 +2468,22 @@ def add_request():
     allocator_roles = f.getlist('allocator_role')
     allocator_role = ','.join(r.strip() for r in allocator_roles if r and r.strip()) if allocator_roles else None
 
+    db = get_db()
+    if db:
+        cur = db.cursor()
+        try:
+            cur.execute("""
+                IF EXISTS (SELECT 1 FROM sysobjects WHERE name='ClientRequests' AND xtype='U')
+                AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='AllocatorRole' AND Object_ID=Object_ID(N'ClientRequests'))
+                ALTER TABLE ClientRequests ADD AllocatorRole NVARCHAR(500)
+            """)
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except: pass
+        try: cur.close()
+        except: pass
+
     try:
         query_db("""
             INSERT INTO ClientRequests (
