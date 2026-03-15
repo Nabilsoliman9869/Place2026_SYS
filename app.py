@@ -4103,7 +4103,7 @@ def training_sales_followup():
     today = datetime.today().strftime('%Y-%m-%d')
     try:
         booked_today = query_db("""
-            SELECT T.SlotID, T.SlotDate, T.SlotTime, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.InterviewType, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
             FROM TASchedules T
             JOIN Candidates C ON T.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
@@ -4111,7 +4111,7 @@ def training_sales_followup():
             ORDER BY T.SlotTime
         """, (today,))
         booked_upcoming = query_db("""
-            SELECT T.SlotID, T.SlotDate, T.SlotTime, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.InterviewType, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
             FROM TASchedules T
             JOIN Candidates C ON T.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID

@@ -29,6 +29,7 @@
                             <th><span class="en-bold">Status</span></th>
                             <th><span class="en-bold">Candidate</span> <span class="ar-normal">المرشح</span></th>
                             <th><span class="en-bold">Type</span></th>
+                            <th><span class="en-bold">طريقة الاختبار</span></th>
                             <th><span class="en-bold">Booked By</span></th>
                             <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
                         </tr>
@@ -64,6 +65,7 @@
                                 {% endif %}
                             </td>
                             <td>{{ slot.Type or '-' }}</td>
+                            <td><span class="badge bg-secondary">{{ slot.InterviewType or '-' }}</span></td>
                             <td class="small text-muted">{{ slot.BookedByName or '-' }}</td>
                             <td>
                                 {% if slot.Status == 'Booked' %}

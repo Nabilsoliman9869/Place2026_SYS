@@ -26,19 +26,21 @@
                     <th>الوقت</th>
                     <th>الاسم</th>
                     <th>الهاتف</th>
+                    <th>طريقة الاختبار</th>
                     <th>المختبر</th>
                     <th>إجراء</th>
                 </tr>
             </thead>
             <tbody>
                 {% if not booked_today %}
-                <tr><td colspan="5" class="text-muted text-center py-3">لا توجد مواعيد محجوزة لليوم.</td></tr>
+                <tr><td colspan="6" class="text-muted text-center py-3">لا توجد مواعيد محجوزة لليوم.</td></tr>
                 {% endif %}
                 {% for row in booked_today %}
                 <tr>
                     <td><strong>{{ row.SlotTime or '-' }}</strong></td>
                     <td class="fw-bold">{{ row.FullName }}</td>
                     <td>{{ row.Phone }}</td>
+                    <td><span class="badge bg-secondary">{{ row.InterviewType or '-' }}</span></td>
                     <td><small>{{ row.EvaluatorName or '-' }}</small></td>
                     <td>
                         <a href="{{ url_for('candidate_profile', candidate_id=row.CandidateID) }}" class="btn btn-sm btn-outline-secondary">ملف</a>
@@ -63,13 +65,14 @@
                     <th>الوقت</th>
                     <th>الاسم</th>
                     <th>الهاتف</th>
+                    <th>طريقة الاختبار</th>
                     <th>المختبر</th>
                     <th>إجراء</th>
                 </tr>
             </thead>
             <tbody>
                 {% if not booked_upcoming %}
-                <tr><td colspan="6" class="text-muted text-center py-3">لا توجد مواعيد قادمة.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center py-3">لا توجد مواعيد قادمة.</td></tr>
                 {% endif %}
                 {% for row in booked_upcoming %}
                 <tr>
@@ -77,6 +80,7 @@
                     <td>{{ row.SlotTime or '-' }}</td>
                     <td class="fw-bold">{{ row.FullName }}</td>
                     <td>{{ row.Phone }}</td>
+                    <td><span class="badge bg-secondary">{{ row.InterviewType or '-' }}</span></td>
                     <td><small>{{ row.EvaluatorName or '-' }}</small></td>
                     <td>
                         <a href="{{ url_for('candidate_profile', candidate_id=row.CandidateID) }}" class="btn btn-sm btn-outline-secondary">ملف</a>
