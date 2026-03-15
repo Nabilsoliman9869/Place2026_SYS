@@ -376,6 +376,16 @@ def init_system():
             AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'RecruiterFeedbackDate' AND Object_ID = Object_ID(N'Candidates'))
                 ALTER TABLE Candidates ADD RecruiterFeedbackDate DATETIME NULL;
         """)
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'IsReferredToTraining' AND Object_ID = Object_ID(N'Candidates'))
+                ALTER TABLE Candidates ADD IsReferredToTraining BIT DEFAULT 0;
+        """)
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='Candidates' AND xtype='U')
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'EmploymentStatus' AND Object_ID = Object_ID(N'Candidates'))
+                ALTER TABLE Candidates ADD EmploymentStatus NVARCHAR(50) NULL;
+        """)
         
         # Explicitly Commit Schema Changes
         cursor.commit()
@@ -1229,29 +1239,74 @@ def recruiter_test_results():
 
 @app.route('/recruiter/evaluate', methods=['POST'])
 @login_required
+@role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_evaluate_candidate():
-    f = request.form
-    cand_id = f['candidate_id']
-    decision = f['decision'] # 'Valid' or 'Invalid'
-    feedback = f['feedback']
-    lang_level = f['language_level']
-    emp_status = f['employment_status']
-    
-    if decision == 'Valid':
-        new_status = 'Talent_Pool' # Ready for Talent Test
-        is_referred = 0
-    else:
-        new_status = 'Rejected_Recruitment'
-        is_referred = 1 # Referred to Training Sales
-        
-    query_db("""
-        UPDATE Candidates 
-        SET Status = ?, IsReferredToTraining = ?, RecruiterFeedback = ?, RecruiterFeedbackBy = ?, RecruiterFeedbackDate = ?, CurrentCEFR = ?, EmploymentStatus = ?
-        WHERE CandidateID = ?
-    """, (new_status, is_referred, feedback, session.get('user_id'), datetime.utcnow(), lang_level, emp_status, cand_id))
-    
-    flash('Candidate Evaluated Successfully', 'success')
-    return redirect(url_for('recruiter_workbench'))
+    try:
+        f = request.form
+        cand_id = f.get('candidate_id')
+        decision = f.get('decision', 'Valid')
+        feedback = f.get('feedback') or ''
+        lang_level = f.get('language_level') or ''
+        emp_status = f.get('employment_status') or ''
+        if not cand_id:
+            flash('Missing candidate. Please try again.', 'danger')
+            return redirect(url_for('recruiter_workbench'))
+        if decision == 'Valid':
+            new_status = 'Talent_Pool'
+            is_referred = 0
+        else:
+            new_status = 'Rejected_Recruitment'
+            is_referred = 1
+        db = get_db()
+        if db:
+            cur = db.cursor()
+            try:
+                cur.execute("""
+                    IF EXISTS (SELECT 1 FROM sysobjects WHERE name='Candidates' AND xtype='U')
+                    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='IsReferredToTraining' AND Object_ID=Object_ID(N'Candidates'))
+                    ALTER TABLE Candidates ADD IsReferredToTraining BIT DEFAULT 0
+                """)
+                cur.execute("""
+                    IF EXISTS (SELECT 1 FROM sysobjects WHERE name='Candidates' AND xtype='U')
+                    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='EmploymentStatus' AND Object_ID=Object_ID(N'Candidates'))
+                    ALTER TABLE Candidates ADD EmploymentStatus NVARCHAR(50) NULL
+                """)
+                cur.execute("""
+                    IF EXISTS (SELECT 1 FROM sysobjects WHERE name='Candidates' AND xtype='U')
+                    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='RecruiterFeedback' AND Object_ID=Object_ID(N'Candidates'))
+                    ALTER TABLE Candidates ADD RecruiterFeedback NVARCHAR(MAX)
+                """)
+                cur.execute("""
+                    IF EXISTS (SELECT 1 FROM sysobjects WHERE name='Candidates' AND xtype='U')
+                    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='RecruiterFeedbackBy' AND Object_ID=Object_ID(N'Candidates'))
+                    ALTER TABLE Candidates ADD RecruiterFeedbackBy INT NULL
+                """)
+                cur.execute("""
+                    IF EXISTS (SELECT 1 FROM sysobjects WHERE name='Candidates' AND xtype='U')
+                    AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name='RecruiterFeedbackDate' AND Object_ID=Object_ID(N'Candidates'))
+                    ALTER TABLE Candidates ADD RecruiterFeedbackDate DATETIME NULL
+                """)
+                db.commit()
+            except Exception:
+                try: db.rollback()
+                except: pass
+            try: cur.close()
+            except: pass
+        query_db("""
+            UPDATE Candidates
+            SET Status = ?, IsReferredToTraining = ?, RecruiterFeedback = ?, RecruiterFeedbackBy = ?,
+                RecruiterFeedbackDate = GETDATE(), CurrentCEFR = ?, EmploymentStatus = ?
+            WHERE CandidateID = ?
+        """, (new_status, is_referred, feedback, session.get('user_id'), lang_level, emp_status, cand_id))
+        flash('Candidate Evaluated Successfully', 'success')
+        return redirect(url_for('recruiter_workbench'))
+    except Exception as e:
+        try:
+            app.logger.error("recruiter_evaluate: %s", str(e))
+        except Exception:
+            pass
+        flash('Error: %s' % str(e)[:80], 'danger')
+        return redirect(url_for('recruiter_workbench'))
 
 @app.route('/admin/import_candidates', methods=('GET', 'POST'))
 @login_required
