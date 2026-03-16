@@ -1878,7 +1878,8 @@ def allocation_confirm_match():
                 flash('ليس لديك الصلاحية: هذا الطلب يتطلب أحد الأدوار التالية فقط: ' + ', '.join(allowed_roles) + '.', 'danger')
                 return redirect(url_for('allocation_matching'))
         # الريكروتر لا يستطيع ترشيح مرشح لم يسجّله
-        if (g.user.get('Role') or '').strip() == 'Recruiter':
+        user_role = (g.user or {}).get('Role') or ''
+        if user_role.strip() == 'Recruiter':
             cand_row = query_db("SELECT SalesAgentID FROM Candidates WHERE CandidateID = ?", (cand_id,), one=True)
             if not cand_row or cand_row.get('SalesAgentID') != session.get('user_id'):
                 flash('لا يمكنك ترشيح هذا المرشح — لا يظهر ضمن مرشحيك المسجّلين.', 'danger')
@@ -1899,13 +1900,32 @@ def allocation_confirm_match():
         except Exception:
             pass
 
-        query_db("""
-            INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
-            VALUES (?, ?, 'Approved', ?, ?, ?)
-        """, (cand_id, req_id, session['user_id'], notes, feedback))
-        flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
+        try:
+            query_db("""
+                INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes, AllocatorFeedback)
+                VALUES (?, ?, 'Approved', ?, ?, ?)
+            """, (cand_id, req_id, session['user_id'], notes or '', feedback or ''))
+            flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
+        except Exception as ins_err:
+            # إذا عمود AllocatorFeedback غير موجود — جرّب الإدراج بدونه
+            err_str = str(ins_err).lower()
+            if 'allocatorfeedback' in err_str or 'invalid column' in err_str or 'no such column' in err_str:
+                try:
+                    merged_notes = (notes or '') + (' | للمريكروتر: ' + (feedback or '')) if feedback else (notes or '')
+                    query_db("""
+                        INSERT INTO Matches (CandidateID, RequestID, Status, AllocatorID, ReviewNotes)
+                        VALUES (?, ?, 'Approved', ?, ?)
+                    """, (cand_id, req_id, session['user_id'], merged_notes))
+                    flash('Candidate matched successfully! Ready for Interview Scheduling.', 'success')
+                except Exception as e2:
+                    perf_logger.exception('confirm_match INSERT fallback failed')
+                    flash('خطأ في حفظ الترشيح. تأكد من تشغيل سكربت add_matches_columns.sql على القاعدة: ' + str(e2)[:60], 'danger')
+            else:
+                perf_logger.exception('confirm_match INSERT failed')
+                flash('خطأ: ' + str(ins_err)[:80], 'danger')
         return redirect(url_for('allocation_matching'))
     except Exception as e:
+        perf_logger.exception('allocation_confirm_match')
         flash('خطأ: ' + str(e)[:80], 'danger')
         return redirect(url_for('allocation_matching'))
 
@@ -2722,15 +2742,40 @@ def recruiter_dashboard():
         ORDER BY M.MatchDate DESC
     """, (user_id,))
 
-    # مقابلات التالنت اليوم — المرشحون المحوّلون من هذا الريكروتر
-    talent_interviews_today = query_db("""
+    # مقابلات التالنت اليوم — من TASchedules و Schedules (Talent_Recruitment)
+    # المرشحون المحوّلون/المحجوزون: SalesAgentID أو RecruiterID أو BookedBy
+    ta_slots = query_db("""
         SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
         FROM TASchedules T
         JOIN Candidates C ON T.CandidateID = C.CandidateID
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-        WHERE C.SalesAgentID = ? AND CAST(T.SlotDate AS DATE) = ? AND T.Status IN ('Booked', 'Completed')
+        WHERE (C.SalesAgentID = ? OR C.RecruiterID = ? OR T.BookedBy = ?)
+          AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
+          AND T.Status IN ('Booked', 'Completed')
         ORDER BY T.SlotTime
-    """, (user_id, today))
+    """, (user_id, user_id, user_id, today))
+    try:
+        sched_slots = query_db("""
+            SELECT S.ScheduleID as SlotID, S.SlotDate, S.SlotTime, S.Status, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
+            FROM Schedules S
+            JOIN Candidates C ON S.BookedCandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON S.OwnerUserID = U.UserID
+            WHERE S.Context = 'Talent_Recruitment' AND S.Status = 'Booked'
+              AND (C.SalesAgentID = ? OR C.RecruiterID = ?)
+              AND CAST(S.SlotDate AS DATE) = CAST(? AS DATE)
+            ORDER BY S.SlotTime
+        """, (user_id, user_id, today))
+    except Exception:
+        sched_slots = []
+    # دمج وإزالة التكرار حسب (CandidateID, SlotDate, SlotTime) وترتيب بالوقت
+    seen = set()
+    combined = []
+    for row in (ta_slots or []) + (sched_slots or []):
+        key = (row.get('CandidateID'), str(row.get('SlotDate', '')), str(row.get('SlotTime', '')))
+        if key not in seen:
+            seen.add(key)
+            combined.append(row)
+    talent_interviews_today = sorted(combined, key=lambda r: (r.get('SlotDate') or '', r.get('SlotTime') or ''))
 
     return render_template('recruitment/dashboard.html', metrics=metrics, recent_matches=recent_matches or [],
                           talent_interviews_today=talent_interviews_today or [])
