@@ -14,12 +14,26 @@
                 <div class="card-body">
                     <!-- Candidate Info -->
                     <div class="alert alert-light border">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <strong>Candidate:</strong> {{ slot.FullName }}
+                        <div class="row align-items-start">
+                            <div class="col-md-8">
+                                <strong>Candidate:</strong> <span class="fs-5">{{ slot.FullName }}</span>
+                                <div class="small text-muted mt-1">
+                                    <i class="fas fa-phone"></i> {{ slot.Phone or '—' }}
+                                    &nbsp;|&nbsp;
+                                    <i class="fas fa-envelope"></i> {{ slot.Email or '—' }}
+                                    &nbsp;|&nbsp;
+                                    <i class="fas fa-birthday-cake"></i> <span class="ar-normal">العمر:</span> {% if slot.Age is not none %}{{ slot.Age }}{% else %}—{% endif %}
+                                </div>
                             </div>
-                            <div class="col-md-6 text-end">
+                            <div class="col-md-4 text-md-end mt-2 mt-md-0">
                                 <strong>Type:</strong> <span class="badge bg-info">{{ eval_type }}</span>
+                                {% if from_exam_feedback and exam_kind %}
+                                <br class="d-none d-md-block">
+                                <span class="badge bg-dark mt-1">{{ exam_label_ar }}</span>
+                                {% if eval_subtype %}
+                                <small class="d-block text-muted mt-1"><span class="en-bold">{{ eval_subtype }}</span></small>
+                                {% endif %}
+                                {% endif %}
                             </div>
                         </div>
                         {% if slot.RecruiterFeedback or slot.MarketingAssessment %}
@@ -37,26 +51,32 @@
 
                     <form action="" method="POST">
                         {% if from_exam_feedback %}
-                        <div class="alert alert-info mb-3">
-                            <i class="fas fa-info-circle"></i> تقييم امتحان دوري — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id) }}">رجوع لفيدباك الدفعة</a>
+                        <input type="hidden" name="exam_kind" value="{{ exam_kind or 'periodic' }}">
+                        <div class="alert alert-{{ 'primary' if exam_kind == 'graduation' else 'info' }} mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            {% if exam_kind == 'graduation' %}
+                            <strong>اختبار تخرج</strong> — يُحفظ النوع في التقييم كـ <code>Training_Graduation</code>
+                            {% else %}
+                            <strong>تقييم دوري</strong> — يُحفظ النوع في التقييم كـ <code>Training_Periodic</code>
+                            {% endif %}
+                            — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id) }}">رجوع لفيدباك الدفعة</a>
                         </div>
                         {% endif %}
                         
                         <!-- Common Fields -->
                         <div class="mb-3">
                             <label class="form-label fw-bold">CEFR Level (from Sheet)</label>
+                            {% if cefr_track == 'training' %}
+                            <span class="badge bg-warning text-dark ms-1">مسار التدريب</span>
+                            {% elif cefr_track == 'recruitment' %}
+                            <span class="badge bg-secondary ms-1">مسار التوظيف</span>
+                            {% endif %}
+                            <small class="text-muted d-block mb-1">المستويات المعروضة تختلف بين التوظيف (تفصيلي) والتدريب (مبسّط).</small>
                             <select name="cefr_level" class="form-select" required>
                                 <option value="">Select Level...</option>
-                                <option value="A1">A1</option>
-                                <option value="A2">A2</option>
-                                <option value="B1">B1</option>
-                                <option value="High B1">High B1</option>
-                                <option value="Low B1+">Low B1+</option>
-                                <option value="Compromised B1+">Compromised B1+</option>
-                                <option value="Solid B1+">Solid B1+</option>
-                                <option value="Compromised B2">Compromised B2</option>
-                                <option value="B2">B2</option>
-                                <option value="C1">C1</option>
+                                {% for lvl in cefr_options %}
+                                <option value="{{ lvl }}">{{ lvl }}</option>
+                                {% endfor %}
                             </select>
                         </div>
 

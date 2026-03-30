@@ -2162,12 +2162,72 @@ def _safe_int(val, default=0):
     except (ValueError, TypeError):
         return default
 
+
+# تقييم المواهب: مستويات اللغة — مُستخرجة/مُوحّاة مع ملفات Excel في المشروع:
+# - التوظيف: 2026 booking.xlsx (Sheet2: R-CEFR، CEFR) + مستويات إضافية للمطابقة/الأرشيف
+# - التدريب: Guide Academy Placements 2025.xlsx (GA Interviews عمود CEFR) + academy_requested_clean_sheets (TTB/TB)
+CEFR_OPTIONS_RECRUITMENT = [
+    'A1', 'A2', 'B1', 'High B1', 'Low B1+',
+    'B1+', 'CB1+',
+    'Low (B1+)', 'Compromised (B1+)', 'Solid (B1+)',
+    'Compromised B1+', 'Solid B1+',
+    'Compromised B2', 'Compromised (B2)', 'B2', 'C1',
+]
+CEFR_OPTIONS_TRAINING = [
+    # Academy track levels (as shared in training exam sheets)
+    'Foundation',
+    'True Beginners',
+    'A1',
+    'A1.1',
+    'A1.2',
+    'A2',
+    'A2.1',
+    'A2.2',
+    'B1',
+    'B1.1',
+    'B1.2',
+    'B1+',
+    'B2',
+    'Milestone 1',
+    'Milestone 2',
+    'Milestone 3',
+    'Milestone 4',
+    'T2H1',
+    'T2H2',
+]
+
+# أنواع تقييم مختبر مواهب التدريب (يُحفظ في Evaluations.EvaluationType)
+EVAL_TRAINING_PERIODIC = 'Training_Periodic'
+EVAL_TRAINING_GRADUATION = 'Training_Graduation'
+def _exam_kind_to_eval_type(exam_kind):
+    """periodic → تقييم دوري | graduation → اختبار تخرج"""
+    if (exam_kind or '').strip().lower() == 'graduation':
+        return EVAL_TRAINING_GRADUATION
+    return EVAL_TRAINING_PERIODIC
+
+
+def _cefr_options_for_talent_evaluate(slot, eval_type):
+    """قائمة مستويات CEFR للقائمة المنسدلة حسب مسار التوظيف أو التدريب.
+    يعيد (القائمة, 'training'|'recruitment') لعرض تلميح في القالب."""
+    pi = (slot.get('PrimaryIntent') or '').strip()
+    st = (slot.get('Status') or '').strip()
+    if pi == 'Training' or st == 'Training_Lead':
+        return CEFR_OPTIONS_TRAINING, 'training'
+    if eval_type in ('Training', EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION):
+        return CEFR_OPTIONS_TRAINING, 'training'
+    if eval_type == 'Recruitment':
+        return CEFR_OPTIONS_RECRUITMENT, 'recruitment'
+    if pi in ('Employment', 'Both', 'Recruitment'):
+        return CEFR_OPTIONS_RECRUITMENT, 'recruitment'
+    return CEFR_OPTIONS_RECRUITMENT, 'recruitment'
+
+
 @app.route('/talent/evaluate/<int:slot_id>', methods=['GET', 'POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_evaluate(slot_id):
     slot = query_db("""
-        SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CurrentCEFR,
+        SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Age, C.Status, C.CurrentCEFR, C.PrimaryIntent,
                C.RecruiterFeedback, C.MarketingAssessment
         FROM TASchedules T 
         JOIN Candidates C ON T.CandidateID = C.CandidateID 
@@ -2183,14 +2243,15 @@ def talent_evaluate(slot_id):
         eval_type = 'Recruitment'
     elif session.get('role') in ('Talent_Training', 'TA-Training'):
         eval_type = 'Training'
-    
+    cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot, eval_type)
+
     if request.method == 'POST':
         f = request.form
         cefr = (f.get('cefr_level') or '').strip()
         decision = (f.get('decision') or '').strip()
         if not cefr or not decision:
             flash('CEFR Level and Decision are required', 'warning')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
         
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
@@ -2214,9 +2275,9 @@ def talent_evaluate(slot_id):
             return redirect(url_for('talent_dashboard'))
         except Exception as e:
             flash(f'خطأ عند حفظ التقييم: {str(e)}', 'danger')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
     
-    return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type)
+    return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
 
 @app.route('/sales/book_slot', methods=['POST'])
 @login_required
@@ -2347,6 +2408,7 @@ def talent_exam_feedback(batch_id):
     if not batch:
         flash('الدفعة غير موجودة.', 'danger')
         return redirect(url_for('talent_dashboard'))
+    is_archived = (batch.get('Status') or '').strip() != 'Active'
     students = query_db("""
         SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR
         FROM Enrollments E
@@ -2354,26 +2416,40 @@ def talent_exam_feedback(batch_id):
         WHERE E.BatchID = ? AND E.Status = 'Active'
         ORDER BY C.FullName
     """, (batch_id,)) or []
-    return render_template('talent/exam_feedback.html', batch=batch, students=students)
+    return render_template('talent/exam_feedback.html', batch=batch, students=students, is_archived=is_archived)
 
-@app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>', methods=['GET', 'POST'])
+@app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>', defaults={'exam_kind': 'periodic'}, methods=['GET', 'POST'])
+@app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>/<exam_kind>', methods=['GET', 'POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
-def talent_exam_feedback_evaluate(batch_id, candidate_id):
-    """تسجيل تقييم امتحان دوري — مثل talent_evaluate لكن بدون slot محجوز."""
-    cand = query_db("SELECT CandidateID, FullName, Phone, Email, Status, CurrentCEFR FROM Candidates WHERE CandidateID=?", (candidate_id,), one=True)
+def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
+    """تقييم من الدفعة: تقييم دوري (periodic) أو اختبار تخرج (graduation) — يُحفظ في EvaluationType."""
+    ek = (exam_kind or 'periodic').strip().lower()
+    if ek not in ('periodic', 'graduation'):
+        ek = 'periodic'
+    cand = query_db("SELECT CandidateID, FullName, Phone, Email, Age, Status, CurrentCEFR, PrimaryIntent FROM Candidates WHERE CandidateID=?", (candidate_id,), one=True)
     batch = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
     if not cand or not batch:
         flash('المرشح أو الدفعة غير موجودين.', 'danger')
         return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
-    eval_type = 'Training'
+    eval_subtype = _exam_kind_to_eval_type(ek)
+    eval_display = 'Training'
+    slot_dict = {k: cand[k] for k in cand} if cand else {}
+    cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
+    exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
     if request.method == 'POST':
         f = request.form
+        ek = (f.get('exam_kind') or 'periodic').strip().lower()
+        if ek not in ('periodic', 'graduation'):
+            ek = 'periodic'
+        eval_subtype = _exam_kind_to_eval_type(ek)
+        exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
+        cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
         cefr = (f.get('cefr_level') or '').strip()
         decision = (f.get('decision') or '').strip()
         if not cefr or not decision:
             flash('CEFR Level و Decision مطلوبان.', 'warning')
-            return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
+            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
         score_p = _safe_int(f.get('score_p'))
@@ -2382,13 +2458,14 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id):
         comments = (f.get('comments') or '')[:4000]
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
+        slot_type = 'Exam Feedback (Periodic)' if ek == 'periodic' else 'Exam Feedback (Graduation)'
         try:
             db = get_db()
             cur = db.cursor()
             cur.execute("""
                 INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType)
-                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, 'Exam Feedback', 'Training')
-            """, (session['user_id'], candidate_id))
+                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, ?, ?)
+            """, (session['user_id'], candidate_id, slot_type, 'Training'))
             cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
             slot_id = int(row[0]) if row and row[0] else None
@@ -2399,16 +2476,35 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id):
                     INSERT INTO Evaluations (CandidateID, SlotID, Score_Comprehension, Score_Fluency, Score_Pronunciation,
                                          Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
-                ''', (candidate_id, slot_id, score_c, score_f, score_p, score_s, score_v, cefr, decision, recommended_level, comments, session['user_id'], eval_type, recording_link))
+                ''', (candidate_id, slot_id, score_c, score_f, score_p, score_s, score_v, cefr, decision, recommended_level, comments, session['user_id'], eval_subtype, recording_link))
                 query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', candidate_id))
-                flash('تم حفظ تقييم الامتحان الدوري بنجاح.', 'success')
+                flash('تم حفظ ' + exam_label_ar + ' بنجاح.', 'success')
             else:
                 flash('خطأ في الحصول على SlotID.', 'danger')
             return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
         except Exception as e:
             flash(f'خطأ: {str(e)[:80]}', 'danger')
-            return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
-    return render_template('talent/evaluate.html', slot={'CandidateID': cand['CandidateID'], 'FullName': cand['FullName'], 'Phone': cand['Phone'], 'Email': cand['Email'], 'Status': cand['Status'], 'CurrentCEFR': cand['CurrentCEFR']}, eval_type=eval_type, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id)
+            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
+    return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
+
+@app.route('/talent/training_completed_tests')
+@login_required
+@role_required(['Talent_Training', 'TA-Training', 'Manager'])
+def talent_training_completed_tests():
+    """ليدز التدريب الذين أُنجز لهم اختبار المواهب — مع اسم المختبر."""
+    rows = query_db("""
+        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType, E.EvaluationDate,
+               C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
+               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+        FROM Evaluations E
+        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+        WHERE E.EvaluationType IN (?, ?, ?)
+          AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+        ORDER BY E.EvaluationDate DESC
+    """, (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training'))
+    return render_template('talent/training_completed_tests.html', rows=rows or [])
+
 
 @app.route('/talent/monthly_results')
 @login_required
@@ -4609,7 +4705,6 @@ def training_sales_course_fee_print(invoice_id):
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator'])
 def training_index():
     view = request.args.get('view', 'active')  # active | archive
-    today = datetime.today().strftime('%Y-%m-%d')
     base_sql = """
         SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName 
         FROM CourseBatches B 
@@ -4618,9 +4713,9 @@ def training_index():
         LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
     """
     if view == 'archive':
-        waves = query_db(base_sql + " WHERE (B.Status != 'Active' OR B.Status IS NULL) OR (B.EndDate IS NOT NULL AND B.EndDate < ?) ORDER BY B.StartDate DESC, B.BatchName", (today,))
+        waves = query_db(base_sql + " WHERE (B.Status != 'Active' OR B.Status IS NULL) ORDER BY B.StartDate DESC, B.BatchName")
     else:
-        waves = query_db(base_sql + " WHERE B.Status = 'Active' AND (B.EndDate IS NULL OR B.EndDate >= ?) ORDER BY B.StartDate DESC, B.BatchName", (today,))
+        waves = query_db(base_sql + " WHERE B.Status = 'Active' ORDER BY B.StartDate DESC, B.BatchName")
     
     # Also fetch definitions for the tabs
     courses = query_db("SELECT * FROM Courses")
