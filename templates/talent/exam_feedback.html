@@ -1,5 +1,10 @@
 {% extends 'base.html' %}
 
+{% block page_title %}
+<span class="en-bold">Batch exam feedback</span>
+<span class="ar-normal">فيدباك الدفعة — دوري وتخرج</span>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="mb-4">
@@ -10,8 +15,10 @@
     <div class="card shadow-sm">
         <div class="card-header bg-success text-white">
             <h4 class="mb-0">
-                <i class="fas fa-clipboard-check"></i> فيدباك الدفعة — {{ batch.BatchName }}
-                <small class="d-block fs-6 opacity-75">{{ batch.CourseName }}</small>
+                <i class="fas fa-clipboard-check"></i>
+                <span class="ar-normal">فيدباك الدفعة — دوري وتخرج</span>
+                <span class="ar-normal">— {{ batch.BatchName }}</span>
+                <small class="d-block fs-6 opacity-75 mt-1">{{ batch.CourseName }}</small>
             </h4>
         </div>
         <div class="card-body">
@@ -20,14 +27,19 @@
                 <i class="fas fa-archive"></i> <strong>دفعة مؤرشفة</strong> — التقييم الدوري معطّل؛ استخدم <strong>اختبار التخرج</strong> لإنهاء التقييمات قبل إغلاق الدورة.
             </div>
             {% endif %}
-            <p class="text-muted">لكل طالب زران: <strong>تقييم دوري</strong> (يُحفظ كـ Training_Periodic) أو <strong>اختبار تخرج</strong> (يُحفظ كـ Training_Graduation).</p>
+            <div class="alert alert-light border mb-3">
+                <strong class="d-block mb-2"><i class="fas fa-info-circle text-primary"></i> أين اختبار التخرج؟</strong>
+                <span class="ar-normal">لكل طالب في الجدول يوجد زرّان: <span class="badge bg-primary">تقييم دوري</span> و <span class="badge bg-success">تخرج</span> (أو زر تخرج أحمر إذا الدفعة مؤرشفة). اضغط <strong>تخرج</strong> لتسجيل <strong>اختبار تخرج الدفعة</strong> — يُحفظ كنوع <code>Training_Graduation</code>.</span>
+                <span class="d-block small text-muted mt-2 en-bold">Periodic = Training_Periodic · Graduation = Training_Graduation</span>
+            </div>
+            <p class="text-muted mb-3">اختر الطالب ثم نوع الاختبار: <strong>تقييم دوري</strong> أو <strong>اختبار تخرج</strong> (ليس «اختبار عادي» فقط).</p>
             <table class="table table-hover">
                 <thead class="table-light">
                     <tr>
                         <th>الاسم</th>
                         <th>الهاتف</th>
                         <th>CEFR الحالي</th>
-                        <th>إجراء</th>
+                        <th>إجراء <span class="text-muted fw-normal">(دوري / تخرج)</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -37,19 +49,19 @@
                         <td>{{ st.Phone or '-' }}</td>
                         <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
                         <td>
-                            <div class="btn-group btn-group-sm flex-wrap" role="group">
+                            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="نوع الاختبار">
                                 {% if is_archived %}
                                 <span class="btn btn-outline-secondary disabled" tabindex="-1" aria-disabled="true" title="غير متاح للدفعات المؤرشفة">
                                     <i class="fas fa-calendar-check"></i> تقييم دوري
                                 </span>
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-danger">
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-danger text-nowrap" title="اختبار تخرج الدفعة">
                                     <i class="fas fa-graduation-cap"></i> تخرج
                                 </a>
                                 {% else %}
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic') }}" class="btn btn-outline-primary">
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic') }}" class="btn btn-outline-primary text-nowrap" title="تقييم دوري">
                                     <i class="fas fa-calendar-check"></i> تقييم دوري
                                 </a>
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-outline-success">
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-outline-success text-nowrap" title="اختبار تخرج الدفعة">
                                     <i class="fas fa-graduation-cap"></i> تخرج
                                 </a>
                                 {% endif %}
