@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block page_title %}<span class="en-bold">Tests registry</span> <span class="ar-normal">سجل الاختبارات</span>{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h4 class="mb-0">
+            <i class="fas fa-clipboard-list text-primary"></i>
+            <span class="en-bold">All tested leads</span>
+            <span class="ar-normal">جميع الليدز التي أُجري لها اختبار</span>
+        </h4>
+        <form method="GET" class="d-flex gap-2 flex-grow-1" style="max-width: 420px;">
+            <input type="search" name="q" class="form-control form-control-sm" placeholder="Search name / phone / ID" value="{{ q or '' }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-search"></i></button>
+        </form>
+    </div>
+    <p class="text-muted small mb-3">
+        <span class="en-bold">Shows every evaluation record</span> — lead, CEFR, scores, evaluation type, decision, and <strong>who tested them</strong>.
+        <span class="ar-normal d-block">يعرض كل سجل تقييم مع المختبر؛ استخدم «تعديل» لتحديث التفاصيل.</span>
+    </p>
+
+    <div class="table-responsive shadow-sm rounded border">
+        <table class="table table-hover table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th><span class="ar-normal">التاريخ</span></th>
+                    <th><span class="ar-normal">الليد</span></th>
+                    <th><span class="ar-normal">الهاتف</span></th>
+                    <th><span class="en-bold">CEFR</span></th>
+                    <th><span class="en-bold">C/F/P/G/V</span></th>
+                    <th><span class="ar-normal">النوع</span></th>
+                    <th><span class="ar-normal">القرار</span></th>
+                    <th><span class="ar-normal">المختبر</span></th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td class="text-nowrap small">{{ (r.EvaluationDate|string)[:19] if r.EvaluationDate else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" target="_blank" class="fw-bold">{{ r.FullName }}</a>
+                        {% if r.PrimaryIntent %}
+                        <br><span class="badge bg-light text-dark border">{{ r.PrimaryIntent }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small">{{ r.Phone or '-' }}</td>
+                    <td><span class="badge bg-secondary">{{ r.CEFR_Level or '-' }}</span></td>
+                    <td class="small text-nowrap">
+                        {{ r.Score_Comprehension or 0 }}/{{ r.Score_Fluency or 0 }}/{{ r.Score_Pronunciation or 0 }}/{{ r.Score_Structure or 0 }}/{{ r.Score_Vocabulary or 0 }}
+                    </td>
+                    <td>
+                        {% set et = (r.EvaluationType or '') %}
+                        {% if et == 'Training_Periodic' %}
+                        <span class="badge bg-info text-dark">دوري</span>
+                        {% elif et == 'Training_Graduation' %}
+                        <span class="badge bg-primary">تخرج</span>
+                        {% elif et == 'Training' %}
+                        <span class="badge bg-secondary">Training</span>
+                        {% elif et == 'Recruitment' %}
+                        <span class="badge bg-success">Recruitment</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark">{{ et or '-' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small">{{ r.Decision or '-' }}</td>
+                    <td class="small">
+                        <strong>{{ r.EvaluatorName or r.EvaluatorUsername or '—' }}</strong>
+                        {% if r.EvaluatorUsername %}<br><span class="text-muted">{{ r.EvaluatorUsername }}</span>{% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a href="{{ url_for('talent_evaluation_edit', evaluation_id=r.EvaluationID) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-edit"></i> <span class="en-bold">Edit</span>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center text-muted py-4">No evaluations found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

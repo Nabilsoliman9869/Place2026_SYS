@@ -2506,6 +2506,136 @@ def talent_training_completed_tests():
     return render_template('talent/training_completed_tests.html', rows=rows or [])
 
 
+EVALUATION_TYPES_EDITABLE = (
+    'Recruitment', 'Training', 'Training_Periodic', 'Training_Graduation', 'General',
+)
+
+
+def _merged_cefr_options_for_edit():
+    return sorted(set(CEFR_OPTIONS_TRAINING + CEFR_OPTIONS_RECRUITMENT), key=lambda s: (len(s), s.lower()))
+
+
+@app.route('/talent/tests_registry')
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_tests_registry():
+    """All leads with at least one talent evaluation; shows who tested them; links to edit."""
+    q = (request.args.get('q') or '').strip()
+    base_sql = """
+        SELECT TOP 2000 E.EvaluationID, E.CandidateID, E.SlotID,
+               E.Score_Comprehension, E.Score_Fluency, E.Score_Pronunciation, E.Score_Structure, E.Score_Vocabulary,
+               E.CEFR_Level, E.Decision, E.RecommendedLevel, E.EvaluationType, E.EvaluationDate, E.RecordingLink,
+               E.Comments,
+               C.FullName, C.Phone, C.Email, C.PrimaryIntent,
+               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+        FROM Evaluations E
+        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+    """
+    if q:
+        like = f"%{q}%"
+        rows = query_db(
+            base_sql + " WHERE (C.FullName LIKE ? OR ISNULL(C.Phone,'') LIKE ? OR CAST(C.CandidateID AS VARCHAR(20)) LIKE ?) ORDER BY E.EvaluationDate DESC",
+            (like, like, like),
+        )
+    else:
+        rows = query_db(base_sql + " ORDER BY E.EvaluationDate DESC")
+    return render_template('talent/tests_registry.html', rows=rows or [], q=q)
+
+
+@app.route('/talent/evaluation/<int:evaluation_id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_evaluation_edit(evaluation_id):
+    row = query_db("""
+        SELECT E.*, C.FullName, C.Phone, C.Email,
+               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+        FROM Evaluations E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+        WHERE E.EvaluationID = ?
+    """, (evaluation_id,), one=True)
+    if not row:
+        flash('التقييم غير موجود.', 'danger')
+        return redirect(url_for('talent_tests_registry'))
+
+    cefr_options = _merged_cefr_options_for_edit()
+
+    if request.method == 'POST':
+        f = request.form
+        cefr = (f.get('cefr_level') or '').strip()
+        decision = (f.get('decision') or '').strip()
+        eval_type = (f.get('evaluation_type') or '').strip()
+        if eval_type not in EVALUATION_TYPES_EDITABLE:
+            eval_type = ((row.get('EvaluationType') or 'General').strip() or 'General')
+            if eval_type not in EVALUATION_TYPES_EDITABLE:
+                eval_type = 'General'
+        comments = (f.get('comments') or '')[:4000]
+        recording_link = (f.get('recording_link') or '').strip() or None
+        recommended_level = (f.get('recommended_level') or '').strip() or None
+        score_c = _safe_int(f.get('score_c'))
+        score_f = _safe_int(f.get('score_f'))
+        score_p = _safe_int(f.get('score_p'))
+        score_s = _safe_int(f.get('score_g'))
+        score_v = _safe_int(f.get('score_v'))
+        eval_dt_raw = (f.get('evaluation_date') or '').strip()
+        eval_dt = None
+        if eval_dt_raw:
+            s = eval_dt_raw.replace('Z', '')
+            try:
+                eval_dt = datetime.fromisoformat(s)
+            except ValueError:
+                try:
+                    eval_dt = datetime.strptime(s[:16], '%Y-%m-%dT%H:%M')
+                except ValueError:
+                    eval_dt = None
+            if eval_dt and getattr(eval_dt, 'tzinfo', None):
+                eval_dt = eval_dt.replace(tzinfo=None)
+        if not cefr or not decision:
+            flash('CEFR والقرار مطلوبان.', 'warning')
+            return render_template(
+                'talent/evaluation_edit.html',
+                row=row,
+                cefr_options=cefr_options,
+                evaluation_types=EVALUATION_TYPES_EDITABLE,
+            )
+        try:
+            if eval_dt:
+                query_db("""
+                    UPDATE Evaluations SET
+                        Score_Comprehension=?, Score_Fluency=?, Score_Pronunciation=?, Score_Structure=?, Score_Vocabulary=?,
+                        CEFR_Level=?, Decision=?, RecommendedLevel=?, Comments=?, EvaluationType=?, RecordingLink=?,
+                        EvaluationDate=?
+                    WHERE EvaluationID=?
+                """, (
+                    score_c, score_f, score_p, score_s, score_v,
+                    cefr, decision, recommended_level, comments, eval_type, recording_link,
+                    eval_dt, evaluation_id,
+                ))
+            else:
+                query_db("""
+                    UPDATE Evaluations SET
+                        Score_Comprehension=?, Score_Fluency=?, Score_Pronunciation=?, Score_Structure=?, Score_Vocabulary=?,
+                        CEFR_Level=?, Decision=?, RecommendedLevel=?, Comments=?, EvaluationType=?, RecordingLink=?
+                    WHERE EvaluationID=?
+                """, (
+                    score_c, score_f, score_p, score_s, score_v,
+                    cefr, decision, recommended_level, comments, eval_type, recording_link,
+                    evaluation_id,
+                ))
+            flash('تم تحديث تفاصيل الاختبار.', 'success')
+            return redirect(url_for('talent_tests_registry'))
+        except Exception as e:
+            flash(f'خطأ: {str(e)[:200]}', 'danger')
+
+    return render_template(
+        'talent/evaluation_edit.html',
+        row=row,
+        cefr_options=cefr_options,
+        evaluation_types=EVALUATION_TYPES_EDITABLE,
+    )
+
+
 @app.route('/talent/monthly_results')
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])

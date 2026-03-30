@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block page_title %}<span class="en-bold">Edit evaluation</span> <span class="ar-normal">تعديل الاختبار</span>{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('talent_tests_registry') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left"></i> <span class="en-bold">Back to registry</span>
+        </a>
+    </div>
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-edit"></i>
+                <span class="en-bold">Edit test details</span>
+                <span class="ar-normal">— {{ row.FullName }}</span>
+            </h5>
+            <small class="opacity-75 d-block mt-1">
+                <span class="en-bold">Tested by:</span> {{ row.EvaluatorName or row.EvaluatorUsername or '—' }}
+                {% if row.EvaluatorUsername %}({{ row.EvaluatorUsername }}){% endif %}
+                · <span class="en-bold">Evaluation ID:</span> {{ row.EvaluationID }}
+            </small>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">CEFR level</label>
+                        <select name="cefr_level" class="form-select" required>
+                            <option value="">—</option>
+                            {% if row.CEFR_Level and row.CEFR_Level not in cefr_options %}
+                            <option value="{{ row.CEFR_Level }}" selected>{{ row.CEFR_Level }} (current)</option>
+                            {% endif %}
+                            {% for lvl in cefr_options %}
+                            <option value="{{ lvl }}" {% if row.CEFR_Level == lvl %}selected{% endif %}>{{ lvl }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">If missing, pick closest level or add via DB.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Evaluation type</label>
+                        <select name="evaluation_type" class="form-select">
+                            {% if row.EvaluationType and row.EvaluationType not in evaluation_types %}
+                            <option value="{{ row.EvaluationType }}" selected>{{ row.EvaluationType }} (current)</option>
+                            {% endif %}
+                            {% for t in evaluation_types %}
+                            <option value="{{ t }}" {% if (row.EvaluationType or '') == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Decision</label>
+                        <select name="decision" class="form-select" required>
+                            <option value="Accepted" {% if row.Decision == 'Accepted' %}selected{% endif %}>Accepted</option>
+                            <option value="Training" {% if row.Decision == 'Training' %}selected{% endif %}>Training</option>
+                            <option value="Rejected" {% if row.Decision == 'Rejected' %}selected{% endif %}>Rejected</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Recommended level <small class="text-muted">(optional)</small></label>
+                        <input type="text" name="recommended_level" class="form-control" value="{{ row.RecommendedLevel or '' }}" maxlength="80">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Evaluation date/time</label>
+                        {% set _ed = (row.EvaluationDate|string|trim) if row.EvaluationDate else '' %}
+                        <input type="datetime-local" name="evaluation_date" class="form-control"
+                               value="{% if _ed|length >= 16 %}{{ _ed[:10] }}T{{ _ed[11:16] }}{% endif %}">
+                        <small class="text-muted">Leave empty to keep stored date unchanged on save (if you clear, date is not cleared).</small>
+                    </div>
+                </div>
+
+                <h6 class="border-bottom pb-2 mb-3"><span class="en-bold">Scores</span> <span class="ar-normal">(0–10)</span></h6>
+                <div class="row g-2 mb-3 flex-nowrap">
+                    <div class="col">
+                        <label class="form-label small">C</label>
+                        <input type="number" name="score_c" class="form-control form-control-sm" step="1" min="0" max="10" value="{{ row.Score_Comprehension or 0 }}">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small">F</label>
+                        <input type="number" name="score_f" class="form-control form-control-sm" step="1" min="0" max="10" value="{{ row.Score_Fluency or 0 }}">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small">P</label>
+                        <input type="number" name="score_p" class="form-control form-control-sm" step="1" min="0" max="10" value="{{ row.Score_Pronunciation or 0 }}">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small">G</label>
+                        <input type="number" name="score_g" class="form-control form-control-sm" step="1" min="0" max="10" value="{{ row.Score_Structure or 0 }}">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small">V</label>
+                        <input type="number" name="score_v" class="form-control form-control-sm" step="1" min="0" max="10" value="{{ row.Score_Vocabulary or 0 }}">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Comments</label>
+                    <textarea name="comments" class="form-control" rows="4">{{ row.Comments or '' }}</textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Recording link</label>
+                    <input type="url" name="recording_link" class="form-control" value="{{ row.RecordingLink or '' }}" placeholder="https://...">
+                </div>
+
+                <div class="d-grid gap-2 d-md-flex">
+                    <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save changes</button>
+                    <a href="{{ url_for('talent_tests_registry') }}" class="btn btn-outline-secondary btn-lg">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

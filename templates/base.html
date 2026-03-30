@@ -508,6 +508,11 @@
             <!-- ============================================= -->
             {% if check_role_access(['Manager', 'Talent', 'Talent_Recruitment', 'TA-Training', 'Talent_Training']) %}
             <div class="sidebar-section-label"><span class="en-bold">Talent Center</span> <span class="ar-normal">المواهب</span></div>
+            <a href="{{ url_for('talent_tests_registry') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_tests_registry', 'talent_evaluation_edit'] else '' }}">
+                <i class="fas fa-database"></i>
+                <span class="link-text"><span class="en-bold">Tests registry</span> <span class="ar-normal">سجل الاختبارات</span></span>
+            </a>
             {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] %}
             <a href="{{ url_for('talent_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' or request.endpoint == 'talent_evaluate' else '' }}">
@@ -523,6 +528,11 @@
                 class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
                 <i class="fas fa-calendar-plus"></i>
                 <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز مواعيد لنفسي</span></span>
+            </a>
+            <a href="{{ url_for('talent_training_completed_tests') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_training_completed_tests' else '' }}">
+                <i class="fas fa-list-check"></i>
+                <span class="link-text"><span class="en-bold">Leads tested</span> <span class="ar-normal">ليدز اكتمل اختبارهم</span></span>
             </a>
             {% endif %}
             {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}
