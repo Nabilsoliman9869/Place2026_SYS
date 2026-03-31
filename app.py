@@ -995,10 +995,11 @@ def recruiter_scheduling():
     
     return render_template('recruitment/scheduling.html', candidates=candidates or [], available_slots=available_slots or [])
 
-@app.route('/recruiter/book_test', methods=['POST'])
+# اسم الدالة فريد؛ endpoint ثابت لـ url_for('recruiter_book_test') — تجنباً لتعارض Flask إن وُجد تعريف مكرر قديماً
+@app.route('/recruiter/book_test', methods=['POST'], endpoint='recruiter_book_test')
 @login_required
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
-def recruiter_book_test():
+def recruiter_post_book_test():
     f = request.form
     cand_id = f['candidate_id']
     slot_id = f.get('slot_id')
