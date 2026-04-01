@@ -2138,20 +2138,151 @@ def talent_dashboard():
     except Exception:
         pass
 
+    ta_peers = query_db("""
+        SELECT UserID, FullName, Username, Role
+        FROM Users_1
+        WHERE Role IN ('Talent', 'Talent_Recruitment', 'Talent_Training', 'TA-Training')
+        ORDER BY FullName, Username
+    """) or []
+    peer_ids = {int(p['UserID']) for p in ta_peers if p.get('UserID') is not None}
+    if int(user_id) not in peer_ids:
+        me_row = query_db(
+            "SELECT UserID, FullName, Username, Role FROM Users_1 WHERE UserID=?",
+            (user_id,),
+            one=True,
+        )
+        if me_row:
+            ta_peers = [me_row] + list(ta_peers)
+
     return render_template('talent/dashboard.html',
-        slots=my_schedule, selected_date=selected_date, batches_with_students=batches_with_students)
+        slots=my_schedule, selected_date=selected_date, batches_with_students=batches_with_students,
+        ta_peers=ta_peers, my_user_id=user_id)
+
+
+def _normalize_slot_time_for_db(t_raw):
+    """تحويل وقت من نموذج (HH:MM) إلى صيغة مناسبة لـ SQL Server TIME."""
+    if not t_raw:
+        return None
+    s = str(t_raw).strip()
+    if len(s) == 5 and s[2] == ':':
+        return s + ':00'
+    if len(s) >= 8 and s.count(':') >= 2:
+        return s[:8]
+    return s
+
+
+@app.route('/talent/reschedule_slot', methods=['POST'])
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
+def talent_reschedule_slot():
+    """ترحيل موعد محجوز: تاريخ/وقت جديد، واختيارياً نقل لنفس المختبر أو لمختبر آخر."""
+    slot_id = request.form.get('slot_id')
+    new_date = (request.form.get('new_slot_date') or '').strip()
+    new_time_raw = (request.form.get('new_slot_time') or '').strip()
+    target_eval_raw = request.form.get('target_evaluator_id')
+    back_date = request.form.get('return_date') or new_date
+
+    if not slot_id or not new_date or not new_time_raw:
+        flash('التاريخ والوقت الجديدان مطلوبان.', 'warning')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    try:
+        slot_id = int(slot_id)
+    except (TypeError, ValueError):
+        flash('معرّف الموعد غير صالح.', 'danger')
+        return redirect(url_for('talent_dashboard'))
+
+    try:
+        target_eval = int(target_eval_raw) if target_eval_raw else session['user_id']
+    except (TypeError, ValueError):
+        target_eval = session['user_id']
+
+    slot = query_db("SELECT * FROM TASchedules WHERE SlotID=?", (slot_id,), one=True)
+    if not slot or (slot.get('Status') or '') != 'Booked':
+        flash('الموعد غير موجود أو ليس بحالة محجوز.', 'danger')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    role = session.get('role')
+    if role != 'Manager' and int(slot.get('EvaluatorID') or 0) != int(session['user_id']):
+        flash('يمكنك ترحيل مواعيدك فقط.', 'danger')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    peer = query_db(
+        "SELECT UserID FROM Users_1 WHERE UserID=? AND Role IN ('Talent','Talent_Recruitment','Talent_Training','TA-Training')",
+        (target_eval,),
+        one=True,
+    )
+    if not peer:
+        flash('المختبر المستهدف غير صالح.', 'danger')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    new_time = _normalize_slot_time_for_db(new_time_raw)
+    if not new_time:
+        flash('صيغة الوقت غير صالحة.', 'warning')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    try:
+        clash = query_db(
+            """
+            SELECT SlotID FROM TASchedules
+            WHERE EvaluatorID = ?
+              AND CAST(SlotDate AS DATE) = CAST(? AS DATE)
+              AND CAST(SlotTime AS TIME) = CAST(? AS TIME)
+              AND SlotID <> ?
+            """,
+            (target_eval, new_date, new_time, slot_id),
+            one=True,
+        )
+    except Exception:
+        clash = query_db(
+            """
+            SELECT SlotID FROM TASchedules
+            WHERE EvaluatorID = ?
+              AND SlotDate = ?
+              AND SlotTime = ?
+              AND SlotID <> ?
+            """,
+            (target_eval, new_date, new_time, slot_id),
+            one=True,
+        )
+
+    if clash:
+        flash('تعارض: يوجد موعد آخر لنفس المختبر في هذا التاريخ والوقت.', 'danger')
+        return redirect(url_for('talent_dashboard', date=back_date))
+
+    try:
+        query_db(
+            """
+            UPDATE TASchedules
+            SET SlotDate = ?, SlotTime = ?, EvaluatorID = ?
+            WHERE SlotID = ? AND Status = 'Booked'
+            """,
+            (new_date, new_time, target_eval, slot_id),
+        )
+        flash('تم ترحيل الموعد بنجاح.', 'success')
+    except Exception as e:
+        flash(f'تعذر حفظ الترحيل: {str(e)[:120]}', 'danger')
+
+    return redirect(url_for('talent_dashboard', date=new_date))
+
 
 @app.route('/talent/cancel_slot', methods=['POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_cancel_slot():
     slot_id = request.form['slot_id']
-    # Reset slot
-    query_db("""
-        UPDATE TASchedules 
-        SET Status='Available', CandidateID=NULL, BookedBy=NULL, Notes=NULL, InterviewType=NULL, IsConfirmedByRecruiter=0
-        WHERE SlotID=?
-    """, (slot_id,))
+    if session.get('role') == 'Manager':
+        query_db("""
+            UPDATE TASchedules
+            SET Status='Available', CandidateID=NULL, BookedBy=NULL, Notes=NULL, InterviewType=NULL, IsConfirmedByRecruiter=0
+            WHERE SlotID=?
+        """, (slot_id,))
+    else:
+        query_db("""
+            UPDATE TASchedules
+            SET Status='Available', CandidateID=NULL, BookedBy=NULL, Notes=NULL, InterviewType=NULL, IsConfirmedByRecruiter=0
+            WHERE SlotID=? AND EvaluatorID=?
+        """, (slot_id, session['user_id']))
     flash('Slot Released (Cancelled) Successfully', 'success')
     return redirect(url_for('talent_dashboard'))
 
@@ -2573,71 +2704,121 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
 @role_required(['Talent_Training', 'TA-Training', 'Manager', 'Talent', 'Talent_Recruitment'])
 def talent_training_completed_tests():
     """ليدز التدريب الذين أُنجز لهم اختبار المواهب — مع اسم المختبر."""
-    params = (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training')
-    # استعلامات بديلة: قواعد قديمة قد تفتقد EvaluationDate أو PrimaryIntent
-    queries = [
-        (
-            """
-        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-               COALESCE(E.EvaluationDate, E.CreatedAt) AS EvaluationDate,
-               C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
-               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
-        FROM Evaluations E
-        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-        WHERE E.EvaluationType IN (?, ?, ?)
-          AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-        ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC
-        """,
-            params,
-        ),
-        (
-            """
-        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-               E.CreatedAt AS EvaluationDate,
-               C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
-               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
-        FROM Evaluations E
-        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-        WHERE E.EvaluationType IN (?, ?, ?)
-          AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-        ORDER BY E.CreatedAt DESC
-        """,
-            params,
-        ),
-        (
-            """
-        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-               E.CreatedAt AS EvaluationDate,
-               C.FullName, C.Phone, C.Email, C.Status,
-               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
-        FROM Evaluations E
-        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-        WHERE E.EvaluationType IN (?, ?, ?)
-          AND C.Status = 'Training_Lead'
-        ORDER BY E.CreatedAt DESC
-        """,
-            params,
-        ),
-    ]
     rows = []
-    last_err = None
-    for sql, prm in queries:
+    try:
+        params = (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training')
+        # استعلامات من الأكمل إلى الأبسط (أعمدة ناقصة في قواعد قديمة)
+        queries = [
+            (
+                """
+            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   COALESCE(E.EvaluationDate, E.CreatedAt) AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
+                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.EvaluationType IN (?, ?, ?)
+              AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC
+            """,
+                params,
+            ),
+            (
+                """
+            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   E.CreatedAt AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
+                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.EvaluationType IN (?, ?, ?)
+              AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+            ORDER BY E.CreatedAt DESC
+            """,
+                params,
+            ),
+            (
+                """
+            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   E.CreatedAt AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status,
+                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.EvaluationType IN (?, ?, ?)
+              AND C.Status = 'Training_Lead'
+            ORDER BY E.CreatedAt DESC
+            """,
+                params,
+            ),
+            (
+                """
+            SELECT TOP 500 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   CAST(NULL AS DATETIME) AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status,
+                   CAST(NULL AS NVARCHAR(200)) AS EvaluatorName,
+                   CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            WHERE E.EvaluationType IN (?, ?, ?)
+              AND C.Status = 'Training_Lead'
+            ORDER BY E.EvaluationID DESC
+            """,
+                params,
+            ),
+            (
+                """
+            SELECT TOP 500 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   CAST(NULL AS DATETIME) AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status,
+                   CAST(NULL AS NVARCHAR(200)) AS EvaluatorName,
+                   CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            WHERE E.EvaluationType IN (?, ?, ?)
+            ORDER BY E.EvaluationID DESC
+            """,
+                params,
+            ),
+        ]
+        last_err = None
+        for sql, prm in queries:
+            try:
+                got = query_db(sql, prm)
+                rows = got if got is not None else []
+                break
+            except Exception as ex:
+                last_err = ex
+                continue
+        if not rows and last_err:
+            try:
+                app.logger.warning('talent_training_completed_tests fallback exhausted: %s', last_err)
+            except Exception:
+                pass
+            flash('تعذر تحميل القائمة بالفلتر الكامل؛ عُرضت نتيجة مبسّطة أو فارغة. راجع سجلات السيرفر.', 'warning')
+    except Exception as outer:
         try:
-            rows = query_db(sql, prm) or []
-            break
-        except Exception as ex:
-            last_err = ex
-            continue
-    if not rows and last_err:
-        try:
-            app.logger.exception('talent_training_completed_tests: %s', last_err)
+            app.logger.exception('talent_training_completed_tests: %s', outer)
         except Exception:
             pass
-        flash('تعذر تحميل القائمة. تحقق من اتصال قاعدة البيانات أو أعمدة الجداول (Evaluations/Candidates).', 'danger')
-    return render_template('talent/training_completed_tests.html', rows=rows or [])
+        flash('حدث خطأ أثناء تحميل الصفحة. جرّب لاحقاً أو راجع الاتصال بقاعدة البيانات.', 'danger')
+
+    try:
+        return render_template('talent/training_completed_tests.html', rows=rows or [])
+    except Exception as render_ex:
+        try:
+            app.logger.exception('talent_training_completed_tests render: %s', render_ex)
+        except Exception:
+            pass
+        return (
+            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body>'
+            '<p>تعذر عرض الصفحة. ارجع للوحة المواهب.</p></body></html>',
+            200,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 EVALUATION_TYPES_EDITABLE = (
