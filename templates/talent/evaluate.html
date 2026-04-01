@@ -1,53 +1,125 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-8 offset-md-2">
-            <div class="card shadow-lg">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">
-                        <i class="fas fa-tasks"></i> Candidate Evaluation 
-                        <span class="arabic-sub d-inline text-white-50 ms-2">تقييم المرشح</span>
-                    </h4>
-                </div>
-                <div class="card-body">
-                    <!-- Candidate Info -->
-                    <div class="alert alert-light border">
-                        <div class="row align-items-start">
-                            <div class="col-md-8">
-                                <strong>Candidate:</strong> <span class="fs-5">{{ slot.FullName }}</span>
-                                <div class="small text-muted mt-1">
-                                    <i class="fas fa-phone"></i> {{ slot.Phone or '—' }}
-                                    &nbsp;|&nbsp;
-                                    <i class="fas fa-envelope"></i> {{ slot.Email or '—' }}
-                                    &nbsp;|&nbsp;
-                                    <i class="fas fa-birthday-cake"></i> <span class="ar-normal">العمر:</span> {% if slot.Age is not none %}{{ slot.Age }}{% else %}—{% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-4 text-md-end mt-2 mt-md-0">
-                                <strong>Type:</strong> <span class="badge bg-info">{{ eval_type }}</span>
-                                {% if from_exam_feedback and exam_kind %}
-                                <br class="d-none d-md-block">
-                                <span class="badge bg-dark mt-1">{{ exam_label_ar }}</span>
-                                {% if eval_subtype %}
-                                <small class="d-block text-muted mt-1"><span class="en-bold">{{ eval_subtype }}</span></small>
-                                {% endif %}
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% if slot.RecruiterFeedback or slot.MarketingAssessment %}
-                        <hr class="my-2">
-                        <div class="small">
-                            {% if slot.RecruiterFeedback %}
-                            <div class="mb-1"><strong class="text-info">ملاحظات الريكروتر Recruiter Notes:</strong> {{ slot.RecruiterFeedback }}</div>
-                            {% endif %}
-                            {% if slot.MarketingAssessment %}
-                            <div><strong class="text-secondary">تقييم التسويق Marketing:</strong> {{ slot.MarketingAssessment }}</div>
-                            {% endif %}
-                        </div>
+{% set es = eval_sidebar if eval_sidebar is defined else {} %}
+{% set c = es.cand if es and es.cand else none %}
+<div class="container-fluid mt-4 px-lg-3 px-xl-4">
+    <div class="row g-4 align-items-start">
+        <!-- ملخص المرشح — يسار (أو بداية الصفحة) -->
+        <aside class="col-lg-4 col-xl-3 order-2 order-lg-1">
+            {% if c %}
+            <div class="card shadow-sm border evaluate-sidebar-card sticky-lg-top mb-3" style="top: 0.75rem; z-index: 10;">
+                <div class="card-body text-center p-3 p-lg-4">
+                    <div class="mb-3">
+                        <i class="fas fa-user-circle fa-5x text-secondary"></i>
+                    </div>
+                    <h4 class="fw-bold mb-1">{{ c.FullName }}</h4>
+                    <p class="text-muted small mb-1">{{ c.Phone or '—' }}</p>
+                    <p class="text-muted small mb-3 text-break">{{ c.Email or '—' }}</p>
+                    <div class="d-grid gap-2 mb-3">
+                        <span class="badge bg-primary p-2 fs-6">{{ c.Status or '—' }}</span>
+                        {% if c.PrimaryIntent %}
+                        <span class="badge bg-info text-dark p-2">{{ c.PrimaryIntent }}</span>
                         {% endif %}
                     </div>
+                    <hr class="my-3">
+                    <div class="text-start small">
+                        <p class="mb-2"><strong>Soft Skills <span class="text-muted">المهارات الشخصية</span>:</strong><br><span class="text-break">{{ c.SoftSkills or '—' }}</span></p>
+                        <p class="mb-2"><strong>English / CEFR <span class="text-muted">مستوى الإنجليزية</span>:</strong><br>{{ c.EnglishLevel or c.CurrentCEFR or '—' }}</p>
+                        <p class="mb-2"><strong>Registration <span class="text-muted">تاريخ التسجيل</span>:</strong><br>
+                            {% if c.CreatedAt %}{{ c.CreatedAt.strftime('%d-%m-%Y') if c.CreatedAt.strftime is defined else (c.CreatedAt|string)[:10] }}{% else %}—{% endif %}
+                        </p>
+                        {% if c.Age is not none %}
+                        <p class="mb-2"><strong>Age <span class="text-muted">العمر</span>:</strong> {{ c.Age }}</p>
+                        {% endif %}
+                        {% if es.recruiter_name %}
+                        <p class="mb-2"><strong>Recruiter <span class="text-muted">الموظف</span>:</strong> {{ es.recruiter_name }}</p>
+                        {% endif %}
+                        {% if c.Address %}
+                        <p class="mb-2"><strong>Address <span class="text-muted">العنوان</span>:</strong> {{ c.Address }}</p>
+                        {% endif %}
+                    </div>
+                    {% if from_exam_feedback and es.current_batch %}
+                    <div class="alert alert-secondary small text-start py-2 mt-2 mb-0">
+                        <strong class="d-block">الدفعة الحالية</strong>
+                        {{ es.current_batch }} — {{ es.current_course or '' }}
+                    </div>
+                    {% endif %}
+                    {% if es.training %}
+                    <hr class="my-3">
+                    <h6 class="text-muted text-uppercase small mb-2">Training سجل التسجيل</h6>
+                    <ul class="list-unstyled small text-start mb-0">
+                        {% for t in es.training %}
+                        <li class="mb-2 border-bottom pb-2">
+                            <span class="fw-semibold">{{ t.CourseName or '—' }}</span><br>
+                            <span class="text-muted">{{ t.BatchName or '—' }}</span>
+                            {% if t.Status %}<span class="badge bg-secondary ms-1">{{ t.Status }}</span>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if es.sheet_cards %}
+                    <hr class="my-3">
+                    <h6 class="text-muted small mb-2">أوراق GA / الحجز / Exit Make-Up</h6>
+                    {% for sc in es.sheet_cards %}
+                    <div class="card border mb-2 text-start">
+                        <div class="card-header py-1 px-2 bg-light small fw-bold">{{ sc.title_ar }}</div>
+                        <div class="card-body py-2 px-2 small text-muted">
+                            {% for line in sc.lines %}
+                            <div class="text-break">{{ line }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    <a href="{{ url_for('candidate_profile', candidate_id=c.CandidateID) }}" class="btn btn-outline-primary btn-sm w-100 mt-2" target="_blank" rel="noopener">
+                        <i class="fas fa-external-link-alt"></i> ملف المتدرب الكامل
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="card shadow-sm border mb-3">
+                <div class="card-body small text-muted">لا تتوفر بيانات ملخص للمرشح.</div>
+            </div>
+            {% endif %}
+        </aside>
+
+        <!-- استمارة التقييم -->
+        <div class="col-lg-8 col-xl-9 order-1 order-lg-2">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h4 class="mb-0">
+                        <i class="fas fa-tasks"></i> Candidate Evaluation
+                        <span class="arabic-sub d-inline text-white-50 ms-2">تقييم المرشح</span>
+                    </h4>
+                    <div class="text-end">
+                        <span class="badge bg-light text-primary">{{ eval_type }}</span>
+                        {% if from_exam_feedback and exam_kind %}
+                        <span class="badge bg-dark ms-1">{{ exam_label_ar }}</span>
+                        {% if eval_subtype %}<small class="d-block text-white-50 mt-1">{{ eval_subtype }}</small>{% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if c and (c.RecruiterFeedback or c.MarketingAssessment) %}
+                    <div class="alert alert-light border mb-3 small">
+                        {% if c.RecruiterFeedback %}
+                        <div class="mb-1"><strong class="text-info">ملاحظات الريكروتر:</strong> {{ c.RecruiterFeedback }}</div>
+                        {% endif %}
+                        {% if c.MarketingAssessment %}
+                        <div><strong class="text-secondary">تقييم التسويق:</strong> {{ c.MarketingAssessment }}</div>
+                        {% endif %}
+                    </div>
+                    {% elif slot.RecruiterFeedback or slot.MarketingAssessment %}
+                    <div class="alert alert-light border mb-3 small">
+                        {% if slot.RecruiterFeedback %}
+                        <div class="mb-1"><strong class="text-info">ملاحظات الريكروتر:</strong> {{ slot.RecruiterFeedback }}</div>
+                        {% endif %}
+                        {% if slot.MarketingAssessment %}
+                        <div><strong class="text-secondary">تقييم التسويق:</strong> {{ slot.MarketingAssessment }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
 
                     <form action="" method="POST">
                         {% if from_exam_feedback %}
@@ -62,8 +134,7 @@
                             — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id) }}">رجوع لفيدباك الدفعة</a>
                         </div>
                         {% endif %}
-                        
-                        <!-- Common Fields -->
+
                         <div class="mb-3">
                             <label class="form-label fw-bold">CEFR Level (from Sheet)</label>
                             {% if cefr_track == 'training' %}
@@ -80,7 +151,6 @@
                             </select>
                         </div>
 
-                        <!-- Full TA Fields — C, F, P, G, V على نفس السطر -->
                         <div class="row g-2 mb-3 flex-nowrap">
                             <div class="col">
                                 <label class="form-label small">C (Comprehension)</label>
@@ -121,7 +191,7 @@
 
                         <div class="mb-4">
                             <label class="form-label fw-bold">4. Final Recommendation <small class="text-muted">(التوصية النهائية)</small></label>
-                            <div class="btn-group w-100" role="group">
+                            <div class="btn-group w-100 flex-wrap" role="group">
                                 <input type="radio" class="btn-check" name="decision" id="dec1" value="Accepted" required>
                                 <label class="btn btn-outline-success" for="dec1">مقبول <small class="d-block">نجاح داخل الدورة</small></label>
 

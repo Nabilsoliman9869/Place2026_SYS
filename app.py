@@ -2223,6 +2223,82 @@ def _cefr_options_for_talent_evaluate(slot, eval_type):
     return CEFR_OPTIONS_RECRUITMENT, 'recruitment'
 
 
+def _talent_evaluate_sidebar_context(candidate_id, current_batch=None):
+    """ملخص جانبي لصفحة التقييم: بيانات المرشح، التسجيل، آخر سطر من أوراق GA/الحجز/Exit Make-Up."""
+    empty = {'cand': None, 'recruiter_name': None, 'training': [], 'sheet_cards': [], 'current_batch': None, 'current_course': None}
+    if not candidate_id:
+        return empty
+    try:
+        cand = query_db('SELECT * FROM Candidates WHERE CandidateID=?', (candidate_id,), one=True)
+    except Exception:
+        return empty
+    if not cand:
+        return empty
+    recruiter_name = None
+    if cand.get('SalesAgentID'):
+        try:
+            r = query_db('SELECT FullName, Username FROM Users_1 WHERE UserID=?', (cand['SalesAgentID'],), one=True)
+            if r:
+                recruiter_name = r.get('FullName') or r.get('Username')
+        except Exception:
+            pass
+    training = []
+    try:
+        training = query_db('''
+            SELECT TOP 3 B.BatchName, C.CourseName, E.Status, E.EnrollmentDate
+            FROM Enrollments E
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses C ON B.CourseID = C.CourseID
+            WHERE E.CandidateID = ?
+            ORDER BY E.EnrollmentDate DESC
+        ''', (candidate_id,)) or []
+    except Exception:
+        pass
+    sheet_specs = [
+        ('GA Interviews', 'GA — مقابلة', ['Date', 'Time', 'CEFR', 'Grad Stat', 'Status', 'Language comments']),
+        ('Booking Placements Sheet', 'سجل الحجز', ['Booked for', 'Pay Status', 'Placement reason', 'Venue', 'Source']),
+        ('Exit Make-Up', 'Exit Make-Up', ['Wave', 'CEFR', 'Status', 'Closing Status', 'Language comments']),
+    ]
+    sheet_cards = []
+    try:
+        rows = query_db('SELECT SheetName, JsonData FROM TraineeSheetData WHERE CandidateID=?', (candidate_id,))
+        by_name = {r['SheetName']: r.get('JsonData') for r in (rows or [])}
+        for sheet_key, ar_label, fields in sheet_specs:
+            raw = by_name.get(sheet_key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+                if not isinstance(data, list) or not data:
+                    continue
+                last = data[-1]
+                if not isinstance(last, dict):
+                    continue
+                lines = []
+                for k in fields:
+                    v = last.get(k)
+                    if v is not None and str(v).strip():
+                        lines.append(f'{k}: {v}')
+                if lines:
+                    sheet_cards.append({'key': sheet_key, 'title_ar': ar_label, 'lines': lines[:8]})
+            except Exception:
+                continue
+    except Exception:
+        pass
+    out = {
+        'cand': cand,
+        'recruiter_name': recruiter_name,
+        'training': training,
+        'sheet_cards': sheet_cards,
+        'current_batch': None,
+        'current_course': None,
+    }
+    if current_batch:
+        out['current_batch'] = current_batch.get('BatchName')
+        out['current_course'] = current_batch.get('CourseName')
+    return out
+
+
 @app.route('/talent/evaluate/<int:slot_id>', methods=['GET', 'POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
@@ -2245,6 +2321,7 @@ def talent_evaluate(slot_id):
     elif session.get('role') in ('Talent_Training', 'TA-Training'):
         eval_type = 'Training'
     cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot, eval_type)
+    eval_sidebar = _talent_evaluate_sidebar_context(slot['CandidateID'])
 
     if request.method == 'POST':
         f = request.form
@@ -2252,7 +2329,7 @@ def talent_evaluate(slot_id):
         decision = (f.get('decision') or '').strip()
         if not cefr or not decision:
             flash('CEFR Level and Decision are required', 'warning')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
         
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
@@ -2276,9 +2353,9 @@ def talent_evaluate(slot_id):
             return redirect(url_for('talent_dashboard'))
         except Exception as e:
             flash(f'خطأ عند حفظ التقييم: {str(e)}', 'danger')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
+            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
     
-    return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False)
+    return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
 
 @app.route('/sales/book_slot', methods=['POST'])
 @login_required
@@ -2438,6 +2515,7 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
     slot_dict = {k: cand[k] for k in cand} if cand else {}
     cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
     exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
+    eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
     if request.method == 'POST':
         f = request.form
         ek = (f.get('exam_kind') or 'periodic').strip().lower()
@@ -2446,11 +2524,12 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
         eval_subtype = _exam_kind_to_eval_type(ek)
         exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
         cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
+        eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
         cefr = (f.get('cefr_level') or '').strip()
         decision = (f.get('decision') or '').strip()
         if not cefr or not decision:
             flash('CEFR Level و Decision مطلوبان.', 'warning')
-            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
+            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
         score_p = _safe_int(f.get('score_p'))
@@ -2485,8 +2564,8 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
             return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
         except Exception as e:
             flash(f'خطأ: {str(e)[:80]}', 'danger')
-            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
-    return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype)
+            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
+    return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
 
 @app.route('/talent/training_completed_tests')
 @login_required
