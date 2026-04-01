@@ -2725,8 +2725,24 @@ def talent_training_completed_tests():
     rows = []
     try:
         params = (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training')
-        # استعلامات من الأكمل إلى الأبسط (أعمدة ناقصة في قواعد قديمة)
+        # الفلترة بالنوع فقط: Training_Periodic / Training_Graduation / Training (مسار التدريب).
+        # لا نربط بـ Status=Training_Lead لأن الحفظ يحدّث المرشح غالباً إلى Evaluated فيختفي من الفلتر القديم.
+        # ترتيب الاستعلامات: يعمل بدون عمود CreatedAt في Evaluations (غير موجود في كثير من القواعد).
         queries = [
+            (
+                """
+            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   E.EvaluationDate AS EvaluationDate,
+                   C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
+                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+            FROM Evaluations E
+            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+            WHERE E.EvaluationType IN (?, ?, ?)
+            ORDER BY E.EvaluationDate DESC, E.EvaluationID DESC
+            """,
+                params,
+            ),
             (
                 """
             SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
@@ -2737,61 +2753,29 @@ def talent_training_completed_tests():
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
             WHERE E.EvaluationType IN (?, ?, ?)
-              AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-            ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC
+            ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC, E.EvaluationID DESC
             """,
                 params,
             ),
             (
                 """
-            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-                   E.CreatedAt AS EvaluationDate,
+            SELECT TOP 800 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+                   E.EvaluationDate AS EvaluationDate,
                    C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
-                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
-            FROM Evaluations E
-            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-            WHERE E.EvaluationType IN (?, ?, ?)
-              AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-            ORDER BY E.CreatedAt DESC
-            """,
-                params,
-            ),
-            (
-                """
-            SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-                   E.CreatedAt AS EvaluationDate,
-                   C.FullName, C.Phone, C.Email, C.Status,
-                   U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
-            FROM Evaluations E
-            INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-            LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-            WHERE E.EvaluationType IN (?, ?, ?)
-              AND C.Status = 'Training_Lead'
-            ORDER BY E.CreatedAt DESC
-            """,
-                params,
-            ),
-            (
-                """
-            SELECT TOP 500 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
-                   CAST(NULL AS DATETIME) AS EvaluationDate,
-                   C.FullName, C.Phone, C.Email, C.Status,
                    CAST(NULL AS NVARCHAR(200)) AS EvaluatorName,
                    CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
             FROM Evaluations E
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
             WHERE E.EvaluationType IN (?, ?, ?)
-              AND C.Status = 'Training_Lead'
-            ORDER BY E.EvaluationID DESC
+            ORDER BY E.EvaluationDate DESC, E.EvaluationID DESC
             """,
                 params,
             ),
             (
                 """
-            SELECT TOP 500 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+            SELECT TOP 800 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
                    CAST(NULL AS DATETIME) AS EvaluationDate,
-                   C.FullName, C.Phone, C.Email, C.Status,
+                   C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
                    CAST(NULL AS NVARCHAR(200)) AS EvaluatorName,
                    CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
             FROM Evaluations E
@@ -2803,20 +2787,25 @@ def talent_training_completed_tests():
             ),
         ]
         last_err = None
+        query_succeeded = False
         for sql, prm in queries:
             try:
                 got = query_db(sql, prm)
                 rows = got if got is not None else []
+                query_succeeded = True
                 break
             except Exception as ex:
                 last_err = ex
                 continue
-        if not rows and last_err:
+        if not query_succeeded and last_err:
             try:
-                app.logger.warning('talent_training_completed_tests fallback exhausted: %s', last_err)
+                app.logger.warning('talent_training_completed_tests: all queries failed: %s', last_err)
             except Exception:
                 pass
-            flash('تعذر تحميل القائمة بالفلتر الكامل؛ عُرضت نتيجة مبسّطة أو فارغة. راجع سجلات السيرفر.', 'warning')
+            flash(
+                'تعذر الاتصال بقاعدة البيانات أو هيكل الجداول مختلف. راجع سجلات السيرفر.',
+                'danger',
+            )
     except Exception as outer:
         try:
             app.logger.exception('talent_training_completed_tests: %s', outer)
