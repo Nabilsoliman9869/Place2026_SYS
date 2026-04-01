@@ -96,7 +96,8 @@ def role_required(roles):
     def decorator(view):
         @functools.wraps(view)
         def wrapped_view(**kwargs):
-            if g.user['Role'] not in roles:
+            role = (g.user or {}).get('Role')
+            if role not in roles:
                 flash('Access Denied', 'danger')
                 return redirect(url_for('dashboard'))
             return view(**kwargs)
@@ -2569,11 +2570,16 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
 
 @app.route('/talent/training_completed_tests')
 @login_required
-@role_required(['Talent_Training', 'TA-Training', 'Manager'])
+@role_required(['Talent_Training', 'TA-Training', 'Manager', 'Talent', 'Talent_Recruitment'])
 def talent_training_completed_tests():
     """ليدز التدريب الذين أُنجز لهم اختبار المواهب — مع اسم المختبر."""
-    rows = query_db("""
-        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType, E.EvaluationDate,
+    params = (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training')
+    # استعلامات بديلة: قواعد قديمة قد تفتقد EvaluationDate أو PrimaryIntent
+    queries = [
+        (
+            """
+        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+               COALESCE(E.EvaluationDate, E.CreatedAt) AS EvaluationDate,
                C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
                U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
         FROM Evaluations E
@@ -2581,8 +2587,56 @@ def talent_training_completed_tests():
         LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
         WHERE E.EvaluationType IN (?, ?, ?)
           AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-        ORDER BY E.EvaluationDate DESC
-    """, (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training'))
+        ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC
+        """,
+            params,
+        ),
+        (
+            """
+        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+               E.CreatedAt AS EvaluationDate,
+               C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
+               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+        FROM Evaluations E
+        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+        WHERE E.EvaluationType IN (?, ?, ?)
+          AND (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
+        ORDER BY E.CreatedAt DESC
+        """,
+            params,
+        ),
+        (
+            """
+        SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
+               E.CreatedAt AS EvaluationDate,
+               C.FullName, C.Phone, C.Email, C.Status,
+               U.FullName AS EvaluatorName, U.Username AS EvaluatorUsername
+        FROM Evaluations E
+        INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
+        WHERE E.EvaluationType IN (?, ?, ?)
+          AND C.Status = 'Training_Lead'
+        ORDER BY E.CreatedAt DESC
+        """,
+            params,
+        ),
+    ]
+    rows = []
+    last_err = None
+    for sql, prm in queries:
+        try:
+            rows = query_db(sql, prm) or []
+            break
+        except Exception as ex:
+            last_err = ex
+            continue
+    if not rows and last_err:
+        try:
+            app.logger.exception('talent_training_completed_tests: %s', last_err)
+        except Exception:
+            pass
+        flash('تعذر تحميل القائمة. تحقق من اتصال قاعدة البيانات أو أعمدة الجداول (Evaluations/Candidates).', 'danger')
     return render_template('talent/training_completed_tests.html', rows=rows or [])
 
 
