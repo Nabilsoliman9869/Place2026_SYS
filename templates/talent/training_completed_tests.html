@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block page_title %}<span class="en-bold">Training leads — tests done</span> <span class="ar-normal">ليدز التدريب — اكتمل الاختبار</span>{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <h4 class="mb-3">
+        <i class="fas fa-user-check text-success"></i>
+        <span class="en-bold">Training leads who completed the talent test</span>
+        <span class="ar-normal">ليدز التدريب الذين أُنجز لهم اختبار المواهب</span>
+    </h4>
+    <p class="text-muted small">يظهر نوع التقييم المحفوظ (تقييم دوري / تخرج / موعد قديم كـ Training) والمختبر الذي أجرى الاختبار.</p>
+    <div class="table-responsive shadow-sm rounded border">
+        <table class="table table-hover table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th><span class="ar-normal">التاريخ</span></th>
+                    <th><span class="ar-normal">المرشح</span></th>
+                    <th><span class="ar-normal">الهاتف</span></th>
+                    <th><span class="en-bold">CEFR</span></th>
+                    <th><span class="ar-normal">نوع التقييم</span></th>
+                    <th><span class="ar-normal">القرار</span></th>
+                    <th><span class="ar-normal">المختبر</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td class="text-nowrap small">{{ (r.EvaluationDate|string)[:19] if r.EvaluationDate else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" target="_blank" class="fw-bold">{{ r.FullName }}</a>
+                    </td>
+                    <td class="small">{{ r.Phone or '-' }}</td>
+                    <td><span class="badge bg-secondary">{{ r.CEFR_Level or '-' }}</span></td>
+                    <td>
+                        {% set et = (r.EvaluationType or '') %}
+                        {% if et == 'Training_Periodic' %}
+                        <span class="badge bg-info text-dark">تقييم دوري</span>
+                        {% elif et == 'Training_Graduation' %}
+                        <span class="badge bg-primary">اختبار تخرج</span>
+                        {% elif et == 'Training' %}
+                        <span class="badge bg-secondary">Training (قديم)</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark">{{ et or '-' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small">{{ r.Decision or '-' }}</td>
+                    <td class="small">
+                        <strong>{{ r.EvaluatorName or r.EvaluatorUsername or '-' }}</strong>
+                        {% if r.EvaluatorUsername %}<br><span class="text-muted">{{ r.EvaluatorUsername }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-4">لا توجد سجلات بعد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

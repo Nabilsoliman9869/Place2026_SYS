@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort, jsonify
+from jinja2 import TemplateNotFound
 from markupsafe import Markup
 import functools
 import os
@@ -26,25 +27,6 @@ if _perf_log_path:
         perf_logger.addHandler(_fh)
     except (OSError, PermissionError):
         pass
-
-@app.before_request
-def start_timer():
-    g.start_time = time.time()
-
-@app.after_request
-def log_request(response):
-    if hasattr(g, 'start_time'):
-        duration = time.time() - g.start_time
-        # Log all requests to analyze bottleneck
-        # Include User ID if available for context
-        user_info = f"User:{session.get('user_id', 'Guest')}"
-        log_msg = f"{user_info} | Endpoint: {request.endpoint} | Method: {request.method} | Status: {response.status_code} | Duration: {duration:.4f}s"
-        perf_logger.info(log_msg)
-        
-        # Add Server-Timing header for browser inspection (DevTools > Network)
-        response.headers.add('Server-Timing', f'app;dur={duration*1000}')
-        
-    return response
 
 # Adjust for PyInstaller --onefile mode
 if getattr(sys, 'frozen', False):
@@ -233,31 +215,46 @@ def query_db(query, args=(), one=False):
         cursor.close()
         raise e
 
-# --- PERFORMANCE: تحميل المستخدم + التحقق السريع ---
+# --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
+_USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
+
 @app.before_request
-def start_timer():
-    g.start = time.time()
+def _before_request_perf_and_user():
+    g._perf_start = time.time()
     user_id = session.get('user_id')
     if user_id is None:
         g.user = None
     else:
-        # تخزين مؤقت للمستخدم 30 ثانية لتسريع التنقل (تجنب استعلام DB في كل طلب)
         cache = session.get('_user_cache')
-        if cache and cache.get('id') == user_id and (time.time() - cache.get('t', 0)) < 30:
+        if cache and cache.get('id') == user_id and (time.time() - cache.get('t', 0)) < _USER_CACHE_TTL:
             g.user = cache.get('user')
         else:
             try:
-                g.user = query_db('SELECT * FROM Users_1 WHERE UserID = ?', (user_id,), one=True)
+                g.user = query_db(
+                    'SELECT UserID, Username, Role, FullName FROM Users_1 WHERE UserID = ?',
+                    (user_id,),
+                    one=True,
+                )
                 if g.user:
                     session['_user_cache'] = {'id': user_id, 'user': g.user, 't': time.time()}
             except Exception:
                 g.user = None
 
 @app.after_request
-def log_request(response):
-    if hasattr(g, 'start'):
-        diff = time.time() - g.start
-        print(f"⏱️ [PERF] {request.method} {request.path} -> {diff:.3f}s")
+def _after_request_perf_log(response):
+    if hasattr(g, '_perf_start'):
+        duration = time.time() - g._perf_start
+        try:
+            user_info = f"User:{session.get('user_id', 'Guest')}"
+            perf_logger.info(
+                f"{user_info} | Endpoint: {request.endpoint} | Method: {request.method} | "
+                f"Status: {response.status_code} | Duration: {duration:.4f}s"
+            )
+            response.headers.add('Server-Timing', f'app;dur={duration*1000}')
+        except Exception:
+            pass
+        if os.environ.get('FLASK_PERF_PRINT') == '1':
+            print(f"⏱️ [PERF] {request.method} {request.path} -> {duration:.3f}s", file=sys.stderr)
     return response
 
 # --- Initialization Logic ---
@@ -2102,13 +2099,20 @@ def talent_dashboard():
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
 
-    # 1. Fetch slots for selected date
+    # 1. Slots: JOINs بدل subqueries لكل صف (أسرع على SQL Server)
     slots_sql = """
         SELECT T.*, C.FullName, C.Phone, C.CandidateID,
-               (SELECT Username FROM Users_1 WHERE UserID = T.BookedBy) as BookedByName,
-               (SELECT COUNT(*) FROM TASchedules TS WHERE TS.CandidateID = T.CandidateID AND TS.Status = 'Completed') as PreviousTests
+               BB.Username AS BookedByName,
+               ISNULL(PT.PrevCnt, 0) AS PreviousTests
         FROM TASchedules T
         LEFT JOIN Candidates C ON T.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 BB ON T.BookedBy = BB.UserID
+        LEFT JOIN (
+            SELECT CandidateID, COUNT(*) AS PrevCnt
+            FROM TASchedules
+            WHERE Status = 'Completed'
+            GROUP BY CandidateID
+        ) PT ON PT.CandidateID = T.CandidateID
         WHERE T.EvaluatorID = ?
         AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
         AND (T.Status = 'Booked' OR T.Status = 'Completed')
@@ -2116,25 +2120,39 @@ def talent_dashboard():
     """
     my_schedule = query_db(slots_sql, (user_id, selected_date)) or []
 
-    # 2. Batches with students — for talent tester to review and evaluate at line level
+    # 2. دفعات + طلاب في استعلام واحد (بدل N+1)
     batches_with_students = []
     try:
-        waves = query_db("""
-            SELECT B.BatchID, B.BatchName, C.CourseName
+        rows = query_db("""
+            SELECT B.BatchID, B.BatchName, Cr.CourseName,
+                   E.CandidateID, C.FullName, C.CurrentCEFR
             FROM CourseBatches B
-            JOIN Courses C ON B.CourseID = C.CourseID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            JOIN Enrollments E ON E.BatchID = B.BatchID AND E.Status = 'Active'
+            JOIN Candidates C ON E.CandidateID = C.CandidateID
             WHERE B.Status = 'Active'
-            ORDER BY B.BatchName
+            ORDER BY B.BatchName, C.FullName
         """) or []
-        for w in waves:
-            students = query_db("""
-                SELECT E.CandidateID, C.FullName, C.CurrentCEFR
-                FROM Enrollments E
-                JOIN Candidates C ON E.CandidateID = C.CandidateID
-                WHERE E.BatchID = ? AND E.Status = 'Active'
-                ORDER BY C.FullName
-            """, (w['BatchID'],)) or []
-            batches_with_students.append({'batch': w, 'students': students})
+        current_batch_id = None
+        current_entry = None
+        for r in rows:
+            bid = r['BatchID']
+            if bid != current_batch_id:
+                current_batch_id = bid
+                current_entry = {
+                    'batch': {
+                        'BatchID': bid,
+                        'BatchName': r['BatchName'],
+                        'CourseName': r['CourseName'],
+                    },
+                    'students': [],
+                }
+                batches_with_students.append(current_entry)
+            current_entry['students'].append({
+                'CandidateID': r['CandidateID'],
+                'FullName': r['FullName'],
+                'CurrentCEFR': r['CurrentCEFR'],
+            })
     except Exception:
         pass
 
@@ -2808,6 +2826,19 @@ def talent_training_completed_tests():
 
     try:
         return render_template('talent/training_completed_tests.html', rows=rows or [])
+    except TemplateNotFound as render_ex:
+        try:
+            app.logger.error(
+                'talent_training_completed_tests: missing template %s — add templates/talent/training_completed_tests.html to the deploy bundle.',
+                render_ex,
+            )
+        except Exception:
+            pass
+        flash(
+            'قالب الصفحة غير موجود على السيرفر (غالباً لم يُرفع مع النشر). أضف الملف إلى Git وادفع ثم أعد النشر.',
+            'danger',
+        )
+        return redirect(url_for('talent_dashboard'))
     except Exception as render_ex:
         try:
             app.logger.exception('talent_training_completed_tests render: %s', render_ex)
