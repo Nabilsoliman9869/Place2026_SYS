@@ -305,7 +305,7 @@
             <!-- ============================================= -->
             <!-- مدير الحسابات: للمدير و Account Manager فقط -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'AccountManager']) %}
+            {% if check_role_access(['Manager', 'AccountManager', 'AllocationManager']) %}
             <div class="sidebar-section-label"><span class="en-bold">Account Management</span> <span class="ar-normal">إدارة الحسابات</span></div>
             <a href="{{ url_for('manage_clients') }}" class="nav-link">
                 <i class="fas fa-building"></i>

@@ -1676,24 +1676,20 @@ def allocation_matching():
             tuple(req_ids) + tuple(cand_ids)
         ) or []
         existing_matches = {(r['CandidateID'], r['RequestID']) for r in rows}
-        cefr_map = {
-            'A0': 0, 'A1': 0, 'A1.1': 1, 'A1.2': 2, 'A2': 2, 'A2.1': 3, 'A2.2': 4,
-            'B1': 4, 'High B1': 4, 'Low B1+': 4, 'B1.1': 5, 'B1.2': 6,
-            'B2': 6, 'Compromised B2': 6, 'B2.1': 7, 'B2.2': 8,
-            'C1': 8, 'C1.1': 9, 'C1.2': 10, 'C2': 11
-        }
+        _ml = _cefr_levels_matching_center()
+        cefr_map = {lvl: i for i, lvl in enumerate(_ml)}
         for req in reqs:
             if len(matches_proposed) >= _MAX_PROPOSED_MATCHES:
                 break
             req_level = (req.get('EnglishLevel') or 'A0').strip()
-            req_val = cefr_map.get(req_level, 0)
+            req_val = cefr_map.get(req_level, cefr_map.get('A0', 0))
             for cand in cands:
                 if len(matches_proposed) >= _MAX_PROPOSED_MATCHES:
                     break
                 if (cand['CandidateID'], req['RequestID']) in existing_matches:
                     continue
                 cand_level = (cand.get('CurrentCEFR') or 'A0').strip()
-                cand_val = cefr_map.get(cand_level, 0)
+                cand_val = cefr_map.get(cand_level, cefr_map.get('A0', 0))
                 gender_match = True
                 req_gender = req.get('Gender')
                 cand_gender = cand.get('Gender')
@@ -1733,7 +1729,7 @@ def allocation_matching():
     selected_request = None
     client_requests = []
     filtered_by_request = []
-    cefr_levels = ['A0','A1','A1.1','A1.2','A2','A2.1','A2.2','B1','High B1','Low B1+','B1.1','B1.2','B2','Compromised B2','B2.1','B2.2','C1','C1.1','C1.2','C2']
+    cefr_levels = _cefr_levels_matching_center()
 
     # جلب كل الطلبات دفعة واحدة — لاستخدامها في Job Order فوراً
     all_requests = query_db("""
@@ -1769,9 +1765,9 @@ def allocation_matching():
                 req = selected_request
                 # القيم من الفلتر أو من طلب العميل
                 min_level = filter_cefr.strip() if filter_cefr else (req.get('EnglishLevel') or 'A0')
-                req_idx = cefr_levels.index(min_level) if min_level in cefr_levels else 0
+                req_idx = cefr_levels.index(min_level) if min_level in cefr_levels else cefr_levels.index('A0')
                 def _cefr_idx(l):
-                    return cefr_levels.index(l) if l in cefr_levels else 0
+                    return cefr_levels.index(l) if l in cefr_levels else cefr_levels.index('A0')
                 gender_filter = filter_gender.strip() if filter_gender else req.get('Gender')
                 age_from = filter_age_from.strip() or (req.get('AgeFrom') and str(req.get('AgeFrom')))
                 age_to = filter_age_to.strip() or (req.get('AgeTo') and str(req.get('AgeTo')))
@@ -2065,11 +2061,17 @@ def recruiter_update_onboarding():
 
 @app.route('/accounting/invoices')
 @login_required
-@role_required(['AccountManager', 'Manager', 'Admin'])
+@role_required(['AccountManager', 'Manager', 'Admin', 'AllocationManager'])
 def accounting_invoices():
-    # Show Hired Candidates ready for invoicing
+    # Show Hired Candidates ready for invoicing (SalaryRange من SalaryFrom/SalaryTo — العمود SalaryRange غير موجود في ClientRequests الافتراضي)
     hired = query_db("""
-        SELECT M.*, C.FullName, CR.JobTitle, Cl.CompanyName, CR.SalaryRange
+        SELECT M.*, C.FullName, CR.JobTitle, Cl.CompanyName,
+               (CASE
+                    WHEN CR.SalaryFrom IS NULL AND CR.SalaryTo IS NULL THEN NULL
+                    WHEN CR.SalaryTo IS NULL THEN CAST(CR.SalaryFrom AS NVARCHAR(50))
+                    WHEN CR.SalaryFrom IS NULL THEN CAST(CR.SalaryTo AS NVARCHAR(50))
+                    ELSE CAST(CR.SalaryFrom AS NVARCHAR(50)) + N' — ' + CAST(CR.SalaryTo AS NVARCHAR(50))
+                END) AS SalaryRange
         FROM Matches M
         JOIN Candidates C ON M.CandidateID = C.CandidateID
         JOIN ClientRequests CR ON M.RequestID = CR.RequestID
@@ -2080,7 +2082,7 @@ def accounting_invoices():
 
 @app.route('/accounting/issue_invoice', methods=['POST'])
 @login_required
-@role_required(['AccountManager', 'Manager', 'Admin'])
+@role_required(['AccountManager', 'Manager', 'Admin', 'AllocationManager'])
 def accounting_issue_invoice():
     match_id = request.form['match_id']
     amount = request.form['amount']
@@ -2346,6 +2348,23 @@ CEFR_OPTIONS_TRAINING = [
     'T2H1',
     'T2H2',
 ]
+
+
+def _cefr_levels_matching_center():
+    """قائمة مستويات فلتر مركز المطابقة: مقياس التوظيف + مستويات مسار التدريب (بدون تكرار)."""
+    base = [
+        'A0', 'A1', 'A1.1', 'A1.2', 'A2', 'A2.1', 'A2.2',
+        'B1', 'High B1', 'Low B1+', 'B1.1', 'B1.2', 'B2', 'Compromised B2',
+        'B2.1', 'B2.2', 'C1', 'C1.1', 'C1.2', 'C2',
+    ]
+    seen = set()
+    out = []
+    for lvl in base + CEFR_OPTIONS_TRAINING + CEFR_OPTIONS_RECRUITMENT:
+        if lvl not in seen:
+            seen.add(lvl)
+            out.append(lvl)
+    return out
+
 
 # أنواع تقييم مختبر مواهب التدريب (يُحفظ في Evaluations.EvaluationType)
 EVAL_TRAINING_PERIODIC = 'Training_Periodic'
@@ -3392,7 +3411,7 @@ def finalize_hiring():
 
 @app.route('/recruitment/am_dashboard')
 @login_required
-@role_required(['AccountManager', 'Manager'])
+@role_required(['AccountManager', 'Manager', 'AllocationManager'])
 def account_manager_dashboard():
     # AM focuses on Clients & Requests
     clients = query_db("SELECT * FROM Clients")
@@ -3510,14 +3529,14 @@ def recruitment_manage():
 # --- NEW STRICT HIERARCHY ROUTES ---
 @app.route('/recruitment/clients')
 @login_required
-@role_required(['Manager', 'AccountManager', 'RecruitmentManager', 'Corporate'])
+@role_required(['Manager', 'AccountManager', 'RecruitmentManager', 'Corporate', 'AllocationManager'])
 def manage_clients():
     clients = query_db('SELECT * FROM Clients')
     return render_template('recruitment/clients.html', clients=clients or [])
 
 @app.route('/recruitment/requests')
 @login_required
-@role_required(['Manager', 'AccountManager', 'AllocationSpecialist', 'Corporate'])
+@role_required(['Manager', 'AccountManager', 'AllocationSpecialist', 'Corporate', 'AllocationManager'])
 def manage_requests():
     requests = query_db('''
         SELECT CR.*, C.CompanyName 
