@@ -105,6 +105,41 @@
         </div>
         {% endif %}
 
+        {% if ta_schedule_appointments|default([]) %}
+        <div class="card shadow-sm mb-4 border-primary border-opacity-25">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-primary"><i class="fas fa-calendar-alt"></i> مواعيد اختبار الموهبة <small class="text-muted fs-6">محجوزة / منتهية</small></h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">المواعيد المسجلة في جدول المختبر (قبل وبعد التقييم).</p>
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>الوقت</th>
+                            <th>الحالة</th>
+                            <th>المختبر</th>
+                            <th>السياق</th>
+                            <th>النوع</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in ta_schedule_appointments %}
+                        <tr>
+                            <td>{{ (a.SlotDate|string)[:10] if a.SlotDate else '-' }}</td>
+                            <td>{{ a.SlotTime or '-' }}</td>
+                            <td><span class="badge bg-{{ 'warning' if a.Status == 'Booked' else 'success' if a.Status == 'Completed' else 'secondary' }}">{{ a.Status or '-' }}</span></td>
+                            <td>{{ a.EvaluatorName or '-' }}</td>
+                            <td>{% if (a.AssessmentContext or '')|trim == 'Training' %}تدريب{% else %}توظيف{% endif %}</td>
+                            <td>{{ a.InterviewType or a.Type or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 0c. ملاحظات مختبر المواهب للتدريب (اختبارات تحديد المستوى، فيدباك الامتحان الدوري) -->
         {% if talent_feedback_training %}
         <div class="card shadow-sm mb-4">

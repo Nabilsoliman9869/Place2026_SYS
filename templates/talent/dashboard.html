@@ -6,17 +6,82 @@
         <i class="fas fa-calendar-check text-primary"></i>
         <span class="en-bold">Talent Dashboard</span>
         <span class="ar-normal">لوحة المواهب</span>
+        {% if talent_schedule_context|default('recruitment') == 'training' %}
+        <span class="badge bg-warning text-dark ms-2">التدريب — مواعيد مختبر التدريب فقط</span>
+        {% else %}
+        <span class="badge bg-primary ms-2">التوظيف — مواعيد مختبر التوظيف فقط</span>
+        {% endif %}
         <small class="text-muted d-block fs-6 ar-normal">جدول المواعيد اليومي والتقييم على مستوى الدفعات</small>
     </h2>
-    <form class="d-flex" method="GET">
-        <input type="date" name="date" class="form-control me-2" value="{{ selected_date }}" onchange="this.form.submit()">
-        <button type="submit" class="btn btn-outline-primary"><span class="en-bold">Go</span></button>
+    <form class="d-flex flex-column align-items-end gap-1" method="GET">
+        {% if session.get('role') == 'Manager' %}
+        <input type="hidden" name="context" value="{{ talent_schedule_context|default('recruitment') }}">
+        {% endif %}
+        <div class="d-flex">
+            <input type="date" name="date" class="form-control me-2" value="{{ selected_date }}" onchange="this.form.submit()">
+            <button type="submit" class="btn btn-outline-primary"><span class="en-bold">Go</span></button>
+        </div>
+        <small class="text-muted ar-normal text-end" style="max-width: 14rem;">غيّر التاريخ لعرض يوم آخر؛ المواعيد المحجوزة في الأيام التالية تظهر في البطاقة أدناه.</small>
     </form>
 </div>
 
 <div class="row">
     <!-- Schedule List -->
     <div class="col-md-8">
+        {% if upcoming_booked|default([]) %}
+        <div class="card shadow-sm mb-3 border-info">
+            <div class="card-header bg-info bg-opacity-10">
+                <h5 class="mb-0 ar-normal"><i class="fas fa-calendar-week text-info"></i> مواعيد محجوزة قادمة <span class="text-muted fs-6">(خلال 14 يوماً، باستثناء اليوم المعروض أعلاه)</span></h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ar-normal">التاريخ</th>
+                            <th><span class="en-bold">Time</span></th>
+                            <th><span class="en-bold">Candidate</span></th>
+                            <th><span class="en-bold">Type</span></th>
+                            <th><span class="en-bold">Action</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for slot in upcoming_booked %}
+                        {% set st_raw = slot.SlotTime|string %}
+                        {% set st_hm = st_raw[:5] if st_raw|length >= 5 else st_raw %}
+                        {% set slot_date_s = (slot.SlotDate|string)[:10] %}
+                        <tr class="table-warning">
+                            <td class="fw-bold">{{ slot_date_s }}</td>
+                            <td class="fw-bold">{{ slot.SlotTime }}</td>
+                            <td>
+                                {% if slot.CandidateID %}
+                                <a href="{{ url_for('candidate_profile', candidate_id=slot.CandidateID) }}" class="fw-bold text-decoration-none" target="_blank">{{ slot.FullName }}</a>
+                                {% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+                            <td><span class="badge bg-secondary">{{ slot.InterviewType or '-' }}</span></td>
+                            <td>
+                                <div class="btn-group btn-group-sm flex-wrap">
+                                    <a href="{{ url_for('talent_evaluate', slot_id=slot.SlotID) }}" class="btn btn-primary"><i class="fas fa-edit"></i> <span class="ar-normal">تقييم</span></a>
+                                    <button type="button" class="btn btn-outline-info talent-reschedule-btn"
+                                        data-slot-id="{{ slot.SlotID }}"
+                                        data-slot-date="{{ slot_date_s }}"
+                                        data-slot-time="{{ st_hm }}">
+                                        <i class="fas fa-calendar-alt"></i> <span class="ar-normal">ترحيل</span>
+                                    </button>
+                                    <form action="{{ url_for('talent_cancel_slot') }}" method="POST" onsubmit="return confirm('Cancel this slot?');" class="ms-1">
+                                        <input type="hidden" name="slot_id" value="{{ slot.SlotID }}">
+                                        <input type="hidden" name="talent_context" value="{{ talent_schedule_context|default('recruitment') }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-times"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card shadow-sm">
             <div class="card-header bg-light">
                 <h5 class="mb-0"><span class="en-bold">Daily Schedule</span> <span class="ar-normal">— Slots for {{ selected_date }}</span></h5>
@@ -69,12 +134,21 @@
                             <td class="small text-muted">{{ slot.BookedByName or '-' }}</td>
                             <td>
                                 {% if slot.Status == 'Booked' %}
-                                    <div class="btn-group btn-group-sm">
+                                    {% set st_raw = slot.SlotTime|string %}
+                                    {% set st_hm = st_raw[:5] if st_raw|length >= 5 else st_raw %}
+                                    <div class="btn-group btn-group-sm flex-wrap">
                                         <a href="{{ url_for('talent_evaluate', slot_id=slot.SlotID) }}" class="btn btn-primary">
                                             <i class="fas fa-edit"></i> <span class="en-bold">Evaluate</span> <span class="ar-normal">تقييم</span>
                                         </a>
+                                        <button type="button" class="btn btn-outline-info talent-reschedule-btn" title="ترحيل أو نقل لزميل"
+                                            data-slot-id="{{ slot.SlotID }}"
+                                            data-slot-date="{{ selected_date }}"
+                                            data-slot-time="{{ st_hm }}">
+                                            <i class="fas fa-calendar-alt"></i> <span class="ar-normal">ترحيل</span>
+                                        </button>
                                         <form action="{{ url_for('talent_cancel_slot') }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel/release this slot?');" class="ms-1">
                                             <input type="hidden" name="slot_id" value="{{ slot.SlotID }}">
+                                            <input type="hidden" name="talent_context" value="{{ talent_schedule_context|default('recruitment') }}">
                                             <button type="submit" class="btn btn-outline-danger" title="Cancel & Release Slot">
                                                 <i class="fas fa-times"></i>
                                             </button>
@@ -122,9 +196,14 @@
                                 <td><span class="en-bold">{{ st.FullName }}</span></td>
                                 <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
                                 <td>
-                                    <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID) }}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-edit"></i> <span class="en-bold">Evaluate</span> <span class="ar-normal">تقييم</span>
-                                    </a>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic') }}" class="btn btn-outline-primary" title="تقييم دوري">
+                                            <i class="fas fa-calendar-check"></i> <span class="ar-normal">دوري</span>
+                                        </a>
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-outline-success" title="اختبار تخرج">
+                                            <i class="fas fa-graduation-cap"></i> <span class="ar-normal">تخرج</span>
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                             {% else %}
@@ -170,7 +249,89 @@
             <span class="ar-normal">Slots are booked by Sales or Training departments. You cannot book slots manually here.</span>
             <hr>
             <small class="d-block ar-normal">ملاحظة: يتم حجز المواعيد من قبل قسم المبيعات أو التدريب.</small>
+            <small class="d-block ar-normal mt-1"><strong>ترحيل:</strong> انقل الموعد لتاريخ/وقت آخر لك أو لمختبر مواهب آخر إن لم يكن هناك تعارض في نفس الخانة.</small>
         </div>
     </div>
 </div>
+
+<!-- ترحيل / شيفت الموعد -->
+<div class="modal fade" id="talentRescheduleModal" tabindex="-1" aria-labelledby="talentRescheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('talent_reschedule_slot') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="talentRescheduleModalLabel">
+                        <i class="fas fa-random text-info"></i> <span class="en-bold">Reschedule / Shift</span>
+                        <span class="ar-normal">ترحيل الموعد</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="slot_id" id="rs_slot_id" value="">
+                    <input type="hidden" name="return_date" id="rs_return_date" value="{{ selected_date }}">
+                    <input type="hidden" name="talent_context" value="{{ talent_schedule_context|default('recruitment') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">تاريخ الموعد الجديد <span class="text-muted small">New date</span></label>
+                        <input type="date" name="new_slot_date" id="rs_new_date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">وقت الموعد الجديد <span class="text-muted small">New time</span></label>
+                        <input type="time" name="new_slot_time" id="rs_new_time" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">المختبر <span class="text-muted small">نفسي أو زميل</span></label>
+                        <select name="target_evaluator_id" id="rs_eval" class="form-select">
+                            {% for p in ta_peers|default([]) %}
+                            <option value="{{ p.UserID }}" {% if p.UserID == my_user_id %}selected{% endif %}>
+                                {{ p.FullName or p.Username }} — {{ p.Role }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <p class="text-muted small mb-0">يُمنع الترحيل إن وُجد موعد آخر (محجوز أو محظور) لنفس المختبر في نفس التاريخ والوقت.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ الترحيل</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modalEl = document.getElementById('talentRescheduleModal');
+    if (!modalEl) return;
+    document.querySelectorAll('.talent-reschedule-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var sid = this.getAttribute('data-slot-id');
+            var sdate = this.getAttribute('data-slot-date');
+            var stime = (this.getAttribute('data-slot-time') || '10:00').substring(0, 5);
+            document.getElementById('rs_slot_id').value = sid;
+            document.getElementById('rs_return_date').value = sdate;
+            document.getElementById('rs_new_time').value = stime.length === 5 ? stime : '10:00';
+            var d = new Date(sdate + 'T12:00:00');
+            d.setDate(d.getDate() + 1);
+            var y = d.getFullYear();
+            var m = String(d.getMonth() + 1).padStart(2, '0');
+            var day = String(d.getDate()).padStart(2, '0');
+            document.getElementById('rs_new_date').value = y + '-' + m + '-' + day;
+            var ev = document.getElementById('rs_eval');
+            if (ev) {
+                var myId = '{{ my_user_id|default("", true) }}';
+                for (var i = 0; i < ev.options.length; i++) {
+                    if (ev.options[i].value === String(myId)) { ev.selectedIndex = i; break; }
+                }
+            }
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'block';
+            }
+        });
+    });
+})();
+</script>
 {% endblock %}

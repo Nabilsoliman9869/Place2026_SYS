@@ -70,7 +70,7 @@
         {% endif %}
     </div>
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" id="training-waves-table">
             <thead class="table-light">
                 <tr>
                     <th><span class="en-bold">Wave</span> <span class="ar-normal">الدفعة</span></th>
@@ -80,6 +80,47 @@
                     <th><span class="en-bold">Dates</span> <span class="ar-normal">التواريخ</span></th>
                     <th><span class="en-bold">Status</span> <span class="ar-normal">الحالة</span></th>
                     <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
+                </tr>
+                <tr class="table-secondary bg-opacity-25">
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-wave" list="dl-wave-names"
+                            placeholder="بحث دفعة…" title="فلترة حسب اسم الدفعة (يتضمن النص)" autocomplete="off">
+                        <datalist id="dl-wave-names">
+                            {% for n in filter_batch_names|default([]) %}<option value="{{ n }}">{% endfor %}
+                        </datalist>
+                    </th>
+                    <th class="p-1">
+                        <select class="form-select form-select-sm js-wave-filter" id="filter-course" title="فلترة الدورة">
+                            <option value="">— كل الدورات —</option>
+                            {% for n in filter_course_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </th>
+                    <th class="p-1">
+                        <select class="form-select form-select-sm js-wave-filter" id="filter-trainer" title="فلترة المدرب">
+                            <option value="">— كل المدربين —</option>
+                            {% for n in filter_trainer_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </th>
+                    <th class="p-1">
+                        <select class="form-select form-select-sm js-wave-filter" id="filter-room" title="فلترة القاعة">
+                            <option value="">— كل القاعات —</option>
+                            {% for n in filter_room_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </th>
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-dates" placeholder="تاريخ…" title="بحث في بداية/نهاية الدفعة">
+                    </th>
+                    <th class="p-1">
+                        <select class="form-select form-select-sm js-wave-filter" id="filter-status" title="فلترة الحالة">
+                            <option value="">— كل الحالات —</option>
+                            {% for st in filter_status_values|default([]) %}
+                            <option value="{{ st }}">{{ st }}</option>
+                            {% endfor %}
+                        </select>
+                    </th>
+                    <th class="p-1 align-middle">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="filter-wave-reset" title="مسح الفلاتر">مسح</button>
+                    </th>
                 </tr>
             </thead>
             <tbody>
@@ -93,7 +134,13 @@
                 </td></tr>
                 {% endif %}
                 {% for wave in batches %}
-                <tr>
+                <tr class="wave-data-row"
+                    data-wave-name="{{ (wave.BatchName or '')|e }}"
+                    data-course="{{ (wave.CourseName or '')|e }}"
+                    data-trainer="{{ (wave.TrainerName or '')|e }}"
+                    data-room="{{ (wave.RoomName or '')|e }}"
+                    data-dates="{{ ((wave.StartDate|string if wave.StartDate else '') ~ ' ' ~ (wave.EndDate|string if wave.EndDate else ''))|e }}"
+                    data-status="{{ (wave.Status or '')|e }}">
                     <td class="fw-bold">{{ wave.BatchName }}</td>
                     <td>{{ wave.CourseName }}</td>
                     <td>{{ wave.TrainerName or '-' }}</td>
@@ -273,4 +320,39 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    function norm(s) { return (s || '').toString().toLowerCase().trim(); }
+    function apply() {
+        var wv = norm(document.getElementById('filter-wave') && document.getElementById('filter-wave').value);
+        var cv = (document.getElementById('filter-course') && document.getElementById('filter-course').value || '').trim();
+        var tv = (document.getElementById('filter-trainer') && document.getElementById('filter-trainer').value || '').trim();
+        var rv = (document.getElementById('filter-room') && document.getElementById('filter-room').value || '').trim();
+        var dv = norm(document.getElementById('filter-dates') && document.getElementById('filter-dates').value);
+        var sv = (document.getElementById('filter-status') && document.getElementById('filter-status').value || '').trim();
+        document.querySelectorAll('#training-waves-table tbody tr.wave-data-row').forEach(function (tr) {
+            var ok = true;
+            if (wv && norm(tr.getAttribute('data-wave-name')).indexOf(wv) === -1) ok = false;
+            if (cv && (tr.getAttribute('data-course') || '').trim() !== cv) ok = false;
+            if (tv && (tr.getAttribute('data-trainer') || '').trim() !== tv) ok = false;
+            if (rv && (tr.getAttribute('data-room') || '').trim() !== rv) ok = false;
+            if (dv && norm(tr.getAttribute('data-dates')).indexOf(dv) === -1) ok = false;
+            if (sv && (tr.getAttribute('data-status') || '').trim() !== sv) ok = false;
+            tr.style.display = ok ? '' : 'none';
+        });
+    }
+    document.querySelectorAll('.js-wave-filter').forEach(function (el) {
+        el.addEventListener('input', apply);
+        el.addEventListener('change', apply);
+    });
+    var btn = document.getElementById('filter-wave-reset');
+    if (btn) btn.addEventListener('click', function () {
+        document.querySelectorAll('.js-wave-filter').forEach(function (el) {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            else el.value = '';
+        });
+        apply();
+    });
+})();
+</script>
 {% endblock %}

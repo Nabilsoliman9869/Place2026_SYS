@@ -527,22 +527,58 @@
                 <i class="fas fa-database"></i>
                 <span class="link-text"><span class="en-bold">Tests registry</span> <span class="ar-normal">سجل الاختبارات</span></span>
             </a>
-            {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] %}
-            <a href="{{ url_for('talent_dashboard') }}"
+            {% if session.get('role') == 'Manager' %}
+            <a href="{{ url_for('talent_dashboard', context='recruitment') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' and request.args.get('context') != 'training' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text"><span class="en-bold">TA Dashboard</span> <span class="ar-normal">لوحة مواهب التوظيف</span></span>
+            </a>
+            <a href="{{ url_for('talent_dashboard', context='training') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' and request.args.get('context') == 'training' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text"><span class="en-bold">TA Dashboard</span> <span class="ar-normal">لوحة مواهب التدريب</span></span>
+            </a>
+            <a href="{{ url_for('talent_book_self', context='recruitment') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] and request.args.get('context','recruitment') != 'training' else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز ذاتي — توظيف</span></span>
+            </a>
+            <a href="{{ url_for('talent_book_self', context='training') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] and request.args.get('context') == 'training' else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز ذاتي — تدريب</span></span>
+            </a>
+            {% elif session.get('role') in ['Talent_Training', 'TA-Training'] %}
+            <a href="{{ url_for('talent_dashboard', context='training') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' or request.endpoint == 'talent_evaluate' else '' }}">
                 <i class="fas fa-calendar-alt"></i>
-                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة المواهب</span></span>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة مواهب التدريب</span></span>
             </a>
+            <a href="{{ url_for('talent_book_self', context='training') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز مواعيد لنفسي</span></span>
+            </a>
+            {% elif session.get('role') in ['Talent', 'Talent_Recruitment'] %}
+            <a href="{{ url_for('talent_dashboard', context='recruitment') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_dashboard' or request.endpoint == 'talent_evaluate' else '' }}">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="link-text"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة مواهب التوظيف</span></span>
+            </a>
+            <a href="{{ url_for('talent_book_self', context='recruitment') }}"
+                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز مواعيد لنفسي</span></span>
+            </a>
+            {% endif %}
+            {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager', 'Talent', 'Talent_Recruitment'] %}
             <a href="{{ url_for('talent_monthly_results') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_monthly_results' else '' }}">
                 <i class="fas fa-chart-bar"></i>
                 <span class="link-text"><span class="en-bold">Monthly Results</span> <span class="ar-normal">نتائج الشهر</span></span>
             </a>
-            <a href="{{ url_for('talent_book_self') }}"
-                class="nav-link {{ 'active' if request.endpoint in ['talent_book_self', 'talent_exam_feedback', 'talent_exam_feedback_evaluate'] else '' }}">
-                <i class="fas fa-calendar-plus"></i>
-                <span class="link-text"><span class="en-bold">Book Self</span> <span class="ar-normal">حجز مواعيد لنفسي</span></span>
-            </a>
+            {% endif %}
+            {% if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] %}
             <a href="{{ url_for('talent_training_completed_tests') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'talent_training_completed_tests' else '' }}">
                 <i class="fas fa-list-check"></i>

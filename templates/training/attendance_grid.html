@@ -67,6 +67,7 @@
                             <th style="width: 8%;">تأخير (د)</th>
                             <th style="width: 8%;">مجمل تأخير</th>
                             <th style="width: 6%;">غيابات</th>
+                            <th style="width: 11%;" title="الواجب / Assignment">الواجب</th>
                             <th style="width: 6%;">ملف</th>
                             <th style="width: 8%;">إجراء</th>
                         </tr>
@@ -74,7 +75,7 @@
                     <tbody>
                         {% if selected_batch and selected_batch.StartTimeStr %}
                         <tr class="table-warning small">
-                            <td colspan="11">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — الحد الأقصى: غياب يوم واحد، إجمالي تأخير ساعتين على مدار عمر الدورة</td>
+                            <td colspan="12">وقت البداية المحدد للدفعة: <strong>{{ selected_batch.StartTimeStr }}</strong> — الحد الأقصى: غياب يوم واحد، إجمالي تأخير ساعتين على مدار عمر الدورة</td>
                         </tr>
                         {% endif %}
                         {% for s in students %}
@@ -109,6 +110,14 @@
                             <td><span class="badge late-minutes-badge bg-{{ 'warning' if (s.LateMinutes or 0) > 0 else 'secondary' }}" data-saved="{{ s.LateMinutes if s.LateMinutes is not none else '' }}">{{ s.LateMinutes if s.LateMinutes is not none else '-' }}</span></td>
                             <td><span class="badge bg-{{ 'danger' if over_delay else 'secondary' }}" title="مجمل تأخير على مدار الدورة (الحد 120 دقيقة)">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
                             <td><span class="badge absence-badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
+                            <td class="align-middle">
+                                <select name="assign_status_{{ s.EnrollmentID }}" class="form-select form-select-sm" title="حالة الواجب">
+                                    <option value="not submitted" {% if s.AssignmentStatus == 'not submitted' %}selected{% endif %}>not submitted</option>
+                                    <option value="Done" {% if s.AssignmentStatus == 'Done' %}selected{% endif %}>Done</option>
+                                    <option value="cancelled" {% if s.AssignmentStatus == 'cancelled' %}selected{% endif %}>cancelled</option>
+                                    <option value="postponed" {% if s.AssignmentStatus == 'postponed' %}selected{% endif %}>postponed</option>
+                                </select>
+                            </td>
                             <td class="text-center">
                                 {% if s.CandidateID %}
                                 <a href="{{ url_for('candidate_profile', candidate_id=s.CandidateID) }}" class="btn btn-sm btn-outline-secondary" title="ملف المتدرب">
@@ -125,7 +134,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="11" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
+                        <tr><td colspan="12" class="text-center py-4 text-muted">لا يوجد طلاب منضمون لهذه الدفعة.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

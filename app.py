@@ -68,6 +68,35 @@ def _safe_date_str(d, fmt='%Y-%m-%d'):
     return str(d)[:10] if d else '-'
 
 
+# حالات الواجب اليومي (Attendance grid) — تُخزَّن كنص في AssignmentStatus
+ASSIGNMENT_STATUS_VALUES = ('Done', 'not submitted', 'cancelled', 'postponed')
+ASSIGNMENT_STATUS_SET = frozenset(ASSIGNMENT_STATUS_VALUES)
+
+
+def _normalize_assignment_status(raw):
+    s = (raw or '').strip()
+    return s if s in ASSIGNMENT_STATUS_SET else 'not submitted'
+
+
+def _coerce_assignment_status_row(row):
+    """قراءة آمنة من الصف: عمود نصي قديم أو AssignmentDone."""
+    if not row:
+        return 'not submitted'
+    st = (row.get('AssignmentStatus') or '').strip()
+    if st in ASSIGNMENT_STATUS_SET:
+        return st
+    ad = row.get('AssignmentDone')
+    if ad is True or ad == 1:
+        return 'Done'
+    if ad is not None and str(ad).lower() in ('true', '1'):
+        return 'Done'
+    return 'not submitted'
+
+
+def _assignment_done_bit_from_status(status_str):
+    return 1 if status_str == 'Done' else 0
+
+
 def _row_user_id(row):
     if not row:
         return None
@@ -87,6 +116,29 @@ def _norm_slot_time_key(t):
 TA_CTX_RECRUITMENT = 'Recruitment'
 TA_CTX_TRAINING = 'Training'
 _ta_assessment_context_column_ready = False
+
+# فصل التوظيف/التدريب: لا نعتبر AssessmentContext الفارغ «توظيفاً» لكل المقيّمين —
+# الشواغر NULL تُعرض فقط مع مقيّم من أدوار ذلك الفرع (تفادي ظهور مختبري التدريب في حجز التوظيف والعكس).
+_SQL_TA_T_RECRUITMENT = (
+    " AND (T.AssessmentContext = N'Recruitment' OR T.AssessmentContext IS NULL) "
+    " AND T.EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
+)
+_SQL_TA_A_RECRUITMENT = (
+    " AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL) "
+    " AND EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
+)
+_SQL_TA_T_TRAINING = (
+    " AND (T.AssessmentContext = N'Training' OR T.AssessmentContext IS NULL) "
+    " AND T.EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
+)
+_SQL_TA_A_TRAINING = (
+    " AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL) "
+    " AND EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
+)
 
 
 def _ensure_taschedules_assessment_context_column():
@@ -110,6 +162,78 @@ def _ta_assessment_context_for_role(role):
     if (role or '').strip() in ('Talent_Training', 'TA-Training'):
         return TA_CTX_TRAINING
     return TA_CTX_RECRUITMENT
+
+
+def _talent_schedule_ui_context():
+    """سياق لوحة/حجز المواهب: توظيف أم تدريب. المدير يحدد عبر ?context= غير المدير يُفرض من الدور."""
+    role = (session.get('role') or '').strip()
+    raw = (request.args.get('context') or '').strip().lower()
+    if role in ('Talent_Training', 'TA-Training'):
+        return TA_CTX_TRAINING
+    if role in ('Talent', 'Talent_Recruitment'):
+        return TA_CTX_RECRUITMENT
+    if role == 'Manager':
+        if raw == 'training':
+            return TA_CTX_TRAINING
+        return TA_CTX_RECRUITMENT
+    if raw == 'training':
+        return TA_CTX_TRAINING
+    return TA_CTX_RECRUITMENT
+
+
+def _talent_schedule_sql_filters(ui_ctx):
+    if ui_ctx == TA_CTX_TRAINING:
+        return (_SQL_TA_T_TRAINING, _SQL_TA_A_TRAINING)
+    return (_SQL_TA_T_RECRUITMENT, _SQL_TA_A_RECRUITMENT)
+
+
+def _ta_peer_roles_for_schedule_context(ui_ctx):
+    if ui_ctx == TA_CTX_TRAINING:
+        return ('Talent_Training', 'TA-Training')
+    return ('Talent', 'Talent_Recruitment')
+
+
+def _add_self_slot_context_from_form():
+    role = (session.get('role') or '').strip()
+    raw = (request.form.get('talent_context') or '').strip().lower()
+    if role in ('Talent_Training', 'TA-Training'):
+        return TA_CTX_TRAINING
+    if role in ('Talent', 'Talent_Recruitment'):
+        return TA_CTX_RECRUITMENT
+    if role == 'Manager':
+        if raw == 'training':
+            return TA_CTX_TRAINING
+        return TA_CTX_RECRUITMENT
+    return TA_CTX_RECRUITMENT
+
+
+def _talent_redirect_query(ui_ctx):
+    """للمدير فقط نمرّر context في الرابط ليبقى فرع التوظيف/التدريب."""
+    if session.get('role') == 'Manager':
+        return {'context': 'training' if ui_ctx == TA_CTX_TRAINING else 'recruitment'}
+    return {}
+
+
+def _talent_dashboard_redirect_after_slot_action(slot_row=None, date_str=None, form_talent_context=None):
+    """رجوع للوحة المواهب مع الحفاظ على سياق التوظيف/التدريب للمدير."""
+    d = date_str or datetime.today().strftime('%Y-%m-%d')
+    kwargs = {'date': d}
+    if session.get('role') == 'Manager':
+        tc = (form_talent_context or '').strip().lower()
+        if tc in ('recruitment', 'training'):
+            kwargs['context'] = tc
+        elif slot_row is not None:
+            ac = (slot_row.get('AssessmentContext') or '').strip()
+            kwargs['context'] = 'training' if ac == TA_CTX_TRAINING else 'recruitment'
+    return redirect(url_for('talent_dashboard', **kwargs))
+
+
+def _talent_book_self_redirect_from_form():
+    tc = (request.form.get('talent_context') or '').strip().lower()
+    extra = {}
+    if session.get('role') == 'Manager' and tc in ('recruitment', 'training'):
+        extra['context'] = tc
+    return redirect(url_for('talent_book_self', **extra))
 
 
 def _recruitment_ta_evaluator_ids():
@@ -169,7 +293,11 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end, assessment_context
     insert_sql = (
         "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) VALUES (?, ?, ?, ?, ?)"
     )
-    ctx_sql = "ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'" if ctx == TA_CTX_RECRUITMENT else "AssessmentContext = N'Training'"
+    ctx_sql = (
+        "(AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL)"
+        if ctx == TA_CTX_RECRUITMENT
+        else "(AssessmentContext = N'Training' OR AssessmentContext IS NULL)"
+    )
     try:
         if getattr(cur, "fast_executemany", None) is not None:
             try:
@@ -1195,13 +1323,13 @@ def recruiter_scheduling():
     end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
     available_slots = []
     ta_ids = []
-    slot_sql = """
+    slot_sql = f"""
         SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
         FROM TASchedules T
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.CandidateID IS NULL
           AND T.EvaluatorID IS NOT NULL
-          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
+          {_SQL_TA_T_RECRUITMENT.strip()}
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
                 OR T.Status IS NULL
@@ -1271,12 +1399,12 @@ def recruiter_post_book_test():
         return redirect(url_for('recruiter_scheduling'))
 
     slot_row = query_db(
-        """
+        f"""
         SELECT SlotID, EvaluatorID, Status FROM TASchedules
         WHERE SlotID=?
           AND CandidateID IS NULL
           AND EvaluatorID IS NOT NULL
-          AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
+          {_SQL_TA_A_RECRUITMENT.strip()}
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                 OR Status IS NULL
@@ -1294,13 +1422,13 @@ def recruiter_post_book_test():
 
     try:
         query_db(
-            """
+            f"""
             UPDATE TASchedules
             SET Status=N'Booked', CandidateID=?, BookedBy=?, Type=N'Initial Assessment', InterviewType=?
             WHERE SlotID=?
               AND CandidateID IS NULL
               AND EvaluatorID IS NOT NULL
-              AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
+              {_SQL_TA_A_RECRUITMENT.strip()}
               AND (
                     LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                     OR Status IS NULL
@@ -1492,7 +1620,7 @@ def recruiter_test_schedule():
           AND S.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
         ORDER BY S.SlotDate, S.SlotTime
     """
-    sql_ta = """
+    sql_ta = f"""
         SELECT T.SlotID AS TaSlotID, T.SlotDate, T.SlotTime, T.IsConfirmedByRecruiter,
                C.FullName, C.Phone, C.SalesAgentID,
                U.Username AS EvaluatorName
@@ -1500,7 +1628,7 @@ def recruiter_test_schedule():
         JOIN Candidates C ON T.CandidateID = C.CandidateID
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.Status = N'Booked'
-          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
+          {_SQL_TA_T_RECRUITMENT.strip()}
           AND T.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
           AND T.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
     """
@@ -1603,7 +1731,7 @@ def recruiter_confirm_test():
 @login_required
 @role_required(['Recruiter', 'Manager'])
 def recruiter_test_results():
-    sql = """
+    sql = f"""
         SELECT T.*, C.FullName, C.Phone, C.CurrentCEFR, 
                U.Username as EvaluatorName,
                E.Decision, E.RecommendedLevel, E.Comments
@@ -1612,7 +1740,7 @@ def recruiter_test_results():
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         LEFT JOIN Evaluations E ON T.SlotID = E.SlotID
         WHERE C.SalesAgentID = ?
-        AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
+        {_SQL_TA_T_RECRUITMENT.strip()}
         AND T.Status IN ('Completed', 'Booked')
         ORDER BY T.SlotDate DESC
     """
@@ -1780,7 +1908,8 @@ def dashboard():
     if role == 'Trainer': return redirect(url_for('training_attendance'))
     
     # --- 6. Talent Acquisition (Testing) ---
-    if role in ['Talent_Training', 'TA-Training']: return redirect(url_for('talent_dashboard'))
+    if role in ['Talent_Training', 'TA-Training']:
+        return redirect(url_for('talent_dashboard', context='training'))
     if role in ['Talent', 'Talent_Recruitment']: return redirect(url_for('talent_conduct_test'))
 
     # --- 7. Top Management (Fall-through) ---
@@ -1964,9 +2093,33 @@ def view_candidate_profile(cand_id):
     except Exception:
         pass
     marketing_assessment = (cand.get('MarketingAssessment') or '') if cand else ''
-    return render_template('candidate_profile_ro.html', cand=cand, recruiter_feedback=recruiter_feedback,
-        recruiter_feedback_by_name=recruiter_feedback_by_name, recruiter_feedback_date=recruiter_feedback_date,
-        talent_feedback_recruitment=talent_feedback_recruitment or [], marketing_assessment=marketing_assessment)
+    ta_schedule_appointments = []
+    try:
+        ta_schedule_appointments = query_db(
+            """
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, T.InterviewType,
+                   ISNULL(T.AssessmentContext, N'Recruitment') AS AssessmentContext,
+                   U.FullName AS EvaluatorName
+            FROM TASchedules T
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE T.CandidateID = ?
+              AND T.Status IN (N'Booked', N'Completed', N'No Show')
+            ORDER BY T.SlotDate DESC, T.SlotTime DESC
+            """,
+            (cand_id,),
+        ) or []
+    except Exception:
+        pass
+    return render_template(
+        'candidate_profile_ro.html',
+        cand=cand,
+        recruiter_feedback=recruiter_feedback,
+        recruiter_feedback_by_name=recruiter_feedback_by_name,
+        recruiter_feedback_date=recruiter_feedback_date,
+        talent_feedback_recruitment=talent_feedback_recruitment or [],
+        marketing_assessment=marketing_assessment,
+        ta_schedule_appointments=ta_schedule_appointments,
+    )
 
 def check_expired_appointments():
     # Helper to expire old 'Booked' slots (e.g. yesterday)
@@ -2479,16 +2632,8 @@ def talent_dashboard():
     if 'role' not in session: return redirect(url_for('login'))
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
-    role = session.get('role')
-    if role == 'Manager':
-        ctx_t_where = ''
-        ctx_pt_where = ''
-    elif role in ('Talent_Training', 'TA-Training'):
-        ctx_t_where = " AND T.AssessmentContext = N'Training' "
-        ctx_pt_where = " AND AssessmentContext = N'Training' "
-    else:
-        ctx_t_where = " AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment' "
-        ctx_pt_where = " AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment' "
+    ui_ctx = _talent_schedule_ui_context()
+    ctx_t_where, ctx_pt_where = _talent_schedule_sql_filters(ui_ctx)
 
     # 1. Slots: JOINs بدل subqueries لكل صف (أسرع على SQL Server)
     slots_sql = f"""
@@ -2511,6 +2656,31 @@ def talent_dashboard():
         ORDER BY T.SlotTime
     """
     my_schedule = query_db(slots_sql, (user_id, selected_date)) or []
+
+    today_s = datetime.today().strftime('%Y-%m-%d')
+    end_s = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
+    upcoming_sql = f"""
+        SELECT T.*, C.FullName, C.Phone, C.CandidateID,
+               BB.Username AS BookedByName,
+               ISNULL(PT.PrevCnt, 0) AS PreviousTests
+        FROM TASchedules T
+        LEFT JOIN Candidates C ON T.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 BB ON T.BookedBy = BB.UserID
+        LEFT JOIN (
+            SELECT CandidateID, COUNT(*) AS PrevCnt
+            FROM TASchedules
+            WHERE Status = 'Completed' {ctx_pt_where}
+            GROUP BY CandidateID
+        ) PT ON PT.CandidateID = T.CandidateID
+        WHERE T.EvaluatorID = ?
+          AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
+          AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
+          AND CAST(T.SlotDate AS DATE) <> CAST(? AS DATE)
+          AND T.Status = N'Booked'
+          {ctx_t_where}
+        ORDER BY T.SlotDate ASC, T.SlotTime ASC
+    """
+    upcoming_booked = query_db(upcoming_sql, (user_id, today_s, end_s, selected_date)) or []
 
     # 2. دفعات + طلاب في استعلام واحد (بدل N+1)
     batches_with_students = []
@@ -2548,12 +2718,17 @@ def talent_dashboard():
     except Exception:
         pass
 
-    ta_peers = query_db("""
+    peer_roles = _ta_peer_roles_for_schedule_context(ui_ctx)
+    ph = ','.join(['?'] * len(peer_roles))
+    ta_peers = query_db(
+        f"""
         SELECT UserID, FullName, Username, Role
         FROM Users_1
-        WHERE Role IN ('Talent', 'Talent_Recruitment', 'Talent_Training', 'TA-Training')
+        WHERE Role IN ({ph})
         ORDER BY FullName, Username
-    """) or []
+        """,
+        tuple(peer_roles),
+    ) or []
     peer_ids = {int(p['UserID']) for p in ta_peers if p.get('UserID') is not None}
     if int(user_id) not in peer_ids:
         me_row = query_db(
@@ -2564,9 +2739,17 @@ def talent_dashboard():
         if me_row:
             ta_peers = [me_row] + list(ta_peers)
 
-    return render_template('talent/dashboard.html',
-        slots=my_schedule, selected_date=selected_date, batches_with_students=batches_with_students,
-        ta_peers=ta_peers, my_user_id=user_id)
+    ctx_label = 'training' if ui_ctx == TA_CTX_TRAINING else 'recruitment'
+    return render_template(
+        'talent/dashboard.html',
+        slots=my_schedule,
+        upcoming_booked=upcoming_booked,
+        selected_date=selected_date,
+        batches_with_students=batches_with_students,
+        ta_peers=ta_peers,
+        my_user_id=user_id,
+        talent_schedule_context=ctx_label,
+    )
 
 
 def _normalize_slot_time_for_db(t_raw):
@@ -2592,15 +2775,17 @@ def talent_reschedule_slot():
     target_eval_raw = request.form.get('target_evaluator_id')
     back_date = request.form.get('return_date') or new_date
 
+    fctx = request.form.get('talent_context')
+
     if not slot_id or not new_date or not new_time_raw:
         flash('التاريخ والوقت الجديدان مطلوبان.', 'warning')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
     try:
         slot_id = int(slot_id)
     except (TypeError, ValueError):
         flash('معرّف الموعد غير صالح.', 'danger')
-        return redirect(url_for('talent_dashboard'))
+        return _talent_dashboard_redirect_after_slot_action(form_talent_context=fctx)
 
     try:
         target_eval = int(target_eval_raw) if target_eval_raw else session['user_id']
@@ -2610,32 +2795,35 @@ def talent_reschedule_slot():
     slot = query_db("SELECT * FROM TASchedules WHERE SlotID=?", (slot_id,), one=True)
     if not slot or (slot.get('Status') or '') != 'Booked':
         flash('الموعد غير موجود أو ليس بحالة محجوز.', 'danger')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
     role = session.get('role')
     if role != 'Manager' and int(slot.get('EvaluatorID') or 0) != int(session['user_id']):
         flash('يمكنك ترحيل مواعيدك فقط.', 'danger')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
+    sctx_raw = (slot.get('AssessmentContext') or '').strip()
+    sctx = TA_CTX_TRAINING if sctx_raw == TA_CTX_TRAINING else TA_CTX_RECRUITMENT
+    peer_roles = _ta_peer_roles_for_schedule_context(sctx)
+    ph = ','.join(['?'] * len(peer_roles))
     peer = query_db(
-        "SELECT UserID FROM Users_1 WHERE UserID=? AND Role IN ('Talent','Talent_Recruitment','Talent_Training','TA-Training')",
-        (target_eval,),
+        f"SELECT UserID FROM Users_1 WHERE UserID=? AND Role IN ({ph})",
+        (target_eval,) + peer_roles,
         one=True,
     )
     if not peer:
-        flash('المختبر المستهدف غير صالح.', 'danger')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        flash('المختبر المستهدف غير صالح لهذا النوع من المواعيد.', 'danger')
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
     new_time = _normalize_slot_time_for_db(new_time_raw)
     if not new_time:
         flash('صيغة الوقت غير صالحة.', 'warning')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
-    sctx = (slot.get('AssessmentContext') or TA_CTX_RECRUITMENT).strip()
     if sctx == TA_CTX_TRAINING:
-        clash_ctx_sql = " AND AssessmentContext = N'Training' "
+        clash_ctx_sql = " AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL) "
     else:
-        clash_ctx_sql = " AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment' "
+        clash_ctx_sql = " AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL) "
 
     try:
         clash = query_db(
@@ -2666,7 +2854,7 @@ def talent_reschedule_slot():
 
     if clash:
         flash('تعارض: يوجد موعد آخر لنفس المختبر في هذا التاريخ والوقت.', 'danger')
-        return redirect(url_for('talent_dashboard', date=back_date))
+        return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
     try:
         query_db(
@@ -2681,7 +2869,7 @@ def talent_reschedule_slot():
     except Exception as e:
         flash(f'تعذر حفظ الترحيل: {str(e)[:120]}', 'danger')
 
-    return redirect(url_for('talent_dashboard', date=new_date))
+    return _talent_dashboard_redirect_after_slot_action(date_str=new_date, form_talent_context=fctx)
 
 
 @app.route('/talent/cancel_slot', methods=['POST'])
@@ -2689,6 +2877,11 @@ def talent_reschedule_slot():
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_cancel_slot():
     slot_id = request.form['slot_id']
+    slot_row = query_db(
+        "SELECT SlotDate, AssessmentContext FROM TASchedules WHERE SlotID=?",
+        (slot_id,),
+        one=True,
+    )
     if session.get('role') == 'Manager':
         query_db("""
             UPDATE TASchedules
@@ -2702,7 +2895,13 @@ def talent_cancel_slot():
             WHERE SlotID=? AND EvaluatorID=?
         """, (slot_id, session['user_id']))
     flash('Slot Released (Cancelled) Successfully', 'success')
-    return redirect(url_for('talent_dashboard'))
+    sd = slot_row.get('SlotDate') if slot_row else None
+    dstr = sd.strftime('%Y-%m-%d') if sd and hasattr(sd, 'strftime') else (str(sd)[:10] if sd else datetime.today().strftime('%Y-%m-%d'))
+    return _talent_dashboard_redirect_after_slot_action(
+        slot_row=slot_row,
+        date_str=dstr,
+        form_talent_context=request.form.get('talent_context'),
+    )
 
 def _safe_int(val, default=0):
     """Coerce form value to int for DB; empty string causes SQL error otherwise."""
@@ -2917,7 +3116,9 @@ def talent_evaluate(slot_id):
             query_db("UPDATE TASchedules SET Status='Completed' WHERE SlotID=?", (slot_id,))
             query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', slot['CandidateID']))
             flash('تم حفظ التقييم بنجاح', 'success')
-            return redirect(url_for('talent_dashboard'))
+            sd = slot.get('SlotDate')
+            dstr = sd.strftime('%Y-%m-%d') if sd and hasattr(sd, 'strftime') else (str(sd)[:10] if sd else datetime.today().strftime('%Y-%m-%d'))
+            return _talent_dashboard_redirect_after_slot_action(slot_row=slot, date_str=dstr)
         except Exception as e:
             flash(f'خطأ عند حفظ التقييم: {str(e)}', 'danger')
             return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
@@ -2934,9 +3135,9 @@ def book_ta_slot():
         interview_type = request.form.get('interview_type', 'Zoom') 
         
         query_db(
-            """
+            f"""
             UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
-            WHERE SlotID=? AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
+            WHERE SlotID=? {_SQL_TA_A_RECRUITMENT.strip()}
             """,
             (candidate_id, session['user_id'], interview_type, slot_id),
         )
@@ -2957,7 +3158,12 @@ def book_ta_slot():
 def mark_no_show():
     slot_id = request.form['slot_id']
     reason = request.form['reason'] # No Answer, Didn't Join Zoom, etc.
-    
+    slot_meta = query_db(
+        "SELECT SlotDate, AssessmentContext FROM TASchedules WHERE SlotID=?",
+        (slot_id,),
+        one=True,
+    )
+
     # 1. Update Slot Status
     query_db("UPDATE TASchedules SET Status='No Show' WHERE SlotID=?", (slot_id,))
     
@@ -2977,7 +3183,15 @@ def mark_no_show():
                 notify_no_show(agent['Email'], agent['Username'], candidate['FullName'], reason)
             
     flash('Marked as No Show. Sales Agent Notified.', 'warning')
-    return redirect(url_for('talent_dashboard'))
+    sd = slot_meta.get('SlotDate') if slot_meta else None
+    dstr = sd.strftime('%Y-%m-%d') if sd and hasattr(sd, 'strftime') else (str(sd)[:10] if sd else datetime.today().strftime('%Y-%m-%d'))
+    return _talent_dashboard_redirect_after_slot_action(
+        slot_row=slot_meta,
+        date_str=dstr,
+        form_talent_context=request.form.get('talent_context'),
+    )
+
+
 @app.route('/talent/block_slot', methods=['POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
@@ -2986,6 +3200,8 @@ def block_ta_slot():
     slot_id = request.form['slot_id']
     query_db("UPDATE TASchedules SET Status='Blocked' WHERE SlotID=? AND EvaluatorID=?", (slot_id, session['user_id']))
     flash('Slot Blocked', 'warning')
+    if 'talent_context' in request.form:
+        return _talent_book_self_redirect_from_form()
     return redirect(request.referrer or url_for('talent_dashboard'))
 
 @app.route('/talent/book_self')
@@ -2995,13 +3211,8 @@ def talent_book_self():
     """شاشة حجز مواعيد لنفسه — المختبر يعرض مواعيده المتاحة ويحظرها أو ينشئ مواعيد جديدة."""
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
-    role = session.get('role')
-    if role == 'Manager':
-        ctx_f = ''
-    elif role in ('Talent_Training', 'TA-Training'):
-        ctx_f = " AND T.AssessmentContext = N'Training' "
-    else:
-        ctx_f = " AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment' "
+    ui_ctx = _talent_schedule_ui_context()
+    ctx_f, _ctx_pt_unused = _talent_schedule_sql_filters(ui_ctx)
     try:
         my_available = query_db(f"""
             SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status
@@ -3036,7 +3247,16 @@ def talent_book_self():
         """) or []
     except Exception:
         active_waves = []
-    return render_template('talent/book_self.html', slots=my_available or [], batches_with_exams=batches_with_exams, exam_dates_today=exam_dates_today, selected_date=selected_date, active_waves=active_waves)
+    ctx_label = 'training' if ui_ctx == TA_CTX_TRAINING else 'recruitment'
+    return render_template(
+        'talent/book_self.html',
+        slots=my_available or [],
+        batches_with_exams=batches_with_exams,
+        exam_dates_today=exam_dates_today,
+        selected_date=selected_date,
+        active_waves=active_waves,
+        talent_schedule_context=ctx_label,
+    )
 
 @app.route('/talent/add_self_slot', methods=['POST'])
 @login_required
@@ -3048,14 +3268,13 @@ def talent_add_self_slot():
     slot_time = request.form.get('slot_time')
     if not slot_date or not slot_time:
         flash('التاريخ والوقت مطلوبان.', 'warning')
-        return redirect(url_for('talent_book_self'))
+        return redirect(url_for('talent_book_self', **_talent_redirect_query(_add_self_slot_context_from_form())))
     _ensure_taschedules_assessment_context_column()
-    role = session.get('role')
-    ctx = _ta_assessment_context_for_role(role) if role != 'Manager' else TA_CTX_RECRUITMENT
+    ctx = _add_self_slot_context_from_form()
     if ctx == TA_CTX_TRAINING:
         ex_sql = (
             "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
-            "AND AssessmentContext = N'Training'"
+            "AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL)"
         )
         ins_sql = (
             "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
@@ -3064,19 +3283,20 @@ def talent_add_self_slot():
     else:
         ex_sql = (
             "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
-            "AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'"
+            "AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL)"
         )
         ins_sql = (
             "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
             "VALUES (?, ?, 'Blocked', ?, N'Recruitment')"
         )
     existing = query_db(ex_sql, (user_id, slot_date, slot_time), one=True)
+    rq = _talent_redirect_query(ctx)
     if existing:
         flash('هذا الموعد موجود مسبقاً.', 'info')
-        return redirect(url_for('talent_book_self'))
+        return redirect(url_for('talent_book_self', **rq))
     query_db(ins_sql, (slot_date, slot_time, user_id))
     flash('تم إضافة الموعد وحظره بنجاح.', 'success')
-    return redirect(url_for('talent_book_self', date=slot_date))
+    return redirect(url_for('talent_book_self', date=slot_date, **rq))
 
 @app.route('/talent/exam_feedback/<int:batch_id>')
 @login_required
@@ -3086,7 +3306,9 @@ def talent_exam_feedback(batch_id):
     batch = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
     if not batch:
         flash('الدفعة غير موجودة.', 'danger')
-        return redirect(url_for('talent_dashboard'))
+        if session.get('role') in ('Talent_Training', 'TA-Training', 'Manager'):
+            return redirect(url_for('talent_dashboard', context='training'))
+        return redirect(url_for('talent_dashboard', context='recruitment'))
     is_archived = (batch.get('Status') or '').strip() != 'Active'
     students = query_db("""
         SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR
@@ -3278,7 +3500,7 @@ def talent_training_completed_tests():
             'قالب الصفحة غير موجود على السيرفر (غالباً لم يُرفع مع النشر). أضف الملف إلى Git وادفع ثم أعد النشر.',
             'danger',
         )
-        return redirect(url_for('talent_dashboard'))
+        return redirect(url_for('talent_dashboard', context='training'))
     except Exception as render_ex:
         try:
             app.logger.exception('talent_training_completed_tests render: %s', render_ex)
@@ -3720,12 +3942,12 @@ def recruiter_dashboard():
         'my_candidates': query_db("SELECT COUNT(*) as c FROM Candidates WHERE SalesAgentID=?", (user_id,), one=True)['c'],
         
         # Test Interviews Today (Tests booked for my candidates today)
-        'my_tests_today': query_db("""
+        'my_tests_today': query_db(f"""
             SELECT COUNT(*) as c 
             FROM TASchedules T 
             JOIN Candidates C ON T.CandidateID = C.CandidateID 
             WHERE C.SalesAgentID = ? AND T.SlotDate = ? AND T.Status = 'Booked'
-              AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
+              {_SQL_TA_T_RECRUITMENT.strip()}
         """, (user_id, today), one=True)['c'],
         
         # Job Interviews Today (Matches in 'Interview' status for today)
@@ -3739,8 +3961,8 @@ def recruiter_dashboard():
         # Workflow Counts (For Badges)
         'count_new_leads': query_db("SELECT COUNT(*) as c FROM Candidates WHERE SalesAgentID=? AND Status='New'", (user_id,), one=True)['c'],
         'count_tests_pending': query_db(
-            "SELECT COUNT(*) as c FROM TASchedules T JOIN Candidates C ON T.CandidateID=C.CandidateID "
-            "WHERE C.SalesAgentID=? AND T.Status='Booked' AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'",
+            f"SELECT COUNT(*) as c FROM TASchedules T JOIN Candidates C ON T.CandidateID=C.CandidateID "
+            f"WHERE C.SalesAgentID=? AND T.Status='Booked' {_SQL_TA_T_RECRUITMENT.strip()}",
             (user_id,), one=True)['c'],
         'count_interviews_pending': query_db("SELECT COUNT(*) as c FROM Matches M JOIN Candidates C ON M.CandidateID=C.CandidateID WHERE C.SalesAgentID=? AND M.Status='Interview'", (user_id,), one=True)['c'],
         'count_feedback_needed': query_db("SELECT COUNT(*) as c FROM Matches M JOIN Candidates C ON M.CandidateID=C.CandidateID WHERE C.SalesAgentID=? AND M.Status='Interview' AND M.InterviewDate < ?", (user_id, today), one=True)['c']
@@ -3760,7 +3982,7 @@ def recruiter_dashboard():
 
     # مقابلات التالنت اليوم — من TASchedules و Schedules (Talent_Recruitment)
     # المرشحون المحوّلون/المحجوزون: SalesAgentID أو RecruiterID أو BookedBy
-    ta_slots = query_db("""
+    ta_slots = query_db(f"""
         SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, C.CandidateID, C.FullName, C.Phone, U.FullName as EvaluatorName
         FROM TASchedules T
         JOIN Candidates C ON T.CandidateID = C.CandidateID
@@ -3768,7 +3990,7 @@ def recruiter_dashboard():
         WHERE (C.SalesAgentID = ? OR C.RecruiterID = ? OR T.BookedBy = ?)
           AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
           AND T.Status IN ('Booked', 'Completed')
-          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
+          {_SQL_TA_T_RECRUITMENT.strip()}
         ORDER BY T.SlotTime
     """, (user_id, user_id, user_id, today))
     try:
@@ -4265,7 +4487,7 @@ def sales_index():
     # Generate slots if not exist for selected date (Auto-generate logic reuse)
     # OPTIMIZED: Use single transaction for bulk insert to avoid 160+ roundtrips
     existing = query_db(
-        "SELECT COUNT(*) as c FROM TASchedules WHERE SlotDate = ? AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'",
+        f"SELECT COUNT(*) as c FROM TASchedules T WHERE T.SlotDate = ? {_SQL_TA_T_RECRUITMENT.strip()}",
         (selected_date,),
         one=True,
     )
@@ -4301,13 +4523,13 @@ def sales_index():
             # This ensures at least something shows up, but marks them clearly.
             pass
 
-    available_slots = query_db("""
+    available_slots = query_db(f"""
         SELECT T.*, U.Username as EvaluatorName 
         FROM TASchedules T 
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID 
-        WHERE SlotDate = ? AND Status = 'Available'
-          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
-        ORDER BY SlotTime, U.Username
+        WHERE T.SlotDate = ? AND T.Status = 'Available'
+          {_SQL_TA_T_RECRUITMENT.strip()}
+        ORDER BY T.SlotTime, U.Username
     """, (selected_date,))
     
     return render_template('sales/index.html', campaigns=campaigns or [], active_requests=active_requests or [], leads=leads or [], invoices=invoices or [], services=services or [], candidates=candidates or [], available_slots=available_slots or [], selected_date=selected_date)
@@ -4885,6 +5107,24 @@ def candidate_profile(candidate_id):
         rd = cand['RecruiterFeedbackDate']
         recruiter_feedback_date = rd.strftime('%Y-%m-%d %H:%M') if hasattr(rd, 'strftime') else str(rd)[:16]
 
+    ta_schedule_appointments = []
+    try:
+        ta_schedule_appointments = query_db(
+            """
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, T.InterviewType, T.Type,
+                   ISNULL(T.AssessmentContext, N'Recruitment') AS AssessmentContext,
+                   U.FullName AS EvaluatorName
+            FROM TASchedules T
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE T.CandidateID = ?
+              AND T.Status IN (N'Booked', N'Completed', N'No Show')
+            ORDER BY T.SlotDate DESC, T.SlotTime DESC
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        pass
+
     return render_template(
         'profile.html',
         cand=cand,
@@ -4903,6 +5143,7 @@ def candidate_profile(candidate_id):
         candidate_invoices=candidate_invoices,
         talent_feedback_training=talent_feedback_training,
         talent_feedback_recruitment=talent_feedback_recruitment,
+        ta_schedule_appointments=ta_schedule_appointments,
         recruiter_feedback=(cand.get('RecruiterFeedback') or '') if cand else '',
         recruiter_feedback_by_name=recruiter_feedback_by_name,
         recruiter_feedback_date=recruiter_feedback_date,
@@ -5219,10 +5460,10 @@ def training_sales_book_slot(candidate_id):
         test_mode = request.form.get('test_mode', 'Online')  # أون لاين أو أون سايت — مثل اختبار المواهب
         if slot_id:
             try:
-                query_db("""
+                query_db(f"""
                     UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
                     WHERE SlotID=? AND CandidateID IS NULL AND EvaluatorID IS NOT NULL
-                      AND AssessmentContext = N'Training'
+                      {_SQL_TA_A_TRAINING.strip()}
                       AND (
                             LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                             OR Status IS NULL
@@ -5238,13 +5479,12 @@ def training_sales_book_slot(candidate_id):
     if not ids:
         available_slots = []
     else:
-        placeholders = ','.join(['?'] * len(ids))
-        available_slots = query_db(f"""
+        slot_q_training = f"""
             SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
             FROM TASchedules T
             JOIN Users_1 U ON T.EvaluatorID = U.UserID
-            WHERE T.EvaluatorID IN ({placeholders}) AND T.AssessmentContext = N'Training'
-              AND T.CandidateID IS NULL
+            WHERE T.CandidateID IS NULL
+              {_SQL_TA_T_TRAINING.strip()}
               AND (
                     LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
                     OR T.Status IS NULL
@@ -5252,26 +5492,14 @@ def training_sales_book_slot(candidate_id):
               )
               AND T.SlotDate >= CAST(GETDATE() AS DATE)
             ORDER BY T.SlotDate, T.SlotTime
-        """, tuple(ids))
+        """
+        available_slots = query_db(slot_q_training) or []
         if not available_slots:
             try:
                 today = datetime.today().date()
                 end = today + timedelta(days=13)
                 _ensure_ta_slots_for_date_range(ids, today, end, TA_CTX_TRAINING)
-                available_slots = query_db(f"""
-                    SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
-                    FROM TASchedules T
-                    JOIN Users_1 U ON T.EvaluatorID = U.UserID
-                    WHERE T.EvaluatorID IN ({placeholders}) AND T.AssessmentContext = N'Training'
-                      AND T.CandidateID IS NULL
-                      AND (
-                            LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
-                            OR T.Status IS NULL
-                            OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
-                      )
-                      AND T.SlotDate >= CAST(GETDATE() AS DATE)
-                    ORDER BY T.SlotDate, T.SlotTime
-                """, tuple(ids))
+                available_slots = query_db(slot_q_training) or []
             except Exception:
                 pass
     return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
@@ -5752,15 +5980,42 @@ def training_index():
     courses = query_db("SELECT * FROM Courses")
     trainers = query_db("SELECT * FROM Trainers")
     classrooms = query_db("SELECT * FROM Classrooms")
+
+    batches_list = waves or []
+    filter_batch_names = sorted(
+        {(b.get('BatchName') or '').strip() for b in batches_list if (b.get('BatchName') or '').strip()},
+        key=lambda x: x.lower(),
+    )
+    filter_course_names = sorted(
+        {(b.get('CourseName') or '').strip() for b in batches_list if (b.get('CourseName') or '').strip()},
+        key=lambda x: x.lower(),
+    )
+    filter_trainer_names = sorted(
+        {(b.get('TrainerName') or '').strip() for b in batches_list if (b.get('TrainerName') or '').strip()},
+        key=lambda x: x.lower(),
+    )
+    filter_room_names = sorted(
+        {(b.get('RoomName') or '').strip() for b in batches_list if (b.get('RoomName') or '').strip()},
+        key=lambda x: x.lower(),
+    )
+    filter_status_values = sorted(
+        {(b.get('Status') or '').strip() for b in batches_list if (b.get('Status') or '').strip()},
+        key=lambda x: x.lower(),
+    )
     
     return render_template(
         'training/index.html',
-        batches=waves or [],
+        batches=batches_list,
         courses=courses or [],
         trainers=trainers or [],
         rooms=classrooms or [],
         view=view,
         can_open_training_talent_slots=(session.get('role') in OPEN_TRAINING_TALENT_SLOT_ROLES),
+        filter_batch_names=filter_batch_names,
+        filter_course_names=filter_course_names,
+        filter_trainer_names=filter_trainer_names,
+        filter_room_names=filter_room_names,
+        filter_status_values=filter_status_values,
     )
 
 @app.route('/training/add_course', methods=['POST'])
@@ -6541,11 +6796,21 @@ def _ensure_attendance_columns():
         "ALTER TABLE Attendance ADD TotalHours DECIMAL(5,2)",
         "ALTER TABLE Attendance ADD AssignmentDone BIT DEFAULT 0",
         "ALTER TABLE Attendance ADD LateMinutes INT NULL",
+        "ALTER TABLE Attendance ADD AssignmentStatus NVARCHAR(50) NULL",
     ]:
         try:
             query_db(stmt)
         except Exception:
             pass  # العمود موجود أو خطأ صلاحيات — نتجاهل
+    try:
+        query_db(
+            """
+            UPDATE Attendance SET AssignmentStatus = CASE WHEN AssignmentDone = 1 THEN N'Done' ELSE N'not submitted' END
+            WHERE AssignmentStatus IS NULL
+            """
+        )
+    except Exception:
+        pass
 
 @app.route('/training/attendance', methods=['GET'])
 @login_required
@@ -6567,7 +6832,7 @@ def training_attendance():
             try:
                 raw = query_db('''
                     SELECT E.EnrollmentID, E.CandidateID, C.FullName,
-                            A.Status, A.CheckInTime, A.CheckOutTime, A.TotalHours, A.AssignmentDone, A.AttendanceID, A.LateMinutes,
+                            A.Status, A.CheckInTime, A.CheckOutTime, A.TotalHours, A.AssignmentDone, A.AssignmentStatus, A.AttendanceID, A.LateMinutes,
                             (SELECT ISNULL(SUM(LateMinutes), 0) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID) AS TotalDelayMinutes,
                             (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
                     FROM Enrollments E
@@ -6579,6 +6844,7 @@ def training_attendance():
                 raw = query_db('''
                     SELECT E.EnrollmentID, E.CandidateID, C.FullName,
                             A.Status, NULL AS CheckInTime, NULL AS CheckOutTime, NULL AS TotalHours, 0 AS AssignmentDone,
+                            NULL AS AssignmentStatus,
                             A.AttendanceID, NULL AS LateMinutes, 0 AS TotalDelayMinutes,
                             (SELECT COUNT(*) FROM Attendance A2 WHERE A2.EnrollmentID = E.EnrollmentID AND A2.Status = 'Absent') AS AbsenceCount
                     FROM Enrollments E
@@ -6587,11 +6853,12 @@ def training_attendance():
                     WHERE E.BatchID = ? AND E.Status = 'Active'
                 ''', (selected_date, selected_batch_id))
             students = []
-            cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'TotalHours', 'AssignmentDone', 'AttendanceID', 'LateMinutes', 'TotalDelayMinutes', 'AbsenceCount']
+            cols = ['EnrollmentID', 'CandidateID', 'FullName', 'Status', 'CheckInTime', 'CheckOutTime', 'TotalHours', 'AssignmentDone', 'AssignmentStatus', 'AttendanceID', 'LateMinutes', 'TotalDelayMinutes', 'AbsenceCount']
             for row in (raw or []):
                 r = {k: row.get(k) for k in cols}
                 r['CheckInTimeStr'] = _safe_time_str(r.get('CheckInTime'))
                 r['CheckOutTimeStr'] = _safe_time_str(r.get('CheckOutTime'))
+                r['AssignmentStatus'] = _coerce_assignment_status_row(r)
                 students.append(r)
             
     return render_template('training/attendance_grid.html', 
@@ -6626,8 +6893,9 @@ def save_attendance_grid():
             status = request.form.get(f'status_{enrollment_id}')
             check_in = request.form.get(f'in_{enrollment_id}') or None
             check_out = request.form.get(f'out_{enrollment_id}') or None
-            assignment = 1 if request.form.get(f'assign_{enrollment_id}') else 0
-            
+            assignment_status = _normalize_assignment_status(request.form.get(f'assign_status_{enrollment_id}'))
+            assignment_done_bit = _assignment_done_bit_from_status(assignment_status)
+
             total_hours = 0
             late_minutes = None
             if check_in and check_out and status not in ('Absent', 'Excused'):
@@ -6664,14 +6932,14 @@ def save_attendance_grid():
             if existing:
                 query_db('''
                     UPDATE Attendance 
-                    SET Status=?, CheckInTime=?, CheckOutTime=?, TotalHours=?, AssignmentDone=?, LateMinutes=?
+                    SET Status=?, CheckInTime=?, CheckOutTime=?, TotalHours=?, AssignmentDone=?, AssignmentStatus=?, LateMinutes=?
                     WHERE AttendanceID=?
-                ''', (status, check_in, check_out, total_hours, assignment, late_minutes, existing['AttendanceID']))
+                ''', (status, check_in, check_out, total_hours, assignment_done_bit, assignment_status, late_minutes, existing['AttendanceID']))
             else:
                 query_db('''
-                    INSERT INTO Attendance (EnrollmentID, Date, Status, CheckInTime, CheckOutTime, TotalHours, AssignmentDone, LateMinutes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (enrollment_id, date, status, check_in, check_out, total_hours, assignment, late_minutes))
+                    INSERT INTO Attendance (EnrollmentID, Date, Status, CheckInTime, CheckOutTime, TotalHours, AssignmentDone, AssignmentStatus, LateMinutes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (enrollment_id, date, status, check_in, check_out, total_hours, assignment_done_bit, assignment_status, late_minutes))
 
     try:
         db = get_db()

@@ -6,9 +6,10 @@
 {% endblock %}
 
 {% block content %}
+{% set book_ctx = 'training' if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] else 'recruitment' %}
 <div class="container mt-4">
     <div class="mb-4">
-        <a href="{{ url_for('talent_book_self') }}" class="btn btn-outline-secondary">
+        <a href="{{ url_for('talent_book_self', context=book_ctx) }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> رجوع لحجز المواعيد
         </a>
     </div>
