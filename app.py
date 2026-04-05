@@ -233,28 +233,24 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
 
 
 def _users_for_recruitment_talent_slot_picker():
+    """من يُولَّد لهم مواعيد التوظيف: مختبرو المواهب فقط (لا مديرين في القائمة)."""
     return query_db(
         """
         SELECT UserID, Username, FullName, Role
         FROM Users_1
-        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
-            N'talent', N'talent_recruitment', N'manager', N'recruitmentmanager'
-        )
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')
         ORDER BY Role, FullName, Username
         """
     ) or []
 
 
 def _users_for_training_talent_slot_picker():
+    """من يُولَّد لهم مواعيد التدريب: مختبرو مواهب التدريب فقط (لا مدرب/منسّق/مدير في القائمة)."""
     return query_db(
         """
         SELECT UserID, Username, FullName, Role
         FROM Users_1
-        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
-            N'talent_training', N'ta-training', N'trainer',
-            N'trainingmanager', N'traininghead', N'traininglead',
-            N'trainingcoordinator', N'manager'
-        )
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')
         ORDER BY Role, FullName, Username
         """
     ) or []

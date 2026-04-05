@@ -9,28 +9,31 @@
     </nav>
 
     <h2 class="mb-2"><i class="fas fa-calendar-plus text-warning"></i> فتح مواعيد مختبر مواهب التدريب</h2>
-    <p class="text-muted">
-        توليد شبكة فترات (كل 15 دقيقة من 8:00 إلى 22:45) في <code>TASchedules</code> مع سياق
-        <strong>Training</strong> فقط. تُستخدم لحجز اختبار مواهب التدريب (مبيعات التدريب / المهتمون) — منفصلة عن مواعيد التوظيف.
+    <p class="text-muted mb-2">
+        توليد <strong>شبكة فترات شاغرة</strong> (كل 15 دقيقة من 8:00 إلى 22:45) لـ<strong>اختبارات مواهب التدريب</strong> فقط — منفصلة عن مواعيد التوظيف.
     </p>
+    <ul class="small text-muted mb-3">
+        <li><strong>من تاريخ / إلى تاريخ:</strong> نطاق الأيام التي تُولَّد فيها الفترات (اختر من التقويم).</li>
+        <li><strong>القائمة أدناه:</strong> فقط من دوره <strong>مختبر مواهب تدريب</strong> (<code>Talent_Training</code> أو <code>TA-Training</code>). المدير أو منسّق التدريب يشغّل الشاشة، ولا يظهر اسمه هنا إن لم يكن من أدوار المختبر.</li>
+    </ul>
 
     <div class="card shadow-sm">
         <div class="card-body">
             <form method="post" action="{{ url_for('training_open_talent_slots') }}" data-turbo="false">
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label">من تاريخ</label>
+                        <label class="form-label">من تاريخ (بداية النطاق)</label>
                         <input type="date" name="date_from" class="form-control" required
                                value="{{ request.args.get('from', '') }}">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">إلى تاريخ</label>
+                        <label class="form-label">إلى تاريخ (نهاية النطاق)</label>
                         <input type="date" name="date_to" class="form-control" required
                                value="{{ request.args.get('to', '') }}">
                     </div>
                 </div>
 
-                <label class="form-label">المقيّمون (تدريب / مختبر تدريب / منسّقون)</label>
+                <label class="form-label">مختبرو مواهب التدريب (من تُنشأ لهم المواعيد)</label>
                 <div class="border rounded p-3 mb-3" style="max-height: 320px; overflow-y: auto;">
                     {% for u in staff %}
                     <div class="form-check">
@@ -41,7 +44,7 @@
                         </label>
                     </div>
                     {% else %}
-                    <p class="text-muted mb-0">لا مستخدمون مطابقون للأدوار. أضف مستخدمين بأدوار التدريب أو المختبر.</p>
+                    <p class="text-muted mb-0">لا يوجد مستخدمون بدور Talent_Training أو TA-Training. عرّف مختبري تدريب ثم أعد المحاولة.</p>
                     {% endfor %}
                 </div>
 

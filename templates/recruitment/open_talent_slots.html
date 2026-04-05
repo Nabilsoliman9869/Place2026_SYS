@@ -9,28 +9,31 @@
     </nav>
 
     <h2 class="mb-2"><i class="fas fa-calendar-plus text-primary"></i> فتح مواعيد مختبر مواهب التوظيف</h2>
-    <p class="text-muted">
-        توليد شبكة فترات (كل 15 دقيقة من 8:00 إلى 22:45) في <code>TASchedules</code> مع سياق
-        <strong>Recruitment</strong> فقط. هذه المواعيد تظهر في جدولة الريكروتر ومبيعات التوظيف — ولا تُخلط مع مختبر التدريب.
+    <p class="text-muted mb-2">
+        توليد <strong>شبكة فترات شاغرة</strong> (كل 15 دقيقة من 8:00 إلى 22:45) في جدول المواعيد، خاصة بـ <strong>اختبارات التوظيف</strong> فقط — منفصلة عن مواعيد مختبر التدريب.
     </p>
+    <ul class="small text-muted mb-3">
+        <li><strong>من تاريخ / إلى تاريخ:</strong> أول وآخر يوم تريد إنشاء أو إكمال الفترات فيهما (صيغة التقويم حسب المتصفح؛ اختر اليوم من التقويم).</li>
+        <li><strong>القائمة أدناه:</strong> تظهر فقط المستخدمون الذين <strong>دورهم مختبر مواهب توظيف</strong> (<code>Talent</code> أو <code>Talent_Recruitment</code>). المدير يفتح هذه الشاشة ويضغط توليد، لكنه لا يُدرَج كمقيّم إن لم يكن دوره مختبراً.</li>
+    </ul>
 
     <div class="card shadow-sm">
         <div class="card-body">
             <form method="post" action="{{ url_for('recruitment_open_talent_slots') }}" data-turbo="false">
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label">من تاريخ</label>
+                        <label class="form-label">من تاريخ (بداية النطاق)</label>
                         <input type="date" name="date_from" class="form-control" required
                                value="{{ request.args.get('from', '') }}">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">إلى تاريخ</label>
+                        <label class="form-label">إلى تاريخ (نهاية النطاق)</label>
                         <input type="date" name="date_to" class="form-control" required
                                value="{{ request.args.get('to', '') }}">
                     </div>
                 </div>
 
-                <label class="form-label">المقيّمون (مختبر التوظيف)</label>
+                <label class="form-label">مختبرو مواهب التوظيف (من تُنشأ لهم المواعيد)</label>
                 <div class="border rounded p-3 mb-3" style="max-height: 320px; overflow-y: auto;">
                     {% for u in staff %}
                     <div class="form-check">
@@ -41,7 +44,7 @@
                         </label>
                     </div>
                     {% else %}
-                    <p class="text-muted mb-0">لا مستخدمون بأدوار مختبر التوظيف.</p>
+                    <p class="text-muted mb-0">لا يوجد مستخدمون بدور Talent أو Talent_Recruitment. عرّف مستخدمين بهذه الأدوار ثم أعد المحاولة.</p>
                     {% endfor %}
                 </div>
 
