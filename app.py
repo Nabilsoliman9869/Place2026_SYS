@@ -74,12 +74,24 @@ def _row_user_id(row):
     return row.get('UserID') or row.get('userid')
 
 
+def _norm_slot_time_key(t):
+    """مقارنة أوقات المواعيد رغم اختلاف التخزين (10:00 مقابل 10:00:00)."""
+    if t is None:
+        return ''
+    s = str(t).strip()
+    if len(s) >= 5 and s[2] == ':':
+        return s[:5]
+    return s
+
+
 def _recruitment_ta_evaluator_ids():
-    """مقيّمو اختبار التوظيف — Talent / Talent_Recruitment (مطابقة غير حسّاسة لحالة الأحرف)."""
+    """مقيّمو اختبار التوظيف — أدوار المختبر الشائعة (بما فيها TA-Training إن وُجدت في الإنتاج)."""
     rows = query_db(
         """
         SELECT UserID FROM Users_1
-        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
+            N'talent', N'talent_recruitment', N'talent_training', N'ta-training'
+        )
         """
     ) or []
     out = []
@@ -87,7 +99,7 @@ def _recruitment_ta_evaluator_ids():
         uid = _row_user_id(r)
         if uid is not None:
             out.append(uid)
-    return out
+    return list(dict.fromkeys(out))
 
 
 def _recruitment_slot_times_quarters():
@@ -100,11 +112,14 @@ def _recruitment_slot_times_quarters():
 
 
 def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
-    """يملأ أياماً بلا صفوف لكل مقيّم دفعة واحدة (executemany) — بدون آلاف الاستعلامات التي كانت تبطئ صفحة الريكروتر."""
+    """يملأ الأوقات الناقصة فقط لكل (مقيّم، يوم) — لا يتخطى اليوم إذا كان فيه مواعيد محجوزة فقط."""
     if not user_ids:
         return
     slot_times = _recruitment_slot_times_quarters()
     today = datetime.today().date()
+    end = today + timedelta(days=days - 1)
+    start_s = today.strftime('%Y-%m-%d')
+    end_s = end.strftime('%Y-%m-%d')
     db = get_db()
     if not db:
         return
@@ -117,22 +132,33 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
             except Exception:
                 pass
         for uid in user_ids:
+            cur.execute(
+                """
+                SELECT CAST(SlotDate AS DATE) AS D, SlotTime
+                FROM TASchedules
+                WHERE EvaluatorID = ?
+                  AND CAST(SlotDate AS DATE) >= CAST(? AS DATE)
+                  AND CAST(SlotDate AS DATE) <= CAST(? AS DATE)
+                """,
+                (uid, start_s, end_s),
+            )
+            by_date = {}
+            for r in cur.fetchall() or []:
+                dkey = r[0]
+                if hasattr(dkey, 'strftime'):
+                    dkey = dkey.strftime('%Y-%m-%d')
+                else:
+                    dkey = str(dkey)[:10]
+                by_date.setdefault(dkey, set()).add(_norm_slot_time_key(r[1]))
             for d in range(days):
                 slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
-                cur.execute(
-                    """
-                    SELECT COUNT(*) FROM TASchedules
-                    WHERE EvaluatorID = ? AND CAST(SlotDate AS DATE) = CAST(? AS DATE)
-                    """,
-                    (uid, slot_date),
-                )
-                row = cur.fetchone()
-                cnt = int(row[0]) if row and row[0] is not None else 0
-                if cnt > 0:
-                    continue
-                batch = [(slot_date, st, 'Available', uid) for st in slot_times]
-                if batch:
-                    cur.executemany(insert_sql, batch)
+                taken = by_date.get(slot_date, set())
+                missing = []
+                for st in slot_times:
+                    if _norm_slot_time_key(st) not in taken:
+                        missing.append((slot_date, st, 'Available', uid))
+                if missing:
+                    cur.executemany(insert_sql, missing)
         db.commit()
     except Exception as ex:
         try:
@@ -1098,16 +1124,19 @@ def recruiter_scheduling():
                 FROM TASchedules T
                 LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
                 WHERE T.EvaluatorID IN ({ph})
-                  AND LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                  AND T.CandidateID IS NULL
+                  AND (
+                        LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                        OR T.Status IS NULL
+                        OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
+                  )
                   AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
                   AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
                 ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
             """
             params = tuple(ta_ids) + (today, end_date)
+            _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
             available_slots = query_db(slot_sql, params) or []
-            if not available_slots:
-                _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
-                available_slots = query_db(slot_sql, params) or []
     except Exception as e:
         try:
             app.logger.exception('recruiter_scheduling slots: %s', e)
@@ -1164,7 +1193,12 @@ def recruiter_post_book_test():
         """
         SELECT SlotID, EvaluatorID, Status FROM TASchedules
         WHERE SlotID=?
-          AND LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+          AND CandidateID IS NULL
+          AND (
+                LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+                OR Status IS NULL
+                OR LTRIM(RTRIM(ISNULL(Status, N''))) = N''
+          )
         """,
         (slot_id,),
         one=True,
@@ -1181,7 +1215,12 @@ def recruiter_post_book_test():
             UPDATE TASchedules
             SET Status=N'Booked', CandidateID=?, BookedBy=?, Type=N'Initial Assessment', InterviewType=?
             WHERE SlotID=?
-              AND LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+              AND CandidateID IS NULL
+              AND (
+                    LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+                    OR Status IS NULL
+                    OR LTRIM(RTRIM(ISNULL(Status, N''))) = N''
+              )
             """,
             (cand_id, session.get('user_id'), interview_type, slot_id),
         )
