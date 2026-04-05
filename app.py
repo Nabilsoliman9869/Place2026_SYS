@@ -68,45 +68,77 @@ def _safe_date_str(d, fmt='%Y-%m-%d'):
     return str(d)[:10] if d else '-'
 
 
+def _row_user_id(row):
+    if not row:
+        return None
+    return row.get('UserID') or row.get('userid')
+
+
 def _recruitment_ta_evaluator_ids():
-    """مقيّمو اختبار التوظيف — نفس منطق توليد مواعيد المبيعات لكن لمستخدمي Talent / Talent_Recruitment."""
+    """مقيّمو اختبار التوظيف — Talent / Talent_Recruitment (مطابقة غير حسّاسة لحالة الأحرف)."""
     rows = query_db(
-        "SELECT UserID FROM Users_1 WHERE Role IN (N'Talent', N'Talent_Recruitment')"
+        """
+        SELECT UserID FROM Users_1
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')
+        """
     ) or []
-    return [r['UserID'] for r in rows]
+    out = []
+    for r in rows:
+        uid = _row_user_id(r)
+        if uid is not None:
+            out.append(uid)
+    return out
+
+
+def _recruitment_slot_times_quarters():
+    """فترات 15 دقيقة للحجز — من 8 صباحاً حتى 10:45 مساءً (يشمل دوام مسائي كالأكاديمية)."""
+    slot_times = []
+    for hour in range(8, 23):
+        for minute in (0, 15, 30, 45):
+            slot_times.append(f"{hour:02d}:{minute:02d}")
+    return slot_times
 
 
 def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
-    """إنشاء فترات 15 دقيقة (10:00–21:00 تقريباً) لكل مقيّم للأيام القادمة إن لم تكن موجودة."""
+    """يملأ أياماً بلا صفوف لكل مقيّم دفعة واحدة (executemany) — بدون آلاف الاستعلامات التي كانت تبطئ صفحة الريكروتر."""
     if not user_ids:
         return
-    slot_times = []
-    for hour in range(10, 22):
-        for minute in (0, 15, 30, 45):
-            if hour == 21 and minute != 0:
-                continue
-            slot_times.append(f"{hour:02d}:{minute:02d}")
+    slot_times = _recruitment_slot_times_quarters()
     today = datetime.today().date()
     db = get_db()
     if not db:
         return
     cur = db.cursor()
+    insert_sql = "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, ?, ?)"
     try:
+        if getattr(cur, "fast_executemany", None) is not None:
+            try:
+                cur.fast_executemany = True
+            except Exception:
+                pass
         for uid in user_ids:
             for d in range(days):
                 slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
-                for st in slot_times:
-                    cur.execute(
-                        "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?",
-                        (uid, slot_date, st),
-                    )
-                    if cur.fetchone() is None:
-                        cur.execute(
-                            "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, N'Available', ?)",
-                            (slot_date, st, uid),
-                        )
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM TASchedules
+                    WHERE EvaluatorID = ? AND CAST(SlotDate AS DATE) = CAST(? AS DATE)
+                    """,
+                    (uid, slot_date),
+                )
+                row = cur.fetchone()
+                cnt = int(row[0]) if row and row[0] is not None else 0
+                if cnt > 0:
+                    continue
+                batch = [(slot_date, st, 'Available', uid) for st in slot_times]
+                if batch:
+                    cur.executemany(insert_sql, batch)
         db.commit()
-    except Exception:
+    except Exception as ex:
+        try:
+            app.logger.exception('ensure recruitment TA slots failed: %s', ex)
+        except Exception:
+            pass
         try:
             db.rollback()
         except Exception:
@@ -1052,7 +1084,7 @@ def recruiter_scheduling():
         flash('تعذر تحميل قائمة المرشحين. تحقق من الاتصال بقاعدة البيانات.', 'danger')
         candidates = []
 
-    # مواعيد الشاغرة من TASchedules
+    # مواعيد الشاغرة من TASchedules — استعلام سريع أولاً؛ التوليد المجمع فقط عند الحاجة
     today = datetime.today().strftime('%Y-%m-%d')
     end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
     available_slots = []
@@ -1060,18 +1092,22 @@ def recruiter_scheduling():
     try:
         ta_ids = _recruitment_ta_evaluator_ids()
         if ta_ids:
-            _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
             ph = ','.join(['?'] * len(ta_ids))
-            available_slots = query_db(f"""
+            slot_sql = f"""
                 SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
                 FROM TASchedules T
                 LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
                 WHERE T.EvaluatorID IN ({ph})
-                  AND T.Status = N'Available'
-                  AND T.SlotDate >= ?
-                  AND T.SlotDate <= ?
+                  AND LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                  AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
+                  AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
                 ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
-            """, tuple(ta_ids) + (today, end_date)) or []
+            """
+            params = tuple(ta_ids) + (today, end_date)
+            available_slots = query_db(slot_sql, params) or []
+            if not available_slots:
+                _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
+                available_slots = query_db(slot_sql, params) or []
     except Exception as e:
         try:
             app.logger.exception('recruiter_scheduling slots: %s', e)
@@ -1125,7 +1161,11 @@ def recruiter_post_book_test():
 
     ta_ids = set(_recruitment_ta_evaluator_ids())
     slot_row = query_db(
-        "SELECT SlotID, EvaluatorID, Status FROM TASchedules WHERE SlotID=? AND Status=N'Available'",
+        """
+        SELECT SlotID, EvaluatorID, Status FROM TASchedules
+        WHERE SlotID=?
+          AND LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+        """,
         (slot_id,),
         one=True,
     )
@@ -1140,7 +1180,8 @@ def recruiter_post_book_test():
             """
             UPDATE TASchedules
             SET Status=N'Booked', CandidateID=?, BookedBy=?, Type=N'Initial Assessment', InterviewType=?
-            WHERE SlotID=? AND Status=N'Available'
+            WHERE SlotID=?
+              AND LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
             """,
             (cand_id, session.get('user_id'), interview_type, slot_id),
         )
