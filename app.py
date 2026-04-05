@@ -111,15 +111,14 @@ def _recruitment_slot_times_quarters():
     return slot_times
 
 
-def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
-    """يملأ الأوقات الناقصة فقط لكل (مقيّم، يوم) — لا يتخطى اليوم إذا كان فيه مواعيد محجوزة فقط."""
-    if not user_ids:
+def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
+    """يملأ الأوقات الناقصة لكل (مقيّم، يوم) ضمن [d_start, d_end] شاملين."""
+    if not user_ids or d_end < d_start:
         return
     slot_times = _recruitment_slot_times_quarters()
-    today = datetime.today().date()
-    end = today + timedelta(days=days - 1)
-    start_s = today.strftime('%Y-%m-%d')
-    end_s = end.strftime('%Y-%m-%d')
+    start_s = d_start.strftime('%Y-%m-%d')
+    end_s = d_end.strftime('%Y-%m-%d')
+    num_days = (d_end - d_start).days + 1
     db = get_db()
     if not db:
         return
@@ -150,8 +149,9 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
                 else:
                     dkey = str(dkey)[:10]
                 by_date.setdefault(dkey, set()).add(_norm_slot_time_key(r[1]))
-            for d in range(days):
-                slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
+            for i in range(num_days):
+                day = d_start + timedelta(days=i)
+                slot_date = day.strftime('%Y-%m-%d')
                 taken = by_date.get(slot_date, set())
                 missing = []
                 for st in slot_times:
@@ -162,7 +162,7 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
         db.commit()
     except Exception as ex:
         try:
-            app.logger.exception('ensure recruitment TA slots failed: %s', ex)
+            app.logger.exception('ensure TA slots for range failed: %s', ex)
         except Exception:
             pass
         try:
@@ -174,6 +174,31 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
             cur.close()
         except Exception:
             pass
+
+
+def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
+    """توليد تلقائي للأيام القادمة (للمستخدمين ذوي أدوار المختبر فقط)."""
+    if not user_ids:
+        return
+    today = datetime.today().date()
+    end = today + timedelta(days=days - 1)
+    _ensure_ta_slots_for_date_range(user_ids, today, end)
+
+
+def _users_for_assessment_slot_picker():
+    """مستخدمون يُفضّل أن يُفتح لهم جدول مواعيد (مختبر توظيف / تدريب / مدرب)."""
+    return query_db(
+        """
+        SELECT UserID, Username, FullName, Role
+        FROM Users_1
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
+            N'talent', N'talent_recruitment', N'talent_training', N'ta-training',
+            N'trainer', N'trainingmanager', N'traininghead', N'traininglead',
+            N'trainingcoordinator', N'manager'
+        )
+        ORDER BY Role, FullName, Username
+        """
+    ) or []
 
 
 @app.route('/version')
@@ -1110,33 +1135,31 @@ def recruiter_scheduling():
         flash('تعذر تحميل قائمة المرشحين. تحقق من الاتصال بقاعدة البيانات.', 'danger')
         candidates = []
 
-    # مواعيد الشاغرة من TASchedules — استعلام سريع أولاً؛ التوليد المجمع فقط عند الحاجة
+    # مواعيد شاغرة من TASchedules — نفس الجدول للمبيعات/التدريب/التوظيف؛ أي مقيّم يظهر إن وُجدت له فترات
     today = datetime.today().strftime('%Y-%m-%d')
     end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
     available_slots = []
     ta_ids = []
+    slot_sql = """
+        SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
+        FROM TASchedules T
+        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+        WHERE T.CandidateID IS NULL
+          AND T.EvaluatorID IS NOT NULL
+          AND (
+                LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                OR T.Status IS NULL
+                OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
+          )
+          AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
+          AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
+        ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
+    """
     try:
         ta_ids = _recruitment_ta_evaluator_ids()
         if ta_ids:
-            ph = ','.join(['?'] * len(ta_ids))
-            slot_sql = f"""
-                SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
-                FROM TASchedules T
-                LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-                WHERE T.EvaluatorID IN ({ph})
-                  AND T.CandidateID IS NULL
-                  AND (
-                        LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
-                        OR T.Status IS NULL
-                        OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
-                  )
-                  AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
-                  AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
-                ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
-            """
-            params = tuple(ta_ids) + (today, end_date)
             _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
-            available_slots = query_db(slot_sql, params) or []
+        available_slots = query_db(slot_sql, (today, end_date)) or []
     except Exception as e:
         try:
             app.logger.exception('recruiter_scheduling slots: %s', e)
@@ -1153,6 +1176,8 @@ def recruiter_scheduling():
         candidates=candidates or [],
         available_slots=available_slots or [],
         has_ta_evaluators=bool(ta_ids),
+        open_assessment_slots_url=url_for('training_open_assessment_slots'),
+        can_open_assessment_slots=(session.get('role') in OPEN_ASSESSMENT_SLOT_ROLES),
     )
 
 # اسم الدالة فريد؛ endpoint ثابت لـ url_for('recruiter_book_test') — تجنباً لتعارض Flask إن وُجد تعريف مكرر قديماً
@@ -1188,12 +1213,12 @@ def recruiter_post_book_test():
         flash('لا يمكنك حجز موعد لمرشح لا يخصك.', 'danger')
         return redirect(url_for('recruiter_scheduling'))
 
-    ta_ids = set(_recruitment_ta_evaluator_ids())
     slot_row = query_db(
         """
         SELECT SlotID, EvaluatorID, Status FROM TASchedules
         WHERE SlotID=?
           AND CandidateID IS NULL
+          AND EvaluatorID IS NOT NULL
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                 OR Status IS NULL
@@ -1203,8 +1228,8 @@ def recruiter_post_book_test():
         (slot_id,),
         one=True,
     )
-    if not slot_row or slot_row.get('EvaluatorID') not in ta_ids:
-        flash('هذا الموعد غير متاح أو لا يخص مقيّم توظيف.', 'warning')
+    if not slot_row:
+        flash('هذا الموعد غير متاح أو محجوزاً.', 'warning')
         return redirect(url_for('recruiter_scheduling'))
 
     interview_type = {'Phone': 'Phone', 'Online': 'Zoom', 'DoorToDoor': 'In-Person'}.get(mode, mode)
@@ -1216,6 +1241,7 @@ def recruiter_post_book_test():
             SET Status=N'Booked', CandidateID=?, BookedBy=?, Type=N'Initial Assessment', InterviewType=?
             WHERE SlotID=?
               AND CandidateID IS NULL
+              AND EvaluatorID IS NOT NULL
               AND (
                     LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                     OR Status IS NULL
@@ -5474,6 +5500,56 @@ def training_sales_course_fee_print(invoice_id):
             payment_method = d.split('الدفع:')[1].strip()
             break
     return render_template('training/invoice_print.html', invoice=inv, items=items, title='فاتورة ايراد دورات تدريب', payment_method=payment_method)
+
+
+OPEN_ASSESSMENT_SLOT_ROLES = [
+    'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator',
+    'TrainingSalesCoordinator',
+    'Talent_Recruitment', 'Talent', 'Talent_Training', 'TA-Training',
+    'RecruitmentManager',
+]
+
+
+@app.route('/training/open-assessment-slots', methods=['GET', 'POST'])
+@login_required
+@role_required(OPEN_ASSESSMENT_SLOT_ROLES)
+def training_open_assessment_slots():
+    """إدخال/توليد شبكة مواعيد اختبار (TASchedules) لمقيّمي التدريب أو التوظيف — يظهر حجز الريكروتر بعدها."""
+    if request.method == 'POST':
+        raw_ids = request.form.getlist('evaluator_id')
+        df = (request.form.get('date_from') or '').strip()
+        dt = (request.form.get('date_to') or '').strip()
+        try:
+            d0 = datetime.strptime(df, '%Y-%m-%d').date()
+            d1 = datetime.strptime(dt, '%Y-%m-%d').date()
+        except ValueError:
+            flash('التواريخ يجب أن تكون بصيغة YYYY-MM-DD.', 'danger')
+            return redirect(url_for('training_open_assessment_slots'))
+        if d1 < d0:
+            flash('تاريخ النهاية قبل البداية.', 'danger')
+            return redirect(url_for('training_open_assessment_slots'))
+        if (d1 - d0).days > 44:
+            flash('الحد الأقصى 45 يوماً في المرة الواحدة.', 'warning')
+            return redirect(url_for('training_open_assessment_slots'))
+        uids = []
+        for x in raw_ids:
+            try:
+                uids.append(int(x))
+            except (TypeError, ValueError):
+                pass
+        uids = list(dict.fromkeys(uids))
+        if not uids:
+            flash('اختر مقيّماً واحداً على الأقل.', 'warning')
+            return redirect(url_for('training_open_assessment_slots'))
+        _ensure_ta_slots_for_date_range(uids, d0, d1)
+        flash(
+            f'تم توليد/إكمال الفترات الناقصة للمستخدمين المختارين من {df} إلى {dt}.',
+            'success',
+        )
+        return redirect(url_for('training_open_assessment_slots'))
+
+    staff = _users_for_assessment_slot_picker()
+    return render_template('training/open_assessment_slots.html', staff=staff)
 
 
 @app.route('/training/index')

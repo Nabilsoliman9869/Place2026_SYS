@@ -75,9 +75,14 @@
                                                         {% if not available_slots %}
                                                         <div class="form-text text-danger">
                                                             {% if not has_ta_evaluators %}
-                                                            لا يوجد مقيّمو توظيف في النظام — أضف مستخدمين بدور Talent أو Talent_Recruitment أو Talent_Training أو TA-Training.
+                                                            لا يوجد مقيّمو توظيف (أدوار مختبر) في النظام — أضف مستخدمين أو افتح المواعيد للمدربين من التدريب.
                                                             {% else %}
-                                                            لا توجد فترات شاغرة في الأيام القادمة. اطلب من مدير الـ TA فتح أوقات أو تحقق من التقويم.
+                                                            لا توجد فترات شاغرة في الـ 14 يوماً القادمة.
+                                                            {% endif %}
+                                                            {% if can_open_assessment_slots|default(false) %}
+                                                            <div class="mt-2"><a href="{{ open_assessment_slots_url }}" class="alert-link fw-bold">فتح مواعيد اختبار (تدريب/توظيف)</a> — Training → إدخال شبكة المواعيد للمقيّمين.</div>
+                                                            {% else %}
+                                                            <div class="mt-2 small">اطلب من مدير التدريب أو مدير التوظيف فتح المواعيد من: <strong>Training → فتح مواعيد اختبار</strong>.</div>
                                                             {% endif %}
                                                         </div>
                                                         {% endif %}
