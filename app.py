@@ -84,14 +84,55 @@ def _norm_slot_time_key(t):
     return s
 
 
+TA_CTX_RECRUITMENT = 'Recruitment'
+TA_CTX_TRAINING = 'Training'
+_ta_assessment_context_column_ready = False
+
+
+def _ensure_taschedules_assessment_context_column():
+    global _ta_assessment_context_column_ready
+    if _ta_assessment_context_column_ready:
+        return
+    try:
+        query_db("""
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE Name = N'AssessmentContext' AND Object_ID = OBJECT_ID(N'TASchedules')
+        )
+        ALTER TABLE TASchedules ADD AssessmentContext NVARCHAR(20) NULL
+        """)
+    except Exception:
+        pass
+    _ta_assessment_context_column_ready = True
+
+
+def _ta_assessment_context_for_role(role):
+    if (role or '').strip() in ('Talent_Training', 'TA-Training'):
+        return TA_CTX_TRAINING
+    return TA_CTX_RECRUITMENT
+
+
 def _recruitment_ta_evaluator_ids():
-    """مقيّمو اختبار التوظيف — أدوار المختبر الشائعة (بما فيها TA-Training إن وُجدت في الإنتاج)."""
+    """مقيّمو اختبار التوظيف — فقط أدوار مختبر التوظيف (لا يُخلط مع مختبر التدريب)."""
     rows = query_db(
         """
         SELECT UserID FROM Users_1
-        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
-            N'talent', N'talent_recruitment', N'talent_training', N'ta-training'
-        )
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')
+        """
+    ) or []
+    out = []
+    for r in rows:
+        uid = _row_user_id(r)
+        if uid is not None:
+            out.append(uid)
+    return list(dict.fromkeys(out))
+
+
+def _training_ta_evaluator_ids():
+    rows = query_db(
+        """
+        SELECT UserID FROM Users_1
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')
         """
     ) or []
     out = []
@@ -111,10 +152,11 @@ def _recruitment_slot_times_quarters():
     return slot_times
 
 
-def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
-    """يملأ الأوقات الناقصة لكل (مقيّم، يوم) ضمن [d_start, d_end] شاملين."""
+def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end, assessment_context=TA_CTX_RECRUITMENT):
+    """يملأ الأوقات الناقصة لكل (مقيّم، يوم، سياق) ضمن [d_start, d_end] شاملين."""
     if not user_ids or d_end < d_start:
         return
+    _ensure_taschedules_assessment_context_column()
     slot_times = _recruitment_slot_times_quarters()
     start_s = d_start.strftime('%Y-%m-%d')
     end_s = d_end.strftime('%Y-%m-%d')
@@ -123,7 +165,11 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
     if not db:
         return
     cur = db.cursor()
-    insert_sql = "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, ?, ?)"
+    ctx = assessment_context if assessment_context in (TA_CTX_RECRUITMENT, TA_CTX_TRAINING) else TA_CTX_RECRUITMENT
+    insert_sql = (
+        "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) VALUES (?, ?, ?, ?, ?)"
+    )
+    ctx_sql = "ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'" if ctx == TA_CTX_RECRUITMENT else "AssessmentContext = N'Training'"
     try:
         if getattr(cur, "fast_executemany", None) is not None:
             try:
@@ -132,12 +178,13 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
                 pass
         for uid in user_ids:
             cur.execute(
-                """
+                f"""
                 SELECT CAST(SlotDate AS DATE) AS D, SlotTime
                 FROM TASchedules
                 WHERE EvaluatorID = ?
                   AND CAST(SlotDate AS DATE) >= CAST(? AS DATE)
                   AND CAST(SlotDate AS DATE) <= CAST(? AS DATE)
+                  AND ({ctx_sql})
                 """,
                 (uid, start_s, end_s),
             )
@@ -156,7 +203,7 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
                 missing = []
                 for st in slot_times:
                     if _norm_slot_time_key(st) not in taken:
-                        missing.append((slot_date, st, 'Available', uid))
+                        missing.append((slot_date, st, 'Available', uid, ctx))
                 if missing:
                     cur.executemany(insert_sql, missing)
         db.commit()
@@ -177,23 +224,35 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end):
 
 
 def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
-    """توليد تلقائي للأيام القادمة (للمستخدمين ذوي أدوار المختبر فقط)."""
+    """توليد تلقائي للأيام القادمة (مختبر التوظيف فقط)."""
     if not user_ids:
         return
     today = datetime.today().date()
     end = today + timedelta(days=days - 1)
-    _ensure_ta_slots_for_date_range(user_ids, today, end)
+    _ensure_ta_slots_for_date_range(user_ids, today, end, TA_CTX_RECRUITMENT)
 
 
-def _users_for_assessment_slot_picker():
-    """مستخدمون يُفضّل أن يُفتح لهم جدول مواعيد (مختبر توظيف / تدريب / مدرب)."""
+def _users_for_recruitment_talent_slot_picker():
     return query_db(
         """
         SELECT UserID, Username, FullName, Role
         FROM Users_1
         WHERE LOWER(LTRIM(RTRIM(Role))) IN (
-            N'talent', N'talent_recruitment', N'talent_training', N'ta-training',
-            N'trainer', N'trainingmanager', N'traininghead', N'traininglead',
+            N'talent', N'talent_recruitment', N'manager', N'recruitmentmanager'
+        )
+        ORDER BY Role, FullName, Username
+        """
+    ) or []
+
+
+def _users_for_training_talent_slot_picker():
+    return query_db(
+        """
+        SELECT UserID, Username, FullName, Role
+        FROM Users_1
+        WHERE LOWER(LTRIM(RTRIM(Role))) IN (
+            N'talent_training', N'ta-training', N'trainer',
+            N'trainingmanager', N'traininghead', N'traininglead',
             N'trainingcoordinator', N'manager'
         )
         ORDER BY Role, FullName, Username
@@ -1135,7 +1194,7 @@ def recruiter_scheduling():
         flash('تعذر تحميل قائمة المرشحين. تحقق من الاتصال بقاعدة البيانات.', 'danger')
         candidates = []
 
-    # مواعيد شاغرة من TASchedules — نفس الجدول للمبيعات/التدريب/التوظيف؛ أي مقيّم يظهر إن وُجدت له فترات
+    # مواعيد شاغرة — مجمع مختبر التوظيف فقط (AssessmentContext)
     today = datetime.today().strftime('%Y-%m-%d')
     end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
     available_slots = []
@@ -1146,6 +1205,7 @@ def recruiter_scheduling():
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.CandidateID IS NULL
           AND T.EvaluatorID IS NOT NULL
+          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
                 OR T.Status IS NULL
@@ -1156,6 +1216,7 @@ def recruiter_scheduling():
         ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
     """
     try:
+        _ensure_taschedules_assessment_context_column()
         ta_ids = _recruitment_ta_evaluator_ids()
         if ta_ids:
             _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
@@ -1176,8 +1237,8 @@ def recruiter_scheduling():
         candidates=candidates or [],
         available_slots=available_slots or [],
         has_ta_evaluators=bool(ta_ids),
-        open_assessment_slots_url=url_for('training_open_assessment_slots'),
-        can_open_assessment_slots=(session.get('role') in OPEN_ASSESSMENT_SLOT_ROLES),
+        open_recruitment_talent_slots_url=url_for('recruitment_open_talent_slots'),
+        can_open_recruitment_talent_slots=(session.get('role') in OPEN_RECRUITMENT_TALENT_SLOT_ROLES),
     )
 
 # اسم الدالة فريد؛ endpoint ثابت لـ url_for('recruiter_book_test') — تجنباً لتعارض Flask إن وُجد تعريف مكرر قديماً
@@ -1219,6 +1280,7 @@ def recruiter_post_book_test():
         WHERE SlotID=?
           AND CandidateID IS NULL
           AND EvaluatorID IS NOT NULL
+          AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                 OR Status IS NULL
@@ -1242,6 +1304,7 @@ def recruiter_post_book_test():
             WHERE SlotID=?
               AND CandidateID IS NULL
               AND EvaluatorID IS NOT NULL
+              AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
               AND (
                     LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                     OR Status IS NULL
@@ -1441,6 +1504,7 @@ def recruiter_test_schedule():
         JOIN Candidates C ON T.CandidateID = C.CandidateID
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.Status = N'Booked'
+          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
           AND T.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
           AND T.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
     """
@@ -1551,7 +1615,8 @@ def recruiter_test_results():
         JOIN Candidates C ON T.CandidateID = C.CandidateID
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         LEFT JOIN Evaluations E ON T.SlotID = E.SlotID
-        WHERE C.SalesAgentID = ? 
+        WHERE C.SalesAgentID = ?
+        AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
         AND T.Status IN ('Completed', 'Booked')
         ORDER BY T.SlotDate DESC
     """
@@ -2418,9 +2483,19 @@ def talent_dashboard():
     if 'role' not in session: return redirect(url_for('login'))
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
+    role = session.get('role')
+    if role == 'Manager':
+        ctx_t_where = ''
+        ctx_pt_where = ''
+    elif role in ('Talent_Training', 'TA-Training'):
+        ctx_t_where = " AND T.AssessmentContext = N'Training' "
+        ctx_pt_where = " AND AssessmentContext = N'Training' "
+    else:
+        ctx_t_where = " AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment' "
+        ctx_pt_where = " AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment' "
 
     # 1. Slots: JOINs بدل subqueries لكل صف (أسرع على SQL Server)
-    slots_sql = """
+    slots_sql = f"""
         SELECT T.*, C.FullName, C.Phone, C.CandidateID,
                BB.Username AS BookedByName,
                ISNULL(PT.PrevCnt, 0) AS PreviousTests
@@ -2430,12 +2505,13 @@ def talent_dashboard():
         LEFT JOIN (
             SELECT CandidateID, COUNT(*) AS PrevCnt
             FROM TASchedules
-            WHERE Status = 'Completed'
+            WHERE Status = 'Completed' {ctx_pt_where}
             GROUP BY CandidateID
         ) PT ON PT.CandidateID = T.CandidateID
         WHERE T.EvaluatorID = ?
         AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
         AND (T.Status = 'Booked' OR T.Status = 'Completed')
+        {ctx_t_where}
         ORDER BY T.SlotTime
     """
     my_schedule = query_db(slots_sql, (user_id, selected_date)) or []
@@ -2559,26 +2635,34 @@ def talent_reschedule_slot():
         flash('صيغة الوقت غير صالحة.', 'warning')
         return redirect(url_for('talent_dashboard', date=back_date))
 
+    sctx = (slot.get('AssessmentContext') or TA_CTX_RECRUITMENT).strip()
+    if sctx == TA_CTX_TRAINING:
+        clash_ctx_sql = " AND AssessmentContext = N'Training' "
+    else:
+        clash_ctx_sql = " AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment' "
+
     try:
         clash = query_db(
-            """
+            f"""
             SELECT SlotID FROM TASchedules
             WHERE EvaluatorID = ?
               AND CAST(SlotDate AS DATE) = CAST(? AS DATE)
               AND CAST(SlotTime AS TIME) = CAST(? AS TIME)
               AND SlotID <> ?
+              {clash_ctx_sql}
             """,
             (target_eval, new_date, new_time, slot_id),
             one=True,
         )
     except Exception:
         clash = query_db(
-            """
+            f"""
             SELECT SlotID FROM TASchedules
             WHERE EvaluatorID = ?
               AND SlotDate = ?
               AND SlotTime = ?
               AND SlotID <> ?
+              {clash_ctx_sql}
             """,
             (target_eval, new_date, new_time, slot_id),
             one=True,
@@ -2853,8 +2937,13 @@ def book_ta_slot():
         # Default to Zoom if not provided (backward compatibility)
         interview_type = request.form.get('interview_type', 'Zoom') 
         
-        query_db("UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=? WHERE SlotID=?", 
-                 (candidate_id, session['user_id'], interview_type, slot_id))
+        query_db(
+            """
+            UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
+            WHERE SlotID=? AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'
+            """,
+            (candidate_id, session['user_id'], interview_type, slot_id),
+        )
         
         # EMAIL NOTIFICATION: Notify TA (Evaluator)
         slot = query_db("SELECT T.SlotDate, T.SlotTime, U.Email, U.Username, C.FullName FROM TASchedules T JOIN Users_1 U ON T.EvaluatorID = U.UserID JOIN Candidates C ON T.CandidateID = C.CandidateID WHERE T.SlotID=?", (slot_id,), one=True)
@@ -2910,11 +2999,19 @@ def talent_book_self():
     """شاشة حجز مواعيد لنفسه — المختبر يعرض مواعيده المتاحة ويحظرها أو ينشئ مواعيد جديدة."""
     user_id = session['user_id']
     selected_date = request.args.get('date') or datetime.today().strftime('%Y-%m-%d')
+    role = session.get('role')
+    if role == 'Manager':
+        ctx_f = ''
+    elif role in ('Talent_Training', 'TA-Training'):
+        ctx_f = " AND T.AssessmentContext = N'Training' "
+    else:
+        ctx_f = " AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment' "
     try:
-        my_available = query_db("""
+        my_available = query_db(f"""
             SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status
             FROM TASchedules T
             WHERE T.EvaluatorID = ? AND T.SlotDate >= CAST(GETDATE() AS DATE) AND T.Status IN ('Available', 'Blocked')
+            {ctx_f}
             ORDER BY T.SlotDate, T.SlotTime
         """, (user_id,)) or []
     except Exception:
@@ -2956,11 +3053,32 @@ def talent_add_self_slot():
     if not slot_date or not slot_time:
         flash('التاريخ والوقت مطلوبان.', 'warning')
         return redirect(url_for('talent_book_self'))
-    existing = query_db("SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?", (user_id, slot_date, slot_time), one=True)
+    _ensure_taschedules_assessment_context_column()
+    role = session.get('role')
+    ctx = _ta_assessment_context_for_role(role) if role != 'Manager' else TA_CTX_RECRUITMENT
+    if ctx == TA_CTX_TRAINING:
+        ex_sql = (
+            "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
+            "AND AssessmentContext = N'Training'"
+        )
+        ins_sql = (
+            "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
+            "VALUES (?, ?, 'Blocked', ?, N'Training')"
+        )
+    else:
+        ex_sql = (
+            "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
+            "AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'"
+        )
+        ins_sql = (
+            "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
+            "VALUES (?, ?, 'Blocked', ?, N'Recruitment')"
+        )
+    existing = query_db(ex_sql, (user_id, slot_date, slot_time), one=True)
     if existing:
         flash('هذا الموعد موجود مسبقاً.', 'info')
         return redirect(url_for('talent_book_self'))
-    query_db("INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, 'Blocked', ?)", (slot_date, slot_time, user_id))
+    query_db(ins_sql, (slot_date, slot_time, user_id))
     flash('تم إضافة الموعد وحظره بنجاح.', 'success')
     return redirect(url_for('talent_book_self', date=slot_date))
 
@@ -3030,8 +3148,8 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
             db = get_db()
             cur = db.cursor()
             cur.execute("""
-                INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType)
-                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, ?, ?)
+                INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType, AssessmentContext)
+                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, ?, ?, N'Training')
             """, (session['user_id'], candidate_id, slot_type, 'Training'))
             cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
@@ -3611,6 +3729,7 @@ def recruiter_dashboard():
             FROM TASchedules T 
             JOIN Candidates C ON T.CandidateID = C.CandidateID 
             WHERE C.SalesAgentID = ? AND T.SlotDate = ? AND T.Status = 'Booked'
+              AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
         """, (user_id, today), one=True)['c'],
         
         # Job Interviews Today (Matches in 'Interview' status for today)
@@ -3623,7 +3742,10 @@ def recruiter_dashboard():
 
         # Workflow Counts (For Badges)
         'count_new_leads': query_db("SELECT COUNT(*) as c FROM Candidates WHERE SalesAgentID=? AND Status='New'", (user_id,), one=True)['c'],
-        'count_tests_pending': query_db("SELECT COUNT(*) as c FROM TASchedules T JOIN Candidates C ON T.CandidateID=C.CandidateID WHERE C.SalesAgentID=? AND T.Status='Booked'", (user_id,), one=True)['c'],
+        'count_tests_pending': query_db(
+            "SELECT COUNT(*) as c FROM TASchedules T JOIN Candidates C ON T.CandidateID=C.CandidateID "
+            "WHERE C.SalesAgentID=? AND T.Status='Booked' AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'",
+            (user_id,), one=True)['c'],
         'count_interviews_pending': query_db("SELECT COUNT(*) as c FROM Matches M JOIN Candidates C ON M.CandidateID=C.CandidateID WHERE C.SalesAgentID=? AND M.Status='Interview'", (user_id,), one=True)['c'],
         'count_feedback_needed': query_db("SELECT COUNT(*) as c FROM Matches M JOIN Candidates C ON M.CandidateID=C.CandidateID WHERE C.SalesAgentID=? AND M.Status='Interview' AND M.InterviewDate < ?", (user_id, today), one=True)['c']
     }
@@ -3650,6 +3772,7 @@ def recruiter_dashboard():
         WHERE (C.SalesAgentID = ? OR C.RecruiterID = ? OR T.BookedBy = ?)
           AND CAST(T.SlotDate AS DATE) = CAST(? AS DATE)
           AND T.Status IN ('Booked', 'Completed')
+          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
         ORDER BY T.SlotTime
     """, (user_id, user_id, user_id, today))
     try:
@@ -4138,18 +4261,23 @@ def sales_index():
     else:
         candidates = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE SalesAgentID=? ORDER BY CreatedAt DESC", (user_id,))
     
-    # Fetch Available TA Slots for Booking
+    # Fetch Available TA Slots for Booking (مختبر التوظيف فقط)
     today = datetime.today().strftime('%Y-%m-%d')
     selected_date = request.args.get('date', today)
-    
+    _ensure_taschedules_assessment_context_column()
+
     # Generate slots if not exist for selected date (Auto-generate logic reuse)
     # OPTIMIZED: Use single transaction for bulk insert to avoid 160+ roundtrips
-    existing = query_db("SELECT COUNT(*) as c FROM TASchedules WHERE SlotDate = ?", (selected_date,), one=True)
+    existing = query_db(
+        "SELECT COUNT(*) as c FROM TASchedules WHERE SlotDate = ? AND ISNULL(AssessmentContext, N'Recruitment') = N'Recruitment'",
+        (selected_date,),
+        one=True,
+    )
     if existing['c'] == 0:
         start_hour = 9
         # MODIFIED: Only create slots for existing Talent users. If none, do NOT create dummy slots that cause confusion.
         talent_users = query_db("SELECT UserID, Username FROM Users_1 WHERE Role IN ('Talent', 'Talent_Recruitment')")
-        
+
         # Prepare bulk insert data
         new_slots = []
         if talent_users:
@@ -4157,14 +4285,17 @@ def sales_index():
                 for m in [0, 15, 30, 45]:
                     time_str = f"{start_hour+h:02d}:{m:02d}"
                     for t in talent_users:
-                        new_slots.append((selected_date, time_str, 'Available', t['UserID']))
-            
+                        new_slots.append((selected_date, time_str, 'Available', t['UserID'], TA_CTX_RECRUITMENT))
+
             # Execute Bulk Insert
             if new_slots:
                 try:
                     db = get_db()
                     cursor = db.cursor()
-                    cursor.executemany("INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, ?, ?)", new_slots)
+                    cursor.executemany(
+                        "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) VALUES (?, ?, ?, ?, ?)",
+                        new_slots,
+                    )
                     db.commit()
                     cursor.close()
                 except Exception as e:
@@ -4173,12 +4304,13 @@ def sales_index():
             # Fallback: Create generic slots if NO Talent users exist (for testing purposes only)
             # This ensures at least something shows up, but marks them clearly.
             pass
-                
+
     available_slots = query_db("""
         SELECT T.*, U.Username as EvaluatorName 
         FROM TASchedules T 
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID 
-        WHERE SlotDate = ? AND Status = 'Available' 
+        WHERE SlotDate = ? AND Status = 'Available'
+          AND ISNULL(T.AssessmentContext, N'Recruitment') = N'Recruitment'
         ORDER BY SlotTime, U.Username
     """, (selected_date,))
     
@@ -4992,16 +5124,28 @@ def training_sales_dashboard():
                 SELECT COUNT(*) as c FROM TASchedules T
                 JOIN Candidates C ON T.CandidateID = C.CandidateID
                 WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead') AND T.SlotDate = ? AND T.Status = 'Booked'
+                  AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                      SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+                  )))
             """, (today,), one=True)['c'],
             'pending_slots': query_db("""
                 SELECT COUNT(*) as c FROM TASchedules T
                 JOIN Candidates C ON T.CandidateID = C.CandidateID
                 WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead') AND T.Status = 'Booked' AND T.SlotDate >= ?
+                  AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                      SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+                  )))
             """, (today,), one=True)['c'],
             'no_slot_yet': query_db("""
                 SELECT COUNT(*) as c FROM Candidates C
                 WHERE (C.PrimaryIntent='Training' OR C.Status='Training_Lead')
-                AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
+                AND NOT EXISTS (
+                    SELECT 1 FROM TASchedules T
+                    WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed')
+                    AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                        SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+                    )))
+                )
             """, one=True)['c'],
         }
     except Exception:
@@ -5020,7 +5164,13 @@ def training_sales_index():
             SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CreatedAt, C.PrimaryIntent
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-            AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
+            AND NOT EXISTS (
+                SELECT 1 FROM TASchedules T
+                WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed')
+                AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                    SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+                )))
+            )
             ORDER BY C.CreatedAt DESC
         """)
     except Exception:
@@ -5063,6 +5213,7 @@ def training_sales_register():
 @role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager', 'TrainingCoordinator'])
 def training_sales_book_slot(candidate_id):
     """حجز موعد اختبار مواهب تدريب لمهتم (عرض شاغر لمختبر مواهب التدريب)."""
+    _ensure_taschedules_assessment_context_column()
     cand = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE CandidateID = ?", (candidate_id,), one=True)
     if not cand:
         flash('المرشح غير موجود.', 'danger')
@@ -5074,63 +5225,57 @@ def training_sales_book_slot(candidate_id):
             try:
                 query_db("""
                     UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
-                    WHERE SlotID=? AND Status='Available'
+                    WHERE SlotID=? AND CandidateID IS NULL AND EvaluatorID IS NOT NULL
+                      AND AssessmentContext = N'Training'
+                      AND (
+                            LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
+                            OR Status IS NULL
+                            OR LTRIM(RTRIM(ISNULL(Status, N''))) = N''
+                      )
                 """, (candidate_id, session.get('user_id'), test_mode, int(slot_id)))
                 flash('تم حجز موعد اختبار مواهب التدريب بنجاح.', 'success')
             except Exception as e:
                 flash('خطأ عند الحجز: ' + str(e)[:80], 'danger')
         return redirect(url_for('training_sales_scheduling'))
-    # GET: عرض الشاغر المتاحة لمختبري مواهب التدريب (Talent_Training)
-    ta_training_ids = query_db("SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')")
-    if not ta_training_ids:
+    # GET: شواغر مجمع مختبر التدريب فقط
+    ids = _training_ta_evaluator_ids()
+    if not ids:
         available_slots = []
     else:
-        ids = [r['UserID'] for r in ta_training_ids]
         placeholders = ','.join(['?'] * len(ids))
         available_slots = query_db(f"""
             SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
             FROM TASchedules T
             JOIN Users_1 U ON T.EvaluatorID = U.UserID
-            WHERE T.EvaluatorID IN ({placeholders}) AND T.Status = 'Available' AND T.SlotDate >= CAST(GETDATE() AS DATE)
+            WHERE T.EvaluatorID IN ({placeholders}) AND T.AssessmentContext = N'Training'
+              AND T.CandidateID IS NULL
+              AND (
+                    LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                    OR T.Status IS NULL
+                    OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
+              )
+              AND T.SlotDate >= CAST(GETDATE() AS DATE)
             ORDER BY T.SlotDate, T.SlotTime
         """, tuple(ids))
-        # إن لم توجد أي شاغر، إنشاء مواعيد تلقائياً: 10 ص–9 م كل 15 دقيقة لمدة 14 يوماً
         if not available_slots:
             try:
-                from datetime import timedelta
-                slot_times = []
-                for hour in range(10, 22):
-                    for minute in (0, 15, 30, 45):
-                        if hour == 21 and minute != 0:
-                            continue
-                        slot_times.append(f"{hour:02d}:{minute:02d}")
                 today = datetime.today().date()
-                db = get_db()
-                cur = db.cursor()
-                try:
-                    for uid in ids:
-                        for d in range(14):
-                            slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
-                            for st in slot_times:
-                                cur.execute(
-                                    "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?",
-                                    (uid, slot_date, st)
-                                )
-                                if cur.fetchone() is None:
-                                    cur.execute(
-                                        "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?,?,N'Available',?)",
-                                        (slot_date, st, uid)
-                                    )
-                    db.commit()
-                    available_slots = query_db(f"""
-                        SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
-                        FROM TASchedules T
-                        JOIN Users_1 U ON T.EvaluatorID = U.UserID
-                        WHERE T.EvaluatorID IN ({placeholders}) AND T.Status = 'Available' AND T.SlotDate >= CAST(GETDATE() AS DATE)
-                        ORDER BY T.SlotDate, T.SlotTime
-                    """, tuple(ids))
-                finally:
-                    cur.close()
+                end = today + timedelta(days=13)
+                _ensure_ta_slots_for_date_range(ids, today, end, TA_CTX_TRAINING)
+                available_slots = query_db(f"""
+                    SELECT T.SlotID, T.SlotDate, T.SlotTime, U.FullName as EvaluatorName
+                    FROM TASchedules T
+                    JOIN Users_1 U ON T.EvaluatorID = U.UserID
+                    WHERE T.EvaluatorID IN ({placeholders}) AND T.AssessmentContext = N'Training'
+                      AND T.CandidateID IS NULL
+                      AND (
+                            LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                            OR T.Status IS NULL
+                            OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
+                      )
+                      AND T.SlotDate >= CAST(GETDATE() AS DATE)
+                    ORDER BY T.SlotDate, T.SlotTime
+                """, tuple(ids))
             except Exception:
                 pass
     return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
@@ -5146,7 +5291,13 @@ def training_sales_scheduling():
             SELECT C.CandidateID, C.FullName, C.Phone, C.Status, C.CreatedAt
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
-            AND NOT EXISTS (SELECT 1 FROM TASchedules T WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed'))
+            AND NOT EXISTS (
+                SELECT 1 FROM TASchedules T
+                WHERE T.CandidateID = C.CandidateID AND T.Status IN ('Booked', 'Completed')
+                AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                    SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+                )))
+            )
             ORDER BY C.CreatedAt DESC
         """)
     except Exception:
@@ -5167,6 +5318,9 @@ def training_sales_followup():
             JOIN Candidates C ON T.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead') AND T.Status = 'Booked' AND T.SlotDate = ?
+              AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                  SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+              )))
             ORDER BY T.SlotTime
         """, (today,))
         booked_upcoming = query_db("""
@@ -5175,6 +5329,9 @@ def training_sales_followup():
             JOIN Candidates C ON T.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead') AND T.Status = 'Booked' AND T.SlotDate > ?
+              AND (T.AssessmentContext = N'Training' OR (T.AssessmentContext IS NULL AND T.EvaluatorID IN (
+                  SELECT UserID FROM Users_1 WHERE Role IN ('Talent_Training', 'TA-Training')
+              )))
             ORDER BY T.SlotDate, T.SlotTime
         """, (today,))
     except Exception:
@@ -5502,54 +5659,80 @@ def training_sales_course_fee_print(invoice_id):
     return render_template('training/invoice_print.html', invoice=inv, items=items, title='فاتورة ايراد دورات تدريب', payment_method=payment_method)
 
 
-OPEN_ASSESSMENT_SLOT_ROLES = [
-    'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator',
-    'TrainingSalesCoordinator',
-    'Talent_Recruitment', 'Talent', 'Talent_Training', 'TA-Training',
-    'RecruitmentManager',
+OPEN_RECRUITMENT_TALENT_SLOT_ROLES = [
+    'Manager', 'RecruitmentManager', 'Talent', 'Talent_Recruitment',
 ]
+OPEN_TRAINING_TALENT_SLOT_ROLES = [
+    'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator',
+    'TrainingSalesCoordinator', 'Talent_Training', 'TA-Training',
+]
+
+
+def _handle_open_talent_slots_post(redirect_endpoint, assessment_context):
+    raw_ids = request.form.getlist('evaluator_id')
+    df = (request.form.get('date_from') or '').strip()
+    dt = (request.form.get('date_to') or '').strip()
+    try:
+        d0 = datetime.strptime(df, '%Y-%m-%d').date()
+        d1 = datetime.strptime(dt, '%Y-%m-%d').date()
+    except ValueError:
+        flash('التواريخ يجب أن تكون بصيغة YYYY-MM-DD.', 'danger')
+        return redirect(url_for(redirect_endpoint))
+    if d1 < d0:
+        flash('تاريخ النهاية قبل البداية.', 'danger')
+        return redirect(url_for(redirect_endpoint))
+    if (d1 - d0).days > 44:
+        flash('الحد الأقصى 45 يوماً في المرة الواحدة.', 'warning')
+        return redirect(url_for(redirect_endpoint))
+    uids = []
+    for x in raw_ids:
+        try:
+            uids.append(int(x))
+        except (TypeError, ValueError):
+            pass
+    uids = list(dict.fromkeys(uids))
+    if not uids:
+        flash('اختر مقيّماً واحداً على الأقل.', 'warning')
+        return redirect(url_for(redirect_endpoint))
+    _ensure_taschedules_assessment_context_column()
+    _ensure_ta_slots_for_date_range(uids, d0, d1, assessment_context)
+    flash(
+        f'تم توليد/إكمال الفترات الناقصة ({"توظيف" if assessment_context == TA_CTX_RECRUITMENT else "تدريب"}) من {df} إلى {dt}.',
+        'success',
+    )
+    return redirect(url_for(redirect_endpoint))
+
+
+@app.route('/recruitment/open-talent-slots', methods=['GET', 'POST'])
+@login_required
+@role_required(OPEN_RECRUITMENT_TALENT_SLOT_ROLES)
+def recruitment_open_talent_slots():
+    """فتح شبكة مواعيد مختبر مواهب التوظيف فقط (TASchedules / AssessmentContext = Recruitment)."""
+    if request.method == 'POST':
+        return _handle_open_talent_slots_post('recruitment_open_talent_slots', TA_CTX_RECRUITMENT)
+    staff = _users_for_recruitment_talent_slot_picker()
+    return render_template('recruitment/open_talent_slots.html', staff=staff)
+
+
+@app.route('/training/open-talent-slots', methods=['GET', 'POST'])
+@login_required
+@role_required(OPEN_TRAINING_TALENT_SLOT_ROLES)
+def training_open_talent_slots():
+    """فتح شبكة مواعيد مختبر مواهب التدريب فقط (TASchedules / AssessmentContext = Training)."""
+    if request.method == 'POST':
+        return _handle_open_talent_slots_post('training_open_talent_slots', TA_CTX_TRAINING)
+    staff = _users_for_training_talent_slot_picker()
+    return render_template('training/open_talent_slots.html', staff=staff)
 
 
 @app.route('/training/open-assessment-slots', methods=['GET', 'POST'])
 @login_required
-@role_required(OPEN_ASSESSMENT_SLOT_ROLES)
+@role_required(OPEN_TRAINING_TALENT_SLOT_ROLES)
 def training_open_assessment_slots():
-    """إدخال/توليد شبكة مواعيد اختبار (TASchedules) لمقيّمي التدريب أو التوظيف — يظهر حجز الريكروتر بعدها."""
+    """توافق مع الروابط القديمة — نفس منطق فتح مواعيد التدريب."""
     if request.method == 'POST':
-        raw_ids = request.form.getlist('evaluator_id')
-        df = (request.form.get('date_from') or '').strip()
-        dt = (request.form.get('date_to') or '').strip()
-        try:
-            d0 = datetime.strptime(df, '%Y-%m-%d').date()
-            d1 = datetime.strptime(dt, '%Y-%m-%d').date()
-        except ValueError:
-            flash('التواريخ يجب أن تكون بصيغة YYYY-MM-DD.', 'danger')
-            return redirect(url_for('training_open_assessment_slots'))
-        if d1 < d0:
-            flash('تاريخ النهاية قبل البداية.', 'danger')
-            return redirect(url_for('training_open_assessment_slots'))
-        if (d1 - d0).days > 44:
-            flash('الحد الأقصى 45 يوماً في المرة الواحدة.', 'warning')
-            return redirect(url_for('training_open_assessment_slots'))
-        uids = []
-        for x in raw_ids:
-            try:
-                uids.append(int(x))
-            except (TypeError, ValueError):
-                pass
-        uids = list(dict.fromkeys(uids))
-        if not uids:
-            flash('اختر مقيّماً واحداً على الأقل.', 'warning')
-            return redirect(url_for('training_open_assessment_slots'))
-        _ensure_ta_slots_for_date_range(uids, d0, d1)
-        flash(
-            f'تم توليد/إكمال الفترات الناقصة للمستخدمين المختارين من {df} إلى {dt}.',
-            'success',
-        )
-        return redirect(url_for('training_open_assessment_slots'))
-
-    staff = _users_for_assessment_slot_picker()
-    return render_template('training/open_assessment_slots.html', staff=staff)
+        return _handle_open_talent_slots_post('training_open_talent_slots', TA_CTX_TRAINING)
+    return redirect(url_for('training_open_talent_slots'))
 
 
 @app.route('/training/index')
@@ -5574,7 +5757,15 @@ def training_index():
     trainers = query_db("SELECT * FROM Trainers")
     classrooms = query_db("SELECT * FROM Classrooms")
     
-    return render_template('training/index.html', batches=waves or [], courses=courses or [], trainers=trainers or [], rooms=classrooms or [], view=view)
+    return render_template(
+        'training/index.html',
+        batches=waves or [],
+        courses=courses or [],
+        trainers=trainers or [],
+        rooms=classrooms or [],
+        view=view,
+        can_open_training_talent_slots=(session.get('role') in OPEN_TRAINING_TALENT_SLOT_ROLES),
+    )
 
 @app.route('/training/add_course', methods=['POST'])
 @login_required

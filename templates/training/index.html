@@ -31,9 +31,9 @@
             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#addClassroomModal">
                 <i class="fas fa-door-open me-1"></i> إضافة قاعة
             </button>
-            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Talent_Recruitment', 'Talent', 'Talent_Training', 'TA-Training', 'RecruitmentManager'] %}
-            <a href="{{ url_for('training_open_assessment_slots') }}" class="btn btn-warning btn-sm">
-                <i class="fas fa-calendar-plus me-1"></i> فتح مواعيد اختبار (تدريب/توظيف)
+            {% if can_open_training_talent_slots|default(false) %}
+            <a href="{{ url_for('training_open_talent_slots') }}" class="btn btn-warning btn-sm">
+                <i class="fas fa-calendar-plus me-1"></i> فتح مواعيد مختبر التدريب
             </a>
             {% endif %}
         </div>

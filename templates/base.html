@@ -396,6 +396,13 @@
                 <i class="fas fa-calendar-alt"></i>
                 <span class="link-text"><span class="en-bold">Scheduling</span> <span class="ar-normal">حجز</span></span>
             </a>
+            {% if session.get('role') in ['Manager', 'RecruitmentManager', 'Talent', 'Talent_Recruitment'] %}
+            <a href="{{ url_for('recruitment_open_talent_slots') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'recruitment_open_talent_slots' else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Open recruitment test slots</span> <span class="ar-normal">توليد مواعيد مختبر التوظيف</span></span>
+            </a>
+            {% endif %}
             <a href="{{ url_for('recruiter_interviews_notify') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'recruiter_interviews_notify' else '' }}">
                 <i class="fas fa-envelope"></i>
@@ -411,8 +418,15 @@
             <!-- ============================================= -->
             <!-- التدريب: كل دور يرى نوافذه فقط — بدون تضارب أو تكرار -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer']) %}
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer', 'Talent_Training', 'TA-Training']) %}
             <div class="sidebar-section-label"><span class="en-bold">Training</span> <span class="ar-normal">قطاع التدريب</span></div>
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Talent_Training', 'TA-Training'] %}
+            <a href="{{ url_for('training_open_talent_slots') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_open_talent_slots' else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Open training test slots</span> <span class="ar-normal">توليد مواعيد مختبر التدريب</span></span>
+            </a>
+            {% endif %}
             {% if session.get('role') in ['TrainingSales', 'TrainingSalesCoordinator', 'Manager'] %}
             <a href="{{ url_for('training_sales_dashboard') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_dashboard' else '' }}">

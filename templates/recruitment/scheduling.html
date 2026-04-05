@@ -79,10 +79,10 @@
                                                             {% else %}
                                                             لا توجد فترات شاغرة في الـ 14 يوماً القادمة.
                                                             {% endif %}
-                                                            {% if can_open_assessment_slots|default(false) %}
-                                                            <div class="mt-2"><a href="{{ open_assessment_slots_url }}" class="alert-link fw-bold">فتح مواعيد اختبار (تدريب/توظيف)</a> — Training → إدخال شبكة المواعيد للمقيّمين.</div>
+                                                            {% if can_open_recruitment_talent_slots|default(false) %}
+                                                            <div class="mt-2"><a href="{{ open_recruitment_talent_slots_url }}" class="alert-link fw-bold">فتح مواعيد مختبر التوظيف</a> — شبكة منفصلة عن مختبر التدريب.</div>
                                                             {% else %}
-                                                            <div class="mt-2 small">اطلب من مدير التدريب أو مدير التوظيف فتح المواعيد من: <strong>Training → فتح مواعيد اختبار</strong>.</div>
+                                                            <div class="mt-2 small">اطلب من مدير التوظيف فتح مواعيد <strong>مختبر التوظيف</strong> من: Recruitment → فتح مواعيد مختبر التوظيف.</div>
                                                             {% endif %}
                                                         </div>
                                                         {% endif %}

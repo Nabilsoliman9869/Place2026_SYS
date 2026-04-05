@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid" style="max-width: 960px;">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('recruiter_dashboard') }}">Recruitment</a></li>
+            <li class="breadcrumb-item active">فتح مواعيد — مختبر مواهب التوظيف</li>
+        </ol>
+    </nav>
+
+    <h2 class="mb-2"><i class="fas fa-calendar-plus text-primary"></i> فتح مواعيد مختبر مواهب التوظيف</h2>
+    <p class="text-muted">
+        توليد شبكة فترات (كل 15 دقيقة من 8:00 إلى 22:45) في <code>TASchedules</code> مع سياق
+        <strong>Recruitment</strong> فقط. هذه المواعيد تظهر في جدولة الريكروتر ومبيعات التوظيف — ولا تُخلط مع مختبر التدريب.
+    </p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('recruitment_open_talent_slots') }}" data-turbo="false">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">من تاريخ</label>
+                        <input type="date" name="date_from" class="form-control" required
+                               value="{{ request.args.get('from', '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">إلى تاريخ</label>
+                        <input type="date" name="date_to" class="form-control" required
+                               value="{{ request.args.get('to', '') }}">
+                    </div>
+                </div>
+
+                <label class="form-label">المقيّمون (مختبر التوظيف)</label>
+                <div class="border rounded p-3 mb-3" style="max-height: 320px; overflow-y: auto;">
+                    {% for u in staff %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="evaluator_id" value="{{ u.UserID }}" id="ev{{ u.UserID }}">
+                        <label class="form-check-label" for="ev{{ u.UserID }}">
+                            <strong>{{ u.FullName or u.Username }}</strong>
+                            <span class="text-muted small">({{ u.Username }}) — {{ u.Role }}</span>
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">لا مستخدمون بأدوار مختبر التوظيف.</p>
+                    {% endfor %}
+                </div>
+
+                <button type="submit" class="btn btn-primary"><i class="fas fa-magic"></i> توليد / إكمال الفترات الناقصة</button>
+                <a href="{{ url_for('recruiter_scheduling') }}" class="btn btn-outline-secondary">جدولة الاختبارات</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
