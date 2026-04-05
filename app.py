@@ -201,7 +201,7 @@ def check_role_access(required_roles):
     return g.user['Role'] in required_roles
 
 # Register for Jinja templates
-app.jinja_env.globals.update(check_role_access=check_role_access)
+app.jinja_env.globals.update(check_role_access=check_role_access, safe_date_str=_safe_date_str)
 
 def is_accountant_sidebar():
     """إسلام أو المحاسب: يرى المالية فقط — بدون Marketing/Sales/Account Mgmt/Allocation/Recruitment/Training/Talent/Admin"""
@@ -1031,33 +1031,57 @@ def recruiter_dashboard_kpi():
 @login_required
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_scheduling():
+    uid = session.get('user_id')
+    if uid is None:
+        return redirect(url_for('login'))
+
     # Fetch candidates ready for scheduling (Status='Talent_Pool')
-    candidates = query_db("""
-        SELECT C.*, CA.Name as CampaignName 
-        FROM Candidates C
-        LEFT JOIN Campaigns CA ON C.CampaignID = CA.CampaignID
-        WHERE C.SalesAgentID = ? AND C.Status = 'Talent_Pool'
-        ORDER BY C.CreatedAt DESC
-    """, (session['user_id'],))
-    
-    # مواعيد الشاغرة من TASchedules (نفس مصدر لوحة المختبر والمبيعات) — جدول Schedules كان فارغاً إن لم يُشغَّل generate_slots.py
+    try:
+        candidates = query_db("""
+            SELECT C.*, CA.Name as CampaignName 
+            FROM Candidates C
+            LEFT JOIN Campaigns CA ON C.CampaignID = CA.CampaignID
+            WHERE C.SalesAgentID = ? AND C.Status = 'Talent_Pool'
+            ORDER BY C.CreatedAt DESC
+        """, (uid,))
+    except Exception as e:
+        try:
+            app.logger.exception('recruiter_scheduling candidates: %s', e)
+        except Exception:
+            pass
+        flash('تعذر تحميل قائمة المرشحين. تحقق من الاتصال بقاعدة البيانات.', 'danger')
+        candidates = []
+
+    # مواعيد الشاغرة من TASchedules
     today = datetime.today().strftime('%Y-%m-%d')
     end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
-    ta_ids = _recruitment_ta_evaluator_ids()
     available_slots = []
-    if ta_ids:
-        _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
-        ph = ','.join(['?'] * len(ta_ids))
-        available_slots = query_db(f"""
-            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
-            FROM TASchedules T
-            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
-            WHERE T.EvaluatorID IN ({ph})
-              AND T.Status = N'Available'
-              AND T.SlotDate >= ?
-              AND T.SlotDate <= ?
-            ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
-        """, tuple(ta_ids) + (today, end_date)) or []
+    ta_ids = []
+    try:
+        ta_ids = _recruitment_ta_evaluator_ids()
+        if ta_ids:
+            _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
+            ph = ','.join(['?'] * len(ta_ids))
+            available_slots = query_db(f"""
+                SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
+                FROM TASchedules T
+                LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+                WHERE T.EvaluatorID IN ({ph})
+                  AND T.Status = N'Available'
+                  AND T.SlotDate >= ?
+                  AND T.SlotDate <= ?
+                ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
+            """, tuple(ta_ids) + (today, end_date)) or []
+    except Exception as e:
+        try:
+            app.logger.exception('recruiter_scheduling slots: %s', e)
+        except Exception:
+            pass
+        flash(
+            'تعذر تحميل مواعيد الاختبار (TASchedules). تأكد من وجود الجدول والاتصال بقاعدة البيانات.',
+            'warning',
+        )
+        available_slots = []
 
     return render_template(
         'recruitment/scheduling.html',

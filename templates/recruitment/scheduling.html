@@ -33,7 +33,7 @@
                             <td class="fw-bold">{{ c.FullName }}</td>
                             <td>{{ c.Phone }}</td>
                             <td><span class="badge bg-info text-dark">{{ c.CampaignName or 'Manual' }}</span></td>
-                            <td>{{ c.CreatedAt.strftime('%Y-%m-%d') if c.CreatedAt else '-' }}</td>
+                            <td>{{ safe_date_str(c.CreatedAt) }}</td>
                             <td>{{ c.CurrentCEFR or '-' }}</td>
                             <td>
                                 <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#bookSlotModal{{ c.CandidateID }}">
