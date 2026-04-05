@@ -67,7 +67,7 @@
                             <th style="width: 8%;">تأخير (د)</th>
                             <th style="width: 8%;">مجمل تأخير</th>
                             <th style="width: 6%;">غيابات</th>
-                            <th style="width: 11%;" title="الواجب / Assignment">الواجب</th>
+                            <th style="width: 11%;" title="Assignment status"><span class="text-danger fw-bold">Assignment</span></th>
                             <th style="width: 6%;">ملف</th>
                             <th style="width: 8%;">إجراء</th>
                         </tr>
@@ -111,7 +111,7 @@
                             <td><span class="badge bg-{{ 'danger' if over_delay else 'secondary' }}" title="مجمل تأخير على مدار الدورة (الحد 120 دقيقة)">{% if s.TotalDelayMinutes %}{{ s.TotalDelayMinutes }}{% else %}0{% endif %}</span></td>
                             <td><span class="badge absence-badge bg-{{ 'danger' if over_absence else 'secondary' }}" title="عدد الغيابات (الحد: يوم واحد)">{% if s.AbsenceCount %}{{ s.AbsenceCount }}{% else %}0{% endif %}</span></td>
                             <td class="align-middle">
-                                <select name="assign_status_{{ s.EnrollmentID }}" class="form-select form-select-sm" title="حالة الواجب">
+                                <select name="assign_status_{{ s.EnrollmentID }}" class="form-select form-select-sm" title="Assignment">
                                     <option value="not submitted" {% if s.AssignmentStatus == 'not submitted' %}selected{% endif %}>not submitted</option>
                                     <option value="Done" {% if s.AssignmentStatus == 'Done' %}selected{% endif %}>Done</option>
                                     <option value="cancelled" {% if s.AssignmentStatus == 'cancelled' %}selected{% endif %}>cancelled</option>
