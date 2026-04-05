@@ -8,7 +8,13 @@ import json
 import time
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
+from datetime import datetime, timedelta
+
+try:
+    from email_service import notify_slot_booking
+except Exception:
+    def notify_slot_booking(*_a, **_k):
+        pass
 
 app = Flask(__name__)
 
@@ -60,6 +66,57 @@ def _safe_date_str(d, fmt='%Y-%m-%d'):
     if d is None: return '-'
     if hasattr(d, 'strftime'): return d.strftime(fmt)
     return str(d)[:10] if d else '-'
+
+
+def _recruitment_ta_evaluator_ids():
+    """مقيّمو اختبار التوظيف — نفس منطق توليد مواعيد المبيعات لكن لمستخدمي Talent / Talent_Recruitment."""
+    rows = query_db(
+        "SELECT UserID FROM Users_1 WHERE Role IN (N'Talent', N'Talent_Recruitment')"
+    ) or []
+    return [r['UserID'] for r in rows]
+
+
+def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
+    """إنشاء فترات 15 دقيقة (10:00–21:00 تقريباً) لكل مقيّم للأيام القادمة إن لم تكن موجودة."""
+    if not user_ids:
+        return
+    slot_times = []
+    for hour in range(10, 22):
+        for minute in (0, 15, 30, 45):
+            if hour == 21 and minute != 0:
+                continue
+            slot_times.append(f"{hour:02d}:{minute:02d}")
+    today = datetime.today().date()
+    db = get_db()
+    if not db:
+        return
+    cur = db.cursor()
+    try:
+        for uid in user_ids:
+            for d in range(days):
+                slot_date = (today + timedelta(days=d)).strftime('%Y-%m-%d')
+                for st in slot_times:
+                    cur.execute(
+                        "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=?",
+                        (uid, slot_date, st),
+                    )
+                    if cur.fetchone() is None:
+                        cur.execute(
+                            "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID) VALUES (?, ?, N'Available', ?)",
+                            (slot_date, st, uid),
+                        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
 
 @app.route('/version')
 def show_version():
@@ -972,6 +1029,7 @@ def recruiter_dashboard_kpi():
 
 @app.route('/recruiter/scheduling')
 @login_required
+@role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_scheduling():
     # Fetch candidates ready for scheduling (Status='Talent_Pool')
     candidates = query_db("""
@@ -982,16 +1040,31 @@ def recruiter_scheduling():
         ORDER BY C.CreatedAt DESC
     """, (session['user_id'],))
     
+    # مواعيد الشاغرة من TASchedules (نفس مصدر لوحة المختبر والمبيعات) — جدول Schedules كان فارغاً إن لم يُشغَّل generate_slots.py
     today = datetime.today().strftime('%Y-%m-%d')
-    available_slots = query_db("""
-        SELECT T.*, U.Username as EvaluatorName 
-        FROM Schedules T 
-        LEFT JOIN Users_1 U ON T.OwnerUserID = U.UserID 
-        WHERE Context='Talent_Recruitment' AND SlotDate >= ? AND Status = 'Available' 
-        ORDER BY SlotDate ASC, SlotTime ASC
-    """, (today,))
-    
-    return render_template('recruitment/scheduling.html', candidates=candidates or [], available_slots=available_slots or [])
+    end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
+    ta_ids = _recruitment_ta_evaluator_ids()
+    available_slots = []
+    if ta_ids:
+        _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
+        ph = ','.join(['?'] * len(ta_ids))
+        available_slots = query_db(f"""
+            SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
+            FROM TASchedules T
+            LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+            WHERE T.EvaluatorID IN ({ph})
+              AND T.Status = N'Available'
+              AND T.SlotDate >= ?
+              AND T.SlotDate <= ?
+            ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
+        """, tuple(ta_ids) + (today, end_date)) or []
+
+    return render_template(
+        'recruitment/scheduling.html',
+        candidates=candidates or [],
+        available_slots=available_slots or [],
+        has_ta_evaluators=bool(ta_ids),
+    )
 
 # اسم الدالة فريد؛ endpoint ثابت لـ url_for('recruiter_book_test') — تجنباً لتعارض Flask إن وُجد تعريف مكرر قديماً
 @app.route('/recruiter/book_test', methods=['POST'], endpoint='recruiter_book_test')
@@ -999,24 +1072,84 @@ def recruiter_scheduling():
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_post_book_test():
     f = request.form
-    cand_id = f['candidate_id']
+    cand_id = f.get('candidate_id')
     slot_id = f.get('slot_id')
-    mode = f.get('mode') # Phone, Online, Door-to-Door
-    
-    if not slot_id:
-        flash('Please select a valid time slot.', 'warning')
+    mode = (f.get('mode') or 'Online').strip()
+
+    if not cand_id or not slot_id:
+        flash('يرجى اختيار موعد صالح.', 'warning')
         return redirect(url_for('recruiter_scheduling'))
 
-    query_db("""
-        UPDATE Schedules 
-        SET BookedCandidateID = ?, Status = 'Booked', BookingMode = ?
-        WHERE ScheduleID = ? AND Status = 'Available' AND Context='Talent_Recruitment'
-    """, (cand_id, mode, slot_id))
-    
-    # Update Candidate Status
-    query_db("UPDATE Candidates SET Status='Test Scheduled' WHERE CandidateID=?", (cand_id,))
-    
-    flash('Talent Test Booked Successfully', 'success')
+    try:
+        slot_id = int(slot_id)
+    except (TypeError, ValueError):
+        flash('معرّف الموعد غير صالح.', 'danger')
+        return redirect(url_for('recruiter_scheduling'))
+
+    role = session.get('role')
+    cand = query_db(
+        "SELECT CandidateID, SalesAgentID, Status FROM Candidates WHERE CandidateID=?",
+        (cand_id,),
+        one=True,
+    )
+    if not cand or (cand.get('Status') or '') != 'Talent_Pool':
+        flash('المرشح غير متاح للحجز (يجب أن تكون حالته Talent Pool).', 'danger')
+        return redirect(url_for('recruiter_scheduling'))
+    if role not in ('Manager', 'RecruitmentManager') and cand.get('SalesAgentID') != session.get('user_id'):
+        flash('لا يمكنك حجز موعد لمرشح لا يخصك.', 'danger')
+        return redirect(url_for('recruiter_scheduling'))
+
+    ta_ids = set(_recruitment_ta_evaluator_ids())
+    slot_row = query_db(
+        "SELECT SlotID, EvaluatorID, Status FROM TASchedules WHERE SlotID=? AND Status=N'Available'",
+        (slot_id,),
+        one=True,
+    )
+    if not slot_row or slot_row.get('EvaluatorID') not in ta_ids:
+        flash('هذا الموعد غير متاح أو لا يخص مقيّم توظيف.', 'warning')
+        return redirect(url_for('recruiter_scheduling'))
+
+    interview_type = {'Phone': 'Phone', 'Online': 'Zoom', 'DoorToDoor': 'In-Person'}.get(mode, mode)
+
+    try:
+        query_db(
+            """
+            UPDATE TASchedules
+            SET Status=N'Booked', CandidateID=?, BookedBy=?, Type=N'Initial Assessment', InterviewType=?
+            WHERE SlotID=? AND Status=N'Available'
+            """,
+            (cand_id, session.get('user_id'), interview_type, slot_id),
+        )
+    except Exception as ex:
+        flash('تعذر الحجز: ' + str(ex)[:120], 'danger')
+        return redirect(url_for('recruiter_scheduling'))
+
+    query_db("UPDATE Candidates SET Status=N'Test Scheduled' WHERE CandidateID=?", (cand_id,))
+
+    slot_info = query_db(
+        """
+        SELECT T.SlotDate, T.SlotTime, U.Email, U.Username, C.FullName
+        FROM TASchedules T
+        JOIN Users_1 U ON T.EvaluatorID = U.UserID
+        JOIN Candidates C ON T.CandidateID = C.CandidateID
+        WHERE T.SlotID=?
+        """,
+        (slot_id,),
+        one=True,
+    )
+    if slot_info and slot_info.get('Email'):
+        try:
+            notify_slot_booking(
+                slot_info['Email'],
+                slot_info['Username'],
+                slot_info['FullName'],
+                slot_info['SlotDate'],
+                slot_info['SlotTime'],
+            )
+        except Exception:
+            pass
+
+    flash('تم حجز اختبار المواهب بنجاح.', 'success')
     return redirect(url_for('recruiter_scheduling'))
 
 # Removed duplicate definition of 'recruiter_interviews_notify' that was here
@@ -1157,7 +1290,7 @@ def recruiter_workbench():
 @login_required
 @role_required(['Recruiter', 'Manager', 'RecruitmentManager'])
 def recruiter_test_schedule():
-    sql = """
+    sql_sched = """
         SELECT S.ScheduleID, S.SlotDate, S.SlotTime, S.IsConfirmedByRecruiter,
                C.FullName, C.Phone, C.SalesAgentID,
                U.Username as EvaluatorName
@@ -1170,9 +1303,22 @@ def recruiter_test_schedule():
           AND S.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
         ORDER BY S.SlotDate, S.SlotTime
     """
-
-    if session.get('role') == 'Recruiter':
-        sql = """
+    sql_ta = """
+        SELECT T.SlotID AS TaSlotID, T.SlotDate, T.SlotTime, T.IsConfirmedByRecruiter,
+               C.FullName, C.Phone, C.SalesAgentID,
+               U.Username AS EvaluatorName
+        FROM TASchedules T
+        JOIN Candidates C ON T.CandidateID = C.CandidateID
+        LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
+        WHERE T.Status = N'Booked'
+          AND T.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
+          AND T.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
+    """
+    uid = session['user_id']
+    role = session.get('role')
+    if role == 'Recruiter':
+        sched_tests = query_db(
+            """
             SELECT S.ScheduleID, S.SlotDate, S.SlotTime, S.IsConfirmedByRecruiter,
                    C.FullName, C.Phone, C.SalesAgentID,
                    U.Username as EvaluatorName
@@ -1185,40 +1331,82 @@ def recruiter_test_schedule():
               AND S.SlotDate >= DATEADD(day, -30, CONVERT(date, GETDATE()))
               AND S.SlotDate <= DATEADD(day,  30, CONVERT(date, GETDATE()))
             ORDER BY S.SlotDate, S.SlotTime
-        """
-        tests = query_db(sql, (session['user_id'],))
+            """,
+            (uid,),
+        )
+        ta_tests = query_db(
+            sql_ta + " AND C.SalesAgentID = ? ORDER BY T.SlotDate, T.SlotTime",
+            (uid,),
+        )
     else:
-        tests = query_db(sql)
-        
+        sched_tests = query_db(sql_sched)
+        ta_tests = query_db(sql_ta + " ORDER BY T.SlotDate, T.SlotTime")
+
+    tests = []
+    for t in sched_tests or []:
+        row = dict(t)
+        row['is_ta_slot'] = False
+        row['TaSlotID'] = None
+        tests.append(row)
+    for t in ta_tests or []:
+        row = dict(t)
+        row['is_ta_slot'] = True
+        row['ScheduleID'] = row.get('TaSlotID')
+        tests.append(row)
+    tests.sort(key=lambda r: (str(r.get('SlotDate') or ''), str(r.get('SlotTime') or '')))
+
     return render_template('recruitment/test_schedule.html', tests=tests or [])
 
 @app.route('/recruiter/confirm_test', methods=['POST'])
 @login_required
 def recruiter_confirm_test():
     schedule_id = request.form.get('schedule_id')
-    if not schedule_id:
-        flash('Missing slot_id.', 'danger')
+    ta_slot_id = request.form.get('ta_slot_id')
+    is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
+    uid = session.get('user_id')
+    role = session.get('role')
+
+    if ta_slot_id:
+        if role == 'Recruiter':
+            query_db(
+                """
+                UPDATE T
+                SET T.IsConfirmedByRecruiter=?
+                FROM TASchedules T
+                INNER JOIN Candidates C ON C.CandidateID = T.CandidateID
+                WHERE T.SlotID = ? AND C.SalesAgentID = ?
+                """,
+                (is_confirmed, ta_slot_id, uid),
+            )
+        else:
+            query_db(
+                "UPDATE TASchedules SET IsConfirmedByRecruiter=? WHERE SlotID=?",
+                (is_confirmed, ta_slot_id),
+            )
+    elif schedule_id:
+        if role == 'Recruiter':
+            query_db("""
+                UPDATE Schedules
+                SET IsConfirmedByRecruiter=?
+                WHERE ScheduleID=?
+                  AND Context='Talent_Recruitment'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM Candidates C
+                    WHERE C.CandidateID = Schedules.BookedCandidateID
+                      AND C.SalesAgentID = ?
+                  )
+            """, (is_confirmed, schedule_id, uid))
+        else:
+            query_db(
+                "UPDATE Schedules SET IsConfirmedByRecruiter=? WHERE ScheduleID=? AND Context='Talent_Recruitment'",
+                (is_confirmed, schedule_id),
+            )
+    else:
+        flash('معرّف الموعد مفقود.', 'danger')
         return redirect(url_for('recruiter_test_schedule'))
 
-    is_confirmed = 1 if request.form.get('confirmed') == 'on' else 0
-
-    if session.get('role') == 'Recruiter':
-        query_db("""
-            UPDATE Schedules
-            SET IsConfirmedByRecruiter=?
-            WHERE ScheduleID=?
-              AND Context='Talent_Recruitment'
-              AND EXISTS (
-                SELECT 1
-                FROM Candidates C
-                WHERE C.CandidateID = Schedules.BookedCandidateID
-                  AND C.SalesAgentID = ?
-              )
-        """, (is_confirmed, schedule_id, session['user_id']))
-    else:
-        query_db("UPDATE Schedules SET IsConfirmedByRecruiter=? WHERE ScheduleID=? AND Context='Talent_Recruitment'", (is_confirmed, schedule_id))
-
-    flash('Attendance Status Updated', 'success')
+    flash('تم تحديث حالة التأكيد.', 'success')
     return redirect(url_for('recruiter_test_schedule'))
 
 @app.route('/recruiter/test_results')
@@ -5407,6 +5595,172 @@ def delete_batch_exam_date(batch_id, exam_date_id):
     flash('تم حذف يوم الامتحان.', 'info')
     return redirect(url_for('wave_details', wave_id=batch_id))
 
+# أعمدة ورقة Excel «Progress report»: عدة صفوف RFI لكل جانب لغوي × أسبوع × متدرب
+PROGRESS_SHEET_ASPECTS = (
+    'Comprehension',
+    'Fluency',
+    'Pronunciation',
+    'Structure',
+    'Vocabulary',
+)
+
+
+def _ensure_enrollment_week_progress_lines_table():
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT 1 FROM sysobjects WHERE name='EnrollmentWeekProgressLines' AND xtype='U')
+            CREATE TABLE EnrollmentWeekProgressLines (
+                LineID INT IDENTITY(1,1) PRIMARY KEY,
+                EnrollmentID INT NOT NULL,
+                WeekNumber INT NOT NULL,
+                LanguageAspect NVARCHAR(40) NOT NULL,
+                LineOrder INT NOT NULL DEFAULT 0,
+                RFI NVARCHAR(500) NULL,
+                Severity NVARCHAR(20) NULL,
+                ActionPlan NVARCHAR(MAX) NULL,
+                ProgressComment NVARCHAR(MAX) NULL,
+                TrainerID INT NULL,
+                UpdatedAt DATETIME DEFAULT GETDATE()
+            )
+            """
+        )
+    except Exception:
+        pass
+
+
+@app.route('/training/wave/<int:wave_id>/progress-sheets')
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def wave_progress_sheets(wave_id):
+    """قائمة متدربي الدفعة مع رابط شيت تقدم أسبوعي (مماثل لورقة Progress report في Excel)."""
+    _ensure_enrollment_week_progress_lines_table()
+    wave = query_db(
+        """
+        SELECT B.BatchID, B.BatchName, C.CourseName
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        WHERE B.BatchID = ?
+        """,
+        (wave_id,),
+        one=True,
+    )
+    if not wave:
+        return 'Wave not found', 404
+    rows = query_db(
+        """
+        SELECT E.EnrollmentID, C.FullName, C.CandidateID,
+               (SELECT COUNT(*) FROM EnrollmentWeekProgressLines L WHERE L.EnrollmentID = E.EnrollmentID) AS SavedLines
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        WHERE E.BatchID = ?
+        ORDER BY C.FullName
+        """,
+        (wave_id,),
+    ) or []
+    return render_template(
+        'training/wave_progress_sheets.html',
+        wave=wave,
+        students=rows,
+    )
+
+
+@app.route('/training/enrollment/<int:enrollment_id>/progress-sheet', methods=['GET', 'POST'])
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def enrollment_progress_sheet(enrollment_id):
+    """شيت تقييم تقدم أسبوعي لمتدرب واحد — هيكل قريب من Excel (عدة صفوف لكل جانب لغوي)."""
+    _ensure_enrollment_week_progress_lines_table()
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        flash('التسجيل غير موجود.', 'danger')
+        return redirect(url_for('training_index'))
+
+    if request.method == 'POST':
+        f = request.form
+        try:
+            week = int(f.get('week_number') or 1)
+        except (TypeError, ValueError):
+            week = 1
+        week = max(1, min(week, 52))
+        wave_id = stu['BatchID']
+        try:
+            query_db(
+                'DELETE FROM EnrollmentWeekProgressLines WHERE EnrollmentID=? AND WeekNumber=?',
+                (enrollment_id, week),
+            )
+            uid = session.get('user_id')
+            for aspect in PROGRESS_SHEET_ASPECTS:
+                rfis = f.getlist(f'{aspect}_rfi')
+                sevs = f.getlist(f'{aspect}_severity')
+                acts = f.getlist(f'{aspect}_action')
+                coms = f.getlist(f'{aspect}_comment')
+                n = max(len(rfis), len(sevs), len(acts), len(coms), 0)
+                for i in range(n):
+                    rfi = (rfis[i] if i < len(rfis) else '') or ''
+                    sev = (sevs[i] if i < len(sevs) else '') or ''
+                    act = (acts[i] if i < len(acts) else '') or ''
+                    com = (coms[i] if i < len(coms) else '') or ''
+                    rfi, sev, act, com = rfi.strip(), sev.strip(), act.strip(), com.strip()
+                    if not (rfi or sev or act or com):
+                        continue
+                    query_db(
+                        """
+                        INSERT INTO EnrollmentWeekProgressLines
+                        (EnrollmentID, WeekNumber, LanguageAspect, LineOrder, RFI, Severity, ActionPlan, ProgressComment, TrainerID)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (enrollment_id, week, aspect, i, rfi or None, sev or None, act or None, com or None, uid),
+                    )
+            flash('تم حفظ شيت التقدم لهذا الأسبوع.', 'success')
+        except Exception as ex:
+            flash('تعذر الحفظ: ' + str(ex)[:200], 'danger')
+        return redirect(
+            url_for('enrollment_progress_sheet', enrollment_id=enrollment_id, week=week)
+        )
+
+    try:
+        week = int(request.args.get('week') or 1)
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+
+    raw_lines = query_db(
+        """
+        SELECT LineID, LanguageAspect, LineOrder, RFI, Severity, ActionPlan, ProgressComment
+        FROM EnrollmentWeekProgressLines
+        WHERE EnrollmentID=? AND WeekNumber=?
+        ORDER BY LanguageAspect, LineOrder
+        """,
+        (enrollment_id, week),
+    ) or []
+
+    lines_by_aspect = {a: [] for a in PROGRESS_SHEET_ASPECTS}
+    for row in raw_lines:
+        asp = (row.get('LanguageAspect') or '').strip()
+        if asp in lines_by_aspect:
+            lines_by_aspect[asp].append(row)
+
+    return render_template(
+        'training/enrollment_progress_sheet.html',
+        student=stu,
+        week=week,
+        lines_by_aspect=lines_by_aspect,
+        aspects=PROGRESS_SHEET_ASPECTS,
+    )
+
+
 @app.route('/training/wave/<int:wave_id>')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
@@ -5458,10 +5812,14 @@ def wave_details(wave_id):
 @login_required
 def add_weekly_report():
     f = request.form
+    aspect = (f.get('language_aspect') or '').strip()
+    rfi = (f.get('rfi') or '').strip()
+    if aspect and aspect != 'General':
+        rfi = f"[{aspect}] {rfi}".strip() if rfi else f"[{aspect}]"
     query_db("""
         INSERT INTO WeeklyProgress (EnrollmentID, WeekNumber, Strengths, Weaknesses, RFI, ActionPlan, Severity, TrainerID)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (f['enrollment_id'], f['week_number'], f['strengths'], f['weaknesses'], f['rfi'], f['action_plan'], f['severity'], session['user_id']))
+    """, (f['enrollment_id'], f['week_number'], f['strengths'], f['weaknesses'], rfi, f['action_plan'], f['severity'], session['user_id']))
     
     flash('Weekly Report Added', 'success')
     return redirect(url_for('wave_details', wave_id=f['wave_id']))

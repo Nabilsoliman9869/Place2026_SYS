@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('training_index') }}">Training</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('wave_details', wave_id=student.BatchID) }}">{{ student.BatchName }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('wave_progress_sheets', wave_id=student.BatchID) }}">Progress sheets</a></li>
+            <li class="breadcrumb-item active">{{ student.FullName }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-clipboard-list text-success"></i> Progress report sheet</h2>
+            <p class="text-muted mb-0">{{ student.FullName }} — {{ student.CourseName }}</p>
+            <p class="small text-secondary mb-0">Same structure as Excel: Language aspect → multiple RFI rows (Severity, Action, Comment).</p>
+        </div>
+        <form method="get" class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0">Week</label>
+            <input type="number" name="week" class="form-control form-control-sm" style="width:5rem" min="1" max="52" value="{{ week }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Go</button>
+        </form>
+    </div>
+
+    <form method="post" action="{{ url_for('enrollment_progress_sheet', enrollment_id=student.EnrollmentID) }}" data-turbo="false">
+        <input type="hidden" name="week_number" value="{{ week }}">
+
+        {% for aspect in aspects %}
+        {% set rows = lines_by_aspect[aspect] %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center py-2 bg-light">
+                <strong class="text-primary">{{ aspect }}</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary add-row-btn" data-aspect="{{ aspect }}">
+                    <i class="fas fa-plus"></i> Add RFI row
+                </button>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width:12rem">RFI</th>
+                            <th style="width:7rem">Severity</th>
+                            <th style="min-width:10rem">Action plan</th>
+                            <th style="min-width:10rem">Comment</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-{{ aspect }}">
+                        {% if rows|length == 0 %}
+                        <tr class="data-row">
+                            <td><input type="text" class="form-control form-control-sm" name="{{ aspect }}_rfi" placeholder="e.g. Word choice"></td>
+                            <td>
+                                <select class="form-select form-select-sm" name="{{ aspect }}_severity">
+                                    <option value="">—</option>
+                                    <option value="Red">Red</option>
+                                    <option value="Yellow">Yellow</option>
+                                    <option value="Green">Green</option>
+                                </select>
+                            </td>
+                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_action" rows="1"></textarea></td>
+                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_comment" rows="1"></textarea></td>
+                        </tr>
+                        {% else %}
+                        {% for line in rows %}
+                        <tr class="data-row">
+                            <td><input type="text" class="form-control form-control-sm" name="{{ aspect }}_rfi" value="{{ line.RFI or '' }}"></td>
+                            <td>
+                                <select class="form-select form-select-sm" name="{{ aspect }}_severity">
+                                    <option value="">—</option>
+                                    <option value="Red" {{ 'selected' if line.Severity == 'Red' }}>Red</option>
+                                    <option value="Yellow" {{ 'selected' if line.Severity == 'Yellow' }}>Yellow</option>
+                                    <option value="Green" {{ 'selected' if line.Severity == 'Green' }}>Green</option>
+                                </select>
+                            </td>
+                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_action" rows="1">{{ line.ActionPlan or '' }}</textarea></td>
+                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_comment" rows="1">{{ line.ProgressComment or '' }}</textarea></td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="sticky-bottom bg-light border-top py-3 px-0 mt-2 d-flex gap-2 justify-content-between flex-wrap">
+            <a href="{{ url_for('wave_progress_sheets', wave_id=student.BatchID) }}" class="btn btn-outline-secondary">Back to list</a>
+            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save week {{ week }}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.querySelectorAll('.add-row-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var aspect = btn.getAttribute('data-aspect');
+        var tb = document.getElementById('tbody-' + aspect);
+        if (!tb) return;
+        var rows = tb.querySelectorAll('tr.data-row');
+        var src = rows[rows.length - 1];
+        if (!src) return;
+        var nu = src.cloneNode(true);
+        nu.querySelectorAll('input, textarea').forEach(function(el) { el.value = ''; });
+        nu.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
+        tb.appendChild(nu);
+    });
+});
+</script>
+{% endblock %}

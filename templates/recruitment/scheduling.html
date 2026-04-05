@@ -67,13 +67,19 @@
                                                         <select name="slot_id" class="form-select select2" required>
                                                             <option value="">-- Select Date & Time --</option>
                                                             {% for slot in available_slots %}
-                                                            <option value="{{ slot.ScheduleID }}">
-                                                                {{ slot.SlotDate }} @ {{ slot.SlotTime }} ({{ slot.EvaluatorName or 'Any TA' }})
+                                                            <option value="{{ slot.SlotID }}">
+                                                                {{ slot.SlotDate }} @ {{ slot.SlotTime }} ({{ slot.EvaluatorName or 'TA' }})
                                                             </option>
                                                             {% endfor %}
                                                         </select>
                                                         {% if not available_slots %}
-                                                        <div class="form-text text-danger">No slots available. Ask TA Manager to open slots.</div>
+                                                        <div class="form-text text-danger">
+                                                            {% if not has_ta_evaluators %}
+                                                            لا يوجد مقيّمو توظيف (Talent / Talent_Recruitment) في النظام — عرّف مستخدمين بهذه الأدوار أولاً.
+                                                            {% else %}
+                                                            لا توجد فترات شاغرة في الأيام القادمة. اطلب من مدير الـ TA فتح أوقات أو تحقق من التقويم.
+                                                            {% endif %}
+                                                        </div>
                                                         {% endif %}
                                                     </div>
                                                 </div>

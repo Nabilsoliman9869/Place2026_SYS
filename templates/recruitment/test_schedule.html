@@ -44,7 +44,11 @@
                         </td>
                         <td>
                             <form action="{{ url_for('recruiter_confirm_test') }}" method="POST">
+                                {% if t.is_ta_slot %}
+                                <input type="hidden" name="ta_slot_id" value="{{ t.TaSlotID }}">
+                                {% else %}
                                 <input type="hidden" name="schedule_id" value="{{ t.ScheduleID }}">
+                                {% endif %}
                                 {% if t.IsConfirmedByRecruiter %}
                                     <button type="submit" class="btn btn-sm btn-outline-danger" name="confirmed" value="off">
                                         <i class="fas fa-undo"></i> Un-Confirm
