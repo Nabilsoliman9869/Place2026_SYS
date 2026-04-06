@@ -18,6 +18,36 @@ except Exception:
 
 app = Flask(__name__)
 
+# ---------------------------------------------------------------------------
+# Flask-Caching — SimpleCache (in-process) by default; switch to Redis by
+# setting the CACHE_TYPE and REDIS_URL environment variables in Railway.
+# ---------------------------------------------------------------------------
+try:
+    from flask_caching import Cache as _Cache
+    _cache_type = os.environ.get('CACHE_TYPE', 'SimpleCache')
+    _cache_cfg: dict = {
+        'CACHE_TYPE': _cache_type,
+        'CACHE_DEFAULT_TIMEOUT': int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300')),
+    }
+    if _cache_type in ('RedisCache', 'redis'):
+        _cache_cfg['CACHE_REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    cache = _Cache(config=_cache_cfg)
+    cache.init_app(app)
+except ImportError:
+    # Graceful degradation: provide a no-op cache so decorators still work.
+    class _NoOpCache:
+        def cached(self, *a, **kw):
+            def decorator(f):
+                return f
+            return decorator
+        def delete_memoized(self, *a, **kw):
+            pass
+        def clear(self):
+            pass
+        def init_app(self, *a, **kw):
+            pass
+    cache = _NoOpCache()
+
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
@@ -445,11 +475,28 @@ def get_db_connection_string():
         return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=15;'
 
 def get_db():
+    """Return the per-request pyodbc connection, creating it on first access.
+
+    pyodbc ships with built-in ODBC connection pooling (enabled by default at
+    the driver manager level).  We keep one logical connection per Flask
+    request context (stored in ``g``) so that all queries within a single
+    request share the same connection without re-authenticating, while the
+    underlying ODBC pool reuses physical TCP connections across requests.
+
+    The query timeout is set to 15 s so that a slow SQL Server query fails
+    fast rather than blocking a gevent worker indefinitely.
+    """
     if 'db' not in g:
         try:
-            # Added Connection Timeout for faster failure on bad networks
             import pyodbc
-            g.db = pyodbc.connect(get_db_connection_string(), timeout=5)
+            # pooling=True is the pyodbc default; stated explicitly for clarity.
+            # The ODBC Driver Manager maintains a pool of physical connections
+            # that are reused across requests, eliminating per-request TCP
+            # handshake and authentication overhead.
+            g.db = pyodbc.connect(get_db_connection_string(), timeout=15, pooling=True)
+            # Set a 15-second query execution timeout on the connection so that
+            # a runaway query cannot block a worker slot indefinitely.
+            g.db.timeout = 15
         except ImportError as e:
             g.db_error = str(e)
             g.db = None
@@ -498,6 +545,18 @@ def is_exam_blocked(candidate_id, batch_id):
 def close_connection(exception):
     db = g.pop('db', None)
     if db is not None: db.close()
+
+# ---------------------------------------------------------------------------
+# Cache key helper — per-user cache buckets so role-based data is isolated.
+# ---------------------------------------------------------------------------
+def _make_user_cache_key(*args, **kwargs):
+    """Cache key that includes the current user ID and the full request URL.
+
+    This prevents one user from seeing another user's cached data when the
+    view returns personalised content (e.g. "my candidates", "my leads").
+    """
+    uid = session.get('user_id', 'anon')
+    return f"view/{uid}/{request.full_path}"
 
 def ensure_training_users():
     """إنشاء مستخدمي التدريب (منسق، مدرب، إلخ) إن لم يكونوا موجودين — مفيد بعد النشر."""
@@ -1248,6 +1307,7 @@ def init_db_route():
 @app.route('/recruiter/dashboard_kpi')
 @login_required
 @role_required(['Recruiter', 'Manager'])
+@cache.cached(timeout=300, make_cache_key=_make_user_cache_key)
 def recruiter_dashboard_kpi():
     uid = session['user_id']
     
@@ -3666,6 +3726,7 @@ def talent_monthly_results():
 @app.route('/corporate/dashboard')
 @login_required
 @role_required(['Corporate', 'Manager'])
+@cache.cached(timeout=300, make_cache_key=_make_user_cache_key)
 def corporate_dashboard():
     stats = {}
     stats['client_count'] = query_db('SELECT COUNT(*) as c FROM Clients', one=True)['c']
@@ -4189,6 +4250,7 @@ def recruitment_manage():
 @app.route('/recruitment/clients')
 @login_required
 @role_required(['Manager', 'AccountManager', 'RecruitmentManager', 'Corporate', 'AllocationManager'])
+@cache.cached(timeout=300, make_cache_key=_make_user_cache_key)
 def manage_clients():
     clients = query_db('SELECT * FROM Clients')
     return render_template('recruitment/clients.html', clients=clients or [])
@@ -4196,6 +4258,7 @@ def manage_clients():
 @app.route('/recruitment/requests')
 @login_required
 @role_required(['Manager', 'AccountManager', 'AllocationSpecialist', 'Corporate', 'AllocationManager'])
+@cache.cached(timeout=300, make_cache_key=_make_user_cache_key)
 def manage_requests():
     requests = query_db('''
         SELECT CR.*, C.CompanyName 
@@ -5350,6 +5413,7 @@ def browse_academy():
 @app.route('/training/sales')
 @login_required
 @role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
+@cache.cached(timeout=300, make_cache_key=_make_user_cache_key)
 def training_sales_dashboard():
     """لوحة مبيعات التدريب — محاكاة لوحة التوظيف (إحصائيات + اختصارات المسار)."""
     user_id = session.get('user_id')
@@ -5962,6 +6026,7 @@ def training_open_assessment_slots():
 @app.route('/training/index')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator'])
+@cache.cached(timeout=120, make_cache_key=_make_user_cache_key)
 def training_index():
     view = request.args.get('view', 'active')  # active | archive
     base_sql = """

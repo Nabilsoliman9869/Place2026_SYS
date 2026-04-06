@@ -4,3 +4,7 @@ gunicorn
 pandas
 openpyxl
 requests
+flask-caching
+redis
+gevent
+greenlet
