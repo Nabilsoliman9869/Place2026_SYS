@@ -6,15 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Place _Guide Academy</title>
 
+    <!-- بدون Turbo Drive: تنقل كامل للصفحة — أسرع وأثبت مع السايدبار والمودالات (لا اعتراض للنقرات) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://code.jquery.com">
+
     <!-- Bootstrap 5 & Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
-    <!-- Turbo Drive for SPA Speed -->
-    <script type="module">
-        import hotwiredTurbo from 'https://cdn.skypack.dev/@hotwired/turbo';
-    </script>
 
     <style>
         .en-bold { font-weight: 700; }
@@ -32,8 +32,6 @@
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             min-height: 100vh;
             overflow-x: hidden;
-            opacity: 1;
-            transition: opacity 0.1s ease-in;
         }
 
         /* --- Sidebar Styling --- */
@@ -45,7 +43,7 @@
             width: var(--sidebar-width);
             background: var(--primary-color);
             color: #fff;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: width 0.15s ease, box-shadow 0.15s ease;
             z-index: 1000;
             display: flex;
             flex-direction: column;
@@ -172,7 +170,7 @@
         /* --- Main Content Area --- */
         .main-content {
             margin-left: var(--sidebar-width);
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: margin-left 0.15s ease;
             padding: 20px;
             min-height: 100vh;
             padding-top: calc(var(--top-bar-height) + 20px);
@@ -195,7 +193,7 @@
             right: 0;
             left: var(--sidebar-width);
             z-index: 900;
-            transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: left 0.15s ease;
         }
 
         .sidebar.collapsed~.main-content .top-navbar {

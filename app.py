@@ -9,6 +9,7 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
     from email_service import notify_slot_booking
@@ -17,6 +18,8 @@ except Exception:
         pass
 
 app = Flask(__name__)
+# خلف Railway/Render/Nginx: ترويسات X-Forwarded-* صحيحة (HTTPS، المضيف)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
@@ -117,28 +120,74 @@ TA_CTX_RECRUITMENT = 'Recruitment'
 TA_CTX_TRAINING = 'Training'
 _ta_assessment_context_column_ready = False
 
-# فصل التوظيف/التدريب: لا نعتبر AssessmentContext الفارغ «توظيفاً» لكل المقيّمين —
-# الشواغر NULL تُعرض فقط مع مقيّم من أدوار ذلك الفرع (تفادي ظهور مختبري التدريب في حجز التوظيف والعكس).
+# فصل التوظيف/التدريب: سياق صريح في TASchedules (بعد ترحيل NULL من دور المستخدم).
+# استبعاد مقيّمي التدريب من استعلامات التوظيف والعكس (حماية من أدوار خاطئة في Users_1).
 _SQL_TA_T_RECRUITMENT = (
-    " AND (T.AssessmentContext = N'Recruitment' OR T.AssessmentContext IS NULL) "
+    " AND T.AssessmentContext = N'Recruitment' "
     " AND T.EvaluatorID IN (SELECT UserID FROM Users_1 "
     "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
+    " AND T.EvaluatorID NOT IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
 )
 _SQL_TA_A_RECRUITMENT = (
-    " AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL) "
+    " AND AssessmentContext = N'Recruitment' "
     " AND EvaluatorID IN (SELECT UserID FROM Users_1 "
     "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
+    " AND EvaluatorID NOT IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
 )
 _SQL_TA_T_TRAINING = (
-    " AND (T.AssessmentContext = N'Training' OR T.AssessmentContext IS NULL) "
+    " AND T.AssessmentContext = N'Training' "
     " AND T.EvaluatorID IN (SELECT UserID FROM Users_1 "
     "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
+    " AND T.EvaluatorID NOT IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
 )
 _SQL_TA_A_TRAINING = (
-    " AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL) "
+    " AND AssessmentContext = N'Training' "
     " AND EvaluatorID IN (SELECT UserID FROM Users_1 "
     "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent_training', N'ta-training')) "
+    " AND EvaluatorID NOT IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')) "
 )
+# حجز الريكروتر / مبيعات التوظيف: فقط Talent_Recruitment (لا دور Talent العام) لتفادي خلط مختبري الأكاديمية.
+_SQL_TA_T_RECRUITER_BOOKING = (
+    " AND T.AssessmentContext = N'Recruitment' "
+    " AND T.EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) = N'talent_recruitment') "
+)
+_SQL_TA_A_RECRUITER_BOOKING = (
+    " AND AssessmentContext = N'Recruitment' "
+    " AND EvaluatorID IN (SELECT UserID FROM Users_1 "
+    "      WHERE LOWER(LTRIM(RTRIM(Role))) = N'talent_recruitment') "
+)
+
+
+def _backfill_taschedules_assessment_context_from_roles():
+    """تعيين AssessmentContext للصفوف NULL حسب دور المقيّم (مرة واحدة فعّالة لكل الصفوف المتبقية)."""
+    try:
+        query_db(
+            """
+            UPDATE T SET T.AssessmentContext = N'Recruitment'
+            FROM TASchedules T
+            INNER JOIN Users_1 U ON U.UserID = T.EvaluatorID
+            WHERE T.EvaluatorID IS NOT NULL
+              AND (T.AssessmentContext IS NULL OR LTRIM(RTRIM(T.AssessmentContext)) = N'')
+              AND LOWER(LTRIM(RTRIM(U.Role))) IN (N'talent', N'talent_recruitment')
+            """
+        )
+        query_db(
+            """
+            UPDATE T SET T.AssessmentContext = N'Training'
+            FROM TASchedules T
+            INNER JOIN Users_1 U ON U.UserID = T.EvaluatorID
+            WHERE T.EvaluatorID IS NOT NULL
+              AND (T.AssessmentContext IS NULL OR LTRIM(RTRIM(T.AssessmentContext)) = N'')
+              AND LOWER(LTRIM(RTRIM(U.Role))) IN (N'talent_training', N'ta-training')
+            """
+        )
+    except Exception:
+        pass
 
 
 def _ensure_taschedules_assessment_context_column():
@@ -155,6 +204,7 @@ def _ensure_taschedules_assessment_context_column():
         """)
     except Exception:
         pass
+    _backfill_taschedules_assessment_context_from_roles()
     _ta_assessment_context_column_ready = True
 
 
@@ -252,6 +302,22 @@ def _recruitment_ta_evaluator_ids():
     return list(dict.fromkeys(out))
 
 
+def _recruitment_ta_booking_evaluator_ids():
+    """مقيّمون يظهرون في حجز الريكروتر/مبيعات التوظيف — دور Talent_Recruitment فقط (لا Talent العام)."""
+    rows = query_db(
+        """
+        SELECT UserID FROM Users_1
+        WHERE LOWER(LTRIM(RTRIM(Role))) = N'talent_recruitment'
+        """
+    ) or []
+    out = []
+    for r in rows:
+        uid = _row_user_id(r)
+        if uid is not None:
+            out.append(uid)
+    return list(dict.fromkeys(out))
+
+
 def _training_ta_evaluator_ids():
     rows = query_db(
         """
@@ -294,9 +360,9 @@ def _ensure_ta_slots_for_date_range(user_ids, d_start, d_end, assessment_context
         "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) VALUES (?, ?, ?, ?, ?)"
     )
     ctx_sql = (
-        "(AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL)"
+        "(AssessmentContext = N'Recruitment')"
         if ctx == TA_CTX_RECRUITMENT
-        else "(AssessmentContext = N'Training' OR AssessmentContext IS NULL)"
+        else "(AssessmentContext = N'Training')"
     )
     try:
         if getattr(cur, "fast_executemany", None) is not None:
@@ -361,13 +427,13 @@ def _ensure_taschedules_for_recruitment_evaluators(user_ids, days=14):
 
 
 def _users_for_recruitment_talent_slot_picker():
-    """من يُولَّد لهم مواعيد التوظيف: مختبرو المواهب فقط (لا مديرين في القائمة)."""
+    """قائمة فتح شبكة التوظيف — Talent_Recruitment فقط (نفس من يظهر في حجز الريكروتر)."""
     return query_db(
         """
         SELECT UserID, Username, FullName, Role
         FROM Users_1
-        WHERE LOWER(LTRIM(RTRIM(Role))) IN (N'talent', N'talent_recruitment')
-        ORDER BY Role, FullName, Username
+        WHERE LOWER(LTRIM(RTRIM(Role))) = N'talent_recruitment'
+        ORDER BY FullName, Username
         """
     ) or []
 
@@ -1329,7 +1395,7 @@ def recruiter_scheduling():
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID
         WHERE T.CandidateID IS NULL
           AND T.EvaluatorID IS NOT NULL
-          {_SQL_TA_T_RECRUITMENT.strip()}
+          {_SQL_TA_T_RECRUITER_BOOKING.strip()}
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
                 OR T.Status IS NULL
@@ -1341,9 +1407,9 @@ def recruiter_scheduling():
     """
     try:
         _ensure_taschedules_assessment_context_column()
-        ta_ids = _recruitment_ta_evaluator_ids()
+        ta_ids = _recruitment_ta_booking_evaluator_ids()
         if ta_ids:
-            _ensure_taschedules_for_recruitment_evaluators(ta_ids, days=14)
+            _ensure_ta_slots_for_date_range(ta_ids, datetime.today().date(), datetime.today().date() + timedelta(days=13), TA_CTX_RECRUITMENT)
         available_slots = query_db(slot_sql, (today, end_date)) or []
     except Exception as e:
         try:
@@ -1404,7 +1470,7 @@ def recruiter_post_book_test():
         WHERE SlotID=?
           AND CandidateID IS NULL
           AND EvaluatorID IS NOT NULL
-          {_SQL_TA_A_RECRUITMENT.strip()}
+          {_SQL_TA_A_RECRUITER_BOOKING.strip()}
           AND (
                 LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                 OR Status IS NULL
@@ -1428,7 +1494,7 @@ def recruiter_post_book_test():
             WHERE SlotID=?
               AND CandidateID IS NULL
               AND EvaluatorID IS NOT NULL
-              {_SQL_TA_A_RECRUITMENT.strip()}
+              {_SQL_TA_A_RECRUITER_BOOKING.strip()}
               AND (
                     LOWER(LTRIM(RTRIM(ISNULL(Status, N'')))) = N'available'
                     OR Status IS NULL
@@ -2821,9 +2887,9 @@ def talent_reschedule_slot():
         return _talent_dashboard_redirect_after_slot_action(date_str=back_date, form_talent_context=fctx)
 
     if sctx == TA_CTX_TRAINING:
-        clash_ctx_sql = " AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL) "
+        clash_ctx_sql = " AND AssessmentContext = N'Training' "
     else:
-        clash_ctx_sql = " AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL) "
+        clash_ctx_sql = " AND AssessmentContext = N'Recruitment' "
 
     try:
         clash = query_db(
@@ -3137,7 +3203,7 @@ def book_ta_slot():
         query_db(
             f"""
             UPDATE TASchedules SET Status='Booked', CandidateID=?, BookedBy=?, Type='Initial Assessment', InterviewType=?
-            WHERE SlotID=? {_SQL_TA_A_RECRUITMENT.strip()}
+            WHERE SlotID=? {_SQL_TA_A_RECRUITER_BOOKING.strip()}
             """,
             (candidate_id, session['user_id'], interview_type, slot_id),
         )
@@ -3274,7 +3340,7 @@ def talent_add_self_slot():
     if ctx == TA_CTX_TRAINING:
         ex_sql = (
             "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
-            "AND (AssessmentContext = N'Training' OR AssessmentContext IS NULL)"
+            "AND AssessmentContext = N'Training'"
         )
         ins_sql = (
             "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
@@ -3283,7 +3349,7 @@ def talent_add_self_slot():
     else:
         ex_sql = (
             "SELECT SlotID FROM TASchedules WHERE EvaluatorID=? AND SlotDate=? AND SlotTime=? "
-            "AND (AssessmentContext = N'Recruitment' OR AssessmentContext IS NULL)"
+            "AND AssessmentContext = N'Recruitment'"
         )
         ins_sql = (
             "INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, AssessmentContext) "
@@ -4487,14 +4553,16 @@ def sales_index():
     # Generate slots if not exist for selected date (Auto-generate logic reuse)
     # OPTIMIZED: Use single transaction for bulk insert to avoid 160+ roundtrips
     existing = query_db(
-        f"SELECT COUNT(*) as c FROM TASchedules T WHERE T.SlotDate = ? {_SQL_TA_T_RECRUITMENT.strip()}",
+        f"SELECT COUNT(*) as c FROM TASchedules T WHERE T.SlotDate = ? {_SQL_TA_T_RECRUITER_BOOKING.strip()}",
         (selected_date,),
         one=True,
     )
     if existing['c'] == 0:
         start_hour = 9
-        # MODIFIED: Only create slots for existing Talent users. If none, do NOT create dummy slots that cause confusion.
-        talent_users = query_db("SELECT UserID, Username FROM Users_1 WHERE Role IN ('Talent', 'Talent_Recruitment')")
+        # شواغر حجز التوظيف: توليد لـ Talent_Recruitment فقط (نفس قائمة الريكروتر)
+        talent_users = query_db(
+            "SELECT UserID, Username FROM Users_1 WHERE LOWER(LTRIM(RTRIM(Role))) = N'talent_recruitment'"
+        )
 
         # Prepare bulk insert data
         new_slots = []
@@ -4528,7 +4596,7 @@ def sales_index():
         FROM TASchedules T 
         LEFT JOIN Users_1 U ON T.EvaluatorID = U.UserID 
         WHERE T.SlotDate = ? AND T.Status = 'Available'
-          {_SQL_TA_T_RECRUITMENT.strip()}
+          {_SQL_TA_T_RECRUITER_BOOKING.strip()}
         ORDER BY T.SlotTime, U.Username
     """, (selected_date,))
     

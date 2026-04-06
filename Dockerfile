@@ -37,8 +37,6 @@ COPY . .
 # Expose port (Render sets $PORT env var, but we expose standard 8000 for local testing)
 EXPOSE 8000
 
-# Run command
-# Gunicorn is used for production Flask deployment
-# binds to 0.0.0.0 and the PORT environment variable provided by Render
-# CRITICAL: We must explicitly use the shell form to expand $PORT
-CMD sh -c "gunicorn app:app --bind 0.0.0.0:${PORT:-8000}"
+# Gunicorn: إعدادات من gunicorn.conf.py (workers، timeout، PORT)
+# متغيرات اختيارية: WEB_CONCURRENCY، GUNICORN_TIMEOUT
+CMD gunicorn app:app --config gunicorn.conf.py
