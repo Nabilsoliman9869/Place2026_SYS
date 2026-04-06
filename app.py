@@ -2748,41 +2748,42 @@ def talent_dashboard():
     """
     upcoming_booked = query_db(upcoming_sql, (user_id, today_s, end_s, selected_date)) or []
 
-    # 2. دفعات + طلاب في استعلام واحد (بدل N+1)
+    # 2. دفعات + طلاب: هذا خاص بسياق التدريب فقط (لا يظهر لمختبر التوظيف)
     batches_with_students = []
-    try:
-        rows = query_db("""
-            SELECT B.BatchID, B.BatchName, Cr.CourseName,
-                   E.CandidateID, C.FullName, C.CurrentCEFR
-            FROM CourseBatches B
-            JOIN Courses Cr ON B.CourseID = Cr.CourseID
-            JOIN Enrollments E ON E.BatchID = B.BatchID AND E.Status = 'Active'
-            JOIN Candidates C ON E.CandidateID = C.CandidateID
-            WHERE B.Status = 'Active'
-            ORDER BY B.BatchName, C.FullName
-        """) or []
-        current_batch_id = None
-        current_entry = None
-        for r in rows:
-            bid = r['BatchID']
-            if bid != current_batch_id:
-                current_batch_id = bid
-                current_entry = {
-                    'batch': {
-                        'BatchID': bid,
-                        'BatchName': r['BatchName'],
-                        'CourseName': r['CourseName'],
-                    },
-                    'students': [],
-                }
-                batches_with_students.append(current_entry)
-            current_entry['students'].append({
-                'CandidateID': r['CandidateID'],
-                'FullName': r['FullName'],
-                'CurrentCEFR': r['CurrentCEFR'],
-            })
-    except Exception:
-        pass
+    if ui_ctx == TA_CTX_TRAINING:
+        try:
+            rows = query_db("""
+                SELECT B.BatchID, B.BatchName, Cr.CourseName,
+                       E.CandidateID, C.FullName, C.CurrentCEFR
+                FROM CourseBatches B
+                JOIN Courses Cr ON B.CourseID = Cr.CourseID
+                JOIN Enrollments E ON E.BatchID = B.BatchID AND E.Status = 'Active'
+                JOIN Candidates C ON E.CandidateID = C.CandidateID
+                WHERE B.Status = 'Active'
+                ORDER BY B.BatchName, C.FullName
+            """) or []
+            current_batch_id = None
+            current_entry = None
+            for r in rows:
+                bid = r['BatchID']
+                if bid != current_batch_id:
+                    current_batch_id = bid
+                    current_entry = {
+                        'batch': {
+                            'BatchID': bid,
+                            'BatchName': r['BatchName'],
+                            'CourseName': r['CourseName'],
+                        },
+                        'students': [],
+                    }
+                    batches_with_students.append(current_entry)
+                current_entry['students'].append({
+                    'CandidateID': r['CandidateID'],
+                    'FullName': r['FullName'],
+                    'CurrentCEFR': r['CurrentCEFR'],
+                })
+        except Exception:
+            pass
 
     peer_roles = _ta_peer_roles_for_schedule_context(ui_ctx)
     ph = ','.join(['?'] * len(peer_roles))
