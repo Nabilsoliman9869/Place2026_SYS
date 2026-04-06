@@ -416,8 +416,15 @@
             <!-- ============================================= -->
             <!-- التدريب: كل دور يرى نوافذه فقط — بدون تضارب أو تكرار -->
             <!-- ============================================= -->
-            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer', 'Talent_Training', 'TA-Training']) %}
+            {% if check_role_access(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator', 'Trainer', 'Talent_Training', 'TA-Training', 'Finance']) %}
             <div class="sidebar-section-label"><span class="en-bold">Training</span> <span class="ar-normal">قطاع التدريب</span></div>
+            {% if session.get('role') == 'Finance' %}
+            <a href="{{ url_for('training_sales_acceptance_train_to_hire') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_acceptance_train_to_hire' else '' }}">
+                <i class="fas fa-user-check"></i>
+                <span class="link-text"><span class="en-bold">Acceptance TTH</span> <span class="ar-normal">Train to Hire</span></span>
+            </a>
+            {% endif %}
             {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'Talent_Training', 'TA-Training'] %}
             <a href="{{ url_for('training_open_talent_slots') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_open_talent_slots' else '' }}">
@@ -455,6 +462,16 @@
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_course_fee' else '' }}">
                 <i class="fas fa-file-invoice"></i>
                 <span class="link-text"><span class="en-bold">Course Invoice</span> <span class="ar-normal">فاتورة ايراد دورات</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_to_be_close') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_to_be_close' else '' }}">
+                <i class="fas fa-handshake"></i>
+                <span class="link-text"><span class="en-bold">TO BE CLOSE</span> <span class="ar-normal">إغلاق مهتمين</span></span>
+            </a>
+            <a href="{{ url_for('training_sales_needs_reschedule') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_needs_reschedule' else '' }}">
+                <i class="fas fa-phone-alt"></i>
+                <span class="link-text"><span class="en-bold">Needs reschedule</span> <span class="ar-normal">إعادة جدولة</span></span>
             </a>
             <a href="{{ url_for('training_index') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_index' or request.endpoint == 'wave_details' or request.endpoint == 'batch_details' else '' }}">
@@ -499,6 +516,25 @@
                 class="nav-link {{ 'active' if request.endpoint == 'training_attendance' else '' }}">
                 <i class="fas fa-clipboard-check"></i>
                 <span class="link-text"><span class="en-bold">Attendance</span> <span class="ar-normal">الحضور</span></span>
+            </a>
+            {% endif %}
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'] %}
+            <a href="{{ url_for('training_sales_acceptance_train_to_hire') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_sales_acceptance_train_to_hire' else '' }}">
+                <i class="fas fa-user-check"></i>
+                <span class="link-text"><span class="en-bold">Acceptance TTH</span> <span class="ar-normal">Train to Hire</span></span>
+            </a>
+            {% endif %}
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'] %}
+            <a href="{{ url_for('training_reports_current_courses') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_reports_current_courses' else '' }}">
+                <i class="fas fa-table"></i>
+                <span class="link-text"><span class="en-bold">Report: current courses</span></span>
+            </a>
+            <a href="{{ url_for('training_reports_future_batches') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_reports_future_batches' else '' }}">
+                <i class="fas fa-calendar-plus"></i>
+                <span class="link-text"><span class="en-bold">Report: future batches</span></span>
             </a>
             {% endif %}
             {% if session.get('role') == 'TrainingManager' %}
@@ -581,6 +617,11 @@
                 class="nav-link {{ 'active' if request.endpoint == 'talent_training_completed_tests' else '' }}">
                 <i class="fas fa-list-check"></i>
                 <span class="link-text"><span class="en-bold">Leads tested</span> <span class="ar-normal">ليدز اكتمل اختبارهم</span></span>
+            </a>
+            <a href="{{ url_for('talent_training_pending_final') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'talent_training_pending_final' else '' }}">
+                <i class="fas fa-hourglass-half"></i>
+                <span class="link-text"><span class="en-bold">Pending (TA)</span> <span class="ar-normal">قيد التقييم</span></span>
             </a>
             {% endif %}
             {% if session.get('role') in ['Talent', 'Talent_Recruitment', 'Manager'] %}

@@ -24,7 +24,26 @@
     </ol>
 </nav>
 
-{% if not available_slots %}
+<div class="alert alert-light border mb-3">
+    <span class="en-bold">Lead type:</span>
+    {% if training_lead_subtype|default('interested') == 'train_to_hire' %}
+    <span class="badge bg-dark">Train to Hire</span>
+    {% else %}
+    <span class="badge bg-info text-dark">Interested for training</span>
+    {% endif %}
+    {% if has_exam_fee_invoice %}<span class="badge bg-success ms-1">Exam fee recorded</span>{% endif %}
+    {% if train_to_hire_docs_ok %}<span class="badge bg-success ms-1">TTH documents OK</span>{% endif %}
+</div>
+{% if not can_book_training_slot|default(true) %}
+<div class="alert alert-danger">
+    {% if training_lead_subtype|default('interested') == 'train_to_hire' %}
+    <strong>Train to Hire:</strong> أكمل الروابط الأربعة في ملف المرشح أو سجّل الليد من جديد مع المستندات.
+    {% else %}
+    <strong>Interested:</strong> سجّل دفع رسوم امتحان تحديد المستوى من <a href="{{ url_for('training_sales_exam_fee') }}">Exam Fee</a> قبل الحجز.
+    {% endif %}
+</div>
+<a href="{{ url_for('training_sales_scheduling') }}" class="btn btn-outline-secondary">عودة</a>
+{% elif not available_slots %}
 <div class="card shadow-sm">
     <div class="card-body">
         <p class="text-warning mb-0">لا توجد شاغر متاحة حالياً. تأكد من وجود مستخدم بدور <strong>مختبر مواهب التدريب (Talent_Training)</strong> وأن لديه مواعيد في جدول TASchedules.</p>

@@ -124,14 +124,12 @@
                     <form action="" method="POST">
                         {% if from_exam_feedback %}
                         <input type="hidden" name="exam_kind" value="{{ exam_kind or 'periodic' }}">
-                        <div class="alert alert-{{ 'primary' if exam_kind == 'graduation' else 'info' }} mb-3">
+                        <input type="hidden" name="session_date" value="{{ exam_session_date|default('') }}">
+                        <div class="alert alert-{{ 'primary' if exam_kind == 'graduation' else ('secondary' if exam_kind in ['redo','exit_makeup'] else 'info') }} mb-3">
                             <i class="fas fa-info-circle"></i>
-                            {% if exam_kind == 'graduation' %}
-                            <strong>اختبار تخرج</strong> — يُحفظ النوع في التقييم كـ <code>Training_Graduation</code>
-                            {% else %}
-                            <strong>تقييم دوري</strong> — يُحفظ النوع في التقييم كـ <code>Training_Periodic</code>
-                            {% endif %}
-                            — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id) }}">رجوع لفيدباك الدفعة</a>
+                            <strong>{{ exam_label_ar or 'تقييم دفعة' }}</strong>
+                            — نوع التقييم: <code>{{ eval_subtype or '—' }}</code>
+                            — <a href="{{ url_for('talent_exam_feedback', batch_id=batch_id, session_date=exam_session_date|default('')) }}">رجوع لفيدباك الدفعة</a>
                         </div>
                         {% endif %}
 
@@ -190,20 +188,36 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-bold">4. Final Recommendation <small class="text-muted">(التوصية النهائية)</small></label>
+                            <label class="form-label fw-bold">4. Status / Recommendation <small class="text-muted">(بعد المقابلة أو الاختبار)</small></label>
+                            {% if eval_type == 'Training' or from_exam_feedback %}
+                            <div class="d-flex flex-wrap gap-2" role="group">
+                                {% set ta_opts = [
+                                    ('Accepted', 'Accepted', 'success', 'مقبول'),
+                                    ('Training', 'Training', 'warning', 'تدريب (تحديد مستوى)'),
+                                    ('No Show', 'No Show', 'dark', 'لم يحضر'),
+                                    ('Rejected', 'Rejected', 'danger', 'مرفوض'),
+                                    ('Resc', 'Resc', 'info', 'إعادة جدولة'),
+                                    ('Pending', 'Pending', 'secondary', 'قيد الانتظار'),
+                                    ('Redo', 'Redo', 'primary', 'إعادة'),
+                                    ('Unreachable', 'Unreachable', 'secondary', 'غير متاح'),
+                                ] %}
+                                {% for oid, val, cls, ar in ta_opts %}
+                                <input type="radio" class="btn-check" name="decision" id="ta_{{ oid }}" value="{{ val }}" {% if loop.first %}required{% endif %}>
+                                <label class="btn btn-outline-{{ cls }}" for="ta_{{ oid }}"><span class="en-bold">{{ val }}</span><small class="d-block ar-normal">{{ ar }}</small></label>
+                                {% endfor %}
+                            </div>
+                            <small class="text-muted d-block mt-2 ar-normal">Accepted / Training يحركان مسار المبيعات حسب نوع الليد؛ Resc / Redo / No Show / Unreachable يعيدون للمتابعة مع المبيعات.</small>
+                            {% else %}
                             <div class="btn-group w-100 flex-wrap" role="group">
                                 <input type="radio" class="btn-check" name="decision" id="dec1" value="Accepted" required>
                                 <label class="btn btn-outline-success" for="dec1">مقبول <small class="d-block">نجاح داخل الدورة</small></label>
-
                                 <input type="radio" class="btn-check" name="decision" id="dec2" value="Training">
                                 <label class="btn btn-outline-warning" for="dec2">تدريب <small class="d-block">نجاح في تحديد المستوى</small></label>
-
                                 <input type="radio" class="btn-check" name="decision" id="dec3" value="Rejected">
                                 <label class="btn btn-outline-danger" for="dec3">مرفوض <small class="d-block">رفض للاثنين</small></label>
                             </div>
-                            <small class="text-muted d-block mt-2">
-                                مقبول = نجاح المتدرب داخل الدورة الويف — تدريب = نجاح في تحديد المستوى — مرفوض = رفض للاثنين معاً.
-                            </small>
+                            <small class="text-muted d-block mt-2">توظيف: مقبول / تدريب / مرفوض.</small>
+                            {% endif %}
                         </div>
 
                         <div class="d-grid gap-2">

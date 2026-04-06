@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+    <h2 class="h4 en-bold">Current courses (by date range)</h2>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-auto"><input type="date" name="from" value="{{ df }}" class="form-control"></div>
+        <div class="col-auto"><input type="date" name="to" value="{{ dt }}" class="form-control"></div>
+        <div class="col-auto"><button class="btn btn-primary" type="submit">Filter</button></div>
+    </form>
+    <p class="small text-muted">Table 1 style: Level (course) / Room / Dates / Trainer / Days / Time / Status</p>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr><th>Level / Course</th><th>Room</th><th>Start</th><th>End</th><th>Trainer</th><th>Days</th><th>Time</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ r.course_level }}</td>
+                    <td>{{ r.room or 'N/A' }}</td>
+                    <td>{{ r.StartDate }}</td>
+                    <td>{{ r.EndDate }}</td>
+                    <td>{{ r.trainer_name or '—' }}</td>
+                    <td>{{ r.days or '—' }}</td>
+                    <td>{{ r.StartTime or '—' }} — {{ r.EndTime or '—' }}</td>
+                    <td>{{ r.Status }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted">No batches match.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

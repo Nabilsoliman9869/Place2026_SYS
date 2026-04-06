@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+    <h2 class="h4"><span class="en-bold">TO BE CLOSE</span> <span class="ar-normal text-muted">— متابعة إغلاق مهتمي التدريب</span></h2>
+    <p class="text-muted small">بعد <span class="en-bold">Accepted</span> في اختبار تحديد المستوى أو التخرج (مسار Interested).</p>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th><th>Phone</th><th>Email</th><th>Closer / Follow-up</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ r.FullName }}</td>
+                    <td>{{ r.Phone }}</td>
+                    <td>{{ r.Email or '—' }}</td>
+                    <td>
+                        <form method="post" class="row g-1 align-items-end">
+                            <input type="hidden" name="candidate_id" value="{{ r.CandidateID }}">
+                            <div class="col-12"><small class="text-muted">Registered by: {{ r.RegAgentName or r.RegAgentUsername or '—' }}</small></div>
+                            <div class="col-md-3"><input type="date" name="follow_up_date" class="form-control form-control-sm" placeholder="Follow Up"></div>
+                            <div class="col-md-3"><input type="text" name="closer_name" class="form-control form-control-sm" placeholder="Closer (override)"></div>
+                            <div class="col-md-6"><input type="text" name="language_feedback" class="form-control form-control-sm" placeholder="Language Feedback"></div>
+                            <div class="col-md-4">
+                                <select name="closing_status" class="form-select form-select-sm">
+                                    <option value="">Closing Status…</option>
+                                    {% for s in closing_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3"><input type="date" name="status_date" class="form-control form-control-sm"></div>
+                            <div class="col-md-4"><input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason"></div>
+                            <div class="col-12"><button type="submit" class="btn btn-sm btn-primary">Save closing</button></div>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No rows in TO BE CLOSE.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

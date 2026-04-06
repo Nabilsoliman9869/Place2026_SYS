@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+    <h2 class="h4 en-bold">Future batches</h2>
+    <p class="text-muted small">From today ({{ today }}) onward.</p>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr><th>Wave</th><th>Course</th><th>Start</th><th>End</th><th>Trainer</th><th>Room</th><th>Days</th><th>Time</th></tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ r.BatchName }}</td>
+                    <td>{{ r.CourseName }}</td>
+                    <td>{{ r.StartDate }}</td>
+                    <td>{{ r.EndDate }}</td>
+                    <td>{{ r.TrainerName or '—' }}</td>
+                    <td>{{ r.RoomName or 'N/A' }}</td>
+                    <td>{{ r.WeekDays or '—' }}</td>
+                    <td>{{ r.StartTime or '—' }} — {{ r.EndTime or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted">No future batches.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

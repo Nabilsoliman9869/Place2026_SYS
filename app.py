@@ -100,6 +100,237 @@ def _assignment_done_bit_from_status(status_str):
     return 1 if status_str == 'Done' else 0
 
 
+# --- مسار التدريب الكامل: Lead / Train to Hire / قوائم المبيعات والمختبر ---
+TRAINING_LEAD_SUBTYPE_INTERESTED = 'interested'
+TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE = 'train_to_hire'
+
+TRAINING_QUEUE_TO_BE_CLOSE = 'TO_BE_CLOSE'
+TRAINING_QUEUE_ACCEPTANCE_TTH = 'ACCEPTANCE_TTH'
+TRAINING_QUEUE_RETURN_SALES = 'RETURN_SALES'
+
+TRAINING_TA_SUBSTATUS_PENDING = 'PENDING_FINAL'
+
+TA_TRAINING_DECISION_VALUES = (
+    'Accepted', 'No Show', 'Rejected', 'Resc', 'Pending', 'Redo', 'Unreachable',
+)
+# قرار قديم في الواجهة — يُعامل كـ Accepted لمسار «مهتم تدريب» في الإغلاق
+TA_TRAINING_LEGACY_TRAINING_DECISION = 'Training'
+
+TRAINING_CLOSING_STATUS_VALUES = (
+    'Confirmed Training', 'Pending Month', 'Not Interested', 'Rejected', 'Unreachable',
+    'Call Back', 'Pending', 'Reconsidering', 'Restrictions', 'GA Employee', 'Moved to Offshore',
+)
+
+_training_workflow_schema_done = False
+
+
+def _ensure_training_workflow_schema():
+    """أعمدة Candidates وجداول حضور الامتحان والضيوف — آمنة للتكرار."""
+    global _training_workflow_schema_done
+    if _training_workflow_schema_done:
+        return
+    alters = [
+        "ALTER TABLE Candidates ADD TrainingLeadSubtype NVARCHAR(30) NULL",
+        "ALTER TABLE Candidates ADD TrainToHire_Link_Degree NVARCHAR(512) NULL",
+        "ALTER TABLE Candidates ADD TrainToHire_Link_AltEmail NVARCHAR(512) NULL",
+        "ALTER TABLE Candidates ADD TrainToHire_Link_IdCard NVARCHAR(512) NULL",
+        "ALTER TABLE Candidates ADD TrainToHire_Link_Contract NVARCHAR(512) NULL",
+        "ALTER TABLE Candidates ADD UniversityCollege NVARCHAR(200) NULL",
+        "ALTER TABLE Candidates ADD ResidenceArea NVARCHAR(200) NULL",
+        "ALTER TABLE Candidates ADD BirthDate DATE NULL",
+        "ALTER TABLE Candidates ADD TrainingSalesQueue NVARCHAR(40) NULL",
+        "ALTER TABLE Candidates ADD TrainingTA_Substatus NVARCHAR(40) NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_FollowUpDate DATE NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_CloserUserID INT NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_CloserName NVARCHAR(200) NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_LanguageFeedback NVARCHAR(MAX) NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_Status NVARCHAR(80) NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_StatusDate DATE NULL",
+        "ALTER TABLE Candidates ADD TrainingClosing_Reason NVARCHAR(MAX) NULL",
+        "ALTER TABLE Candidates ADD Age INT NULL",
+    ]
+    for stmt in alters:
+        try:
+            query_db(stmt)
+        except Exception:
+            pass
+    create_batch_presence = """
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='BatchExamSessionPresence' AND xtype='U')
+    CREATE TABLE BatchExamSessionPresence (
+        BatchID INT NOT NULL,
+        SessionDate DATE NOT NULL,
+        EnrollmentID INT NOT NULL,
+        IsPresent BIT NOT NULL DEFAULT 1,
+        UpdatedAt DATETIME DEFAULT GETDATE(),
+        UpdatedBy INT NULL,
+        PRIMARY KEY (BatchID, SessionDate, EnrollmentID)
+    )
+    """
+    create_guests = """
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ClassSessionGuests' AND xtype='U')
+    CREATE TABLE ClassSessionGuests (
+        GuestID INT IDENTITY(1,1) PRIMARY KEY,
+        BatchID INT NOT NULL,
+        SessionDate DATE NOT NULL,
+        FullName NVARCHAR(120) NOT NULL,
+        Phone NVARCHAR(50) NULL,
+        Email NVARCHAR(120) NULL,
+        RecordedBy INT NULL,
+        RecordedAt DATETIME DEFAULT GETDATE()
+    )
+    """
+    try:
+        query_db(create_batch_presence)
+    except Exception:
+        pass
+    try:
+        query_db(create_guests)
+    except Exception:
+        pass
+    _training_workflow_schema_done = True
+
+
+def _is_training_candidate_row(c):
+    if not c:
+        return False
+    pi = (c.get('PrimaryIntent') or '').strip()
+    st = (c.get('Status') or '').strip()
+    return pi == 'Training' or st == 'Training_Lead'
+
+
+def _candidate_has_training_exam_fee_paid(candidate_id):
+    """فاتورة رسوم امتحان تحديد المستوى في InvoiceItems (نفس وصف Exam Fee)."""
+    try:
+        cid = int(candidate_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        row = query_db(
+            """
+            SELECT TOP 1 I.InvoiceID
+            FROM InvoiceHeaders I
+            INNER JOIN InvoiceItems II ON II.InvoiceID = I.InvoiceID
+            WHERE I.CandidateID = ?
+              AND (II.Description LIKE ? OR II.Description LIKE ?)
+            """,
+            (cid, '%' + EXAM_FEE_DESCRIPTION + '%', '%رسوم امتحان%'),
+            one=True,
+        )
+        return bool(row and row.get('InvoiceID'))
+    except Exception:
+        return False
+
+
+def _train_to_hire_docs_complete(c):
+    if not c:
+        return False
+    for k in (
+        'TrainToHire_Link_Degree',
+        'TrainToHire_Link_AltEmail',
+        'TrainToHire_Link_IdCard',
+        'TrainToHire_Link_Contract',
+    ):
+        v = (c.get(k) or '').strip()
+        if not v or not v.lower().startswith('http'):
+            return False
+    return True
+
+
+def _candidate_training_lead_subtype(c):
+    s = (c.get('TrainingLeadSubtype') or '').strip().lower()
+    if s == TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE:
+        return TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE
+    return TRAINING_LEAD_SUBTYPE_INTERESTED
+
+
+def _normalize_ta_training_decision(raw):
+    d = (raw or '').strip()
+    if d == TA_TRAINING_LEGACY_TRAINING_DECISION:
+        return 'Accepted'
+    if d in TA_TRAINING_DECISION_VALUES:
+        return d
+    if d in ('Accepted', 'Rejected'):
+        return d
+    return ''
+
+
+def _training_eval_triggers_sales_queue(evaluation_type):
+    et = (evaluation_type or '').strip()
+    return et in (
+        'Training',
+        EVAL_TRAINING_PLACEMENT,
+        EVAL_TRAINING_GRADUATION,
+    )
+
+
+def _training_apply_post_ta_decision(candidate_id, decision, lead_subtype, evaluation_type):
+    """تحديث TrainingSalesQueue / TrainingTA_Substatus بعد حفظ تقييم تدريب."""
+    if not candidate_id:
+        return
+    try:
+        cid = int(candidate_id)
+    except (TypeError, ValueError):
+        return
+    try:
+        crow = query_db(
+            "SELECT PrimaryIntent, Status FROM Candidates WHERE CandidateID=?",
+            (cid,),
+            one=True,
+        )
+        if not _is_training_candidate_row(crow):
+            return
+    except Exception:
+        return
+    decision = _normalize_ta_training_decision(decision)
+    lead_subtype = (lead_subtype or TRAINING_LEAD_SUBTYPE_INTERESTED).strip().lower()
+    if not _training_eval_triggers_sales_queue(evaluation_type):
+        return
+    queue = None
+    ta_sub = None
+    if decision in ('Resc', 'Redo', 'Unreachable'):
+        queue = TRAINING_QUEUE_RETURN_SALES
+    elif decision == 'No Show':
+        queue = TRAINING_QUEUE_RETURN_SALES
+    elif decision == 'Pending':
+        ta_sub = TRAINING_TA_SUBSTATUS_PENDING
+    elif decision == 'Rejected':
+        queue = None
+        ta_sub = None
+    elif decision == 'Accepted':
+        if lead_subtype == TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE:
+            queue = TRAINING_QUEUE_ACCEPTANCE_TTH
+        else:
+            queue = TRAINING_QUEUE_TO_BE_CLOSE
+    try:
+        if decision == 'Rejected':
+            query_db(
+                """
+                UPDATE Candidates SET TrainingSalesQueue = NULL, TrainingTA_Substatus = NULL
+                WHERE CandidateID = ?
+                """,
+                (cid,),
+            )
+        else:
+            query_db(
+                """
+                UPDATE Candidates SET TrainingSalesQueue = ?, TrainingTA_Substatus = ?
+                WHERE CandidateID = ?
+                """,
+                (queue, ta_sub, cid),
+            )
+    except Exception:
+        pass
+
+
+def _taschedule_is_training_context(slot_row):
+    if not slot_row:
+        return False
+    ctx = (slot_row.get('AssessmentContext') or '').strip()
+    if ctx == TA_CTX_TRAINING:
+        return True
+    return False
+
+
 def _row_user_id(row):
     if not row:
         return None
@@ -628,6 +859,10 @@ def _before_request_perf_and_user():
                     session['_user_cache'] = {'id': user_id, 'user': g.user, 't': time.time()}
             except Exception:
                 g.user = None
+    try:
+        _ensure_training_workflow_schema()
+    except Exception:
+        pass
 
 @app.after_request
 def _after_request_perf_log(response):
@@ -3031,12 +3266,20 @@ def _cefr_levels_matching_center():
 
 
 # أنواع تقييم مختبر مواهب التدريب (يُحفظ في Evaluations.EvaluationType)
+EVAL_TRAINING_PLACEMENT = 'Training_Placement'
 EVAL_TRAINING_PERIODIC = 'Training_Periodic'
 EVAL_TRAINING_GRADUATION = 'Training_Graduation'
+EVAL_TRAINING_REDO = 'Training_Redo'
+EVAL_TRAINING_EXIT_MAKEUP = 'Training_ExitMakeUp'
 def _exam_kind_to_eval_type(exam_kind):
-    """periodic → تقييم دوري | graduation → اختبار تخرج"""
-    if (exam_kind or '').strip().lower() == 'graduation':
+    """periodic | graduation | redo | exit_makeup → نوع التقييم في Evaluations."""
+    ek = (exam_kind or '').strip().lower()
+    if ek == 'graduation':
         return EVAL_TRAINING_GRADUATION
+    if ek == 'redo':
+        return EVAL_TRAINING_REDO
+    if ek in ('exit_makeup', 'exit-makeup', 'exit makeup'):
+        return EVAL_TRAINING_EXIT_MAKEUP
     return EVAL_TRAINING_PERIODIC
 
 
@@ -3138,7 +3381,10 @@ def _talent_evaluate_sidebar_context(candidate_id, current_batch=None):
 def talent_evaluate(slot_id):
     slot = query_db("""
         SELECT T.*, C.CandidateID, C.FullName, C.Phone, C.Email, C.Age, C.Status, C.CurrentCEFR, C.PrimaryIntent,
-               C.RecruiterFeedback, C.MarketingAssessment
+               C.RecruiterFeedback, C.MarketingAssessment,
+               C.TrainingLeadSubtype, C.TrainToHire_Link_Degree, C.TrainToHire_Link_AltEmail,
+               C.TrainToHire_Link_IdCard, C.TrainToHire_Link_Contract,
+               C.UniversityCollege, C.ResidenceArea, C.BirthDate, C.SourceChannel, C.GraduationStatus
         FROM TASchedules T 
         JOIN Candidates C ON T.CandidateID = C.CandidateID 
         WHERE T.SlotID = ?
@@ -3159,7 +3405,10 @@ def talent_evaluate(slot_id):
     if request.method == 'POST':
         f = request.form
         cefr = (f.get('cefr_level') or '').strip()
-        decision = (f.get('decision') or '').strip()
+        decision_raw = (f.get('decision') or '').strip()
+        decision = _normalize_ta_training_decision(decision_raw) if eval_type == 'Training' else decision_raw
+        if eval_type == 'Training' and decision_raw == TA_TRAINING_LEGACY_TRAINING_DECISION:
+            decision = 'Accepted'
         if not cefr or not decision:
             flash('CEFR Level and Decision are required', 'warning')
             return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
@@ -3172,6 +3421,7 @@ def talent_evaluate(slot_id):
         comments = (f.get('comments') or '')[:4000]
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
+        insert_eval_type = EVAL_TRAINING_PLACEMENT if eval_type == 'Training' else eval_type
         
         try:
             query_db('''
@@ -3179,9 +3429,18 @@ def talent_evaluate(slot_id):
                                          Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
             ''', (slot['CandidateID'], slot_id, score_c, score_f, score_p, score_s, score_v,
-                  cefr, decision, recommended_level, comments, session['user_id'], eval_type, recording_link))
-            query_db("UPDATE TASchedules SET Status='Completed' WHERE SlotID=?", (slot_id,))
+                  cefr, decision if eval_type == 'Training' else decision_raw, recommended_level, comments, session['user_id'], insert_eval_type, recording_link))
+            fin_dec = decision if eval_type == 'Training' else decision_raw
+            slot_status = 'No Show' if (eval_type == 'Training' and fin_dec == 'No Show') else 'Completed'
+            query_db("UPDATE TASchedules SET Status=? WHERE SlotID=?", (slot_status, slot_id))
             query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', slot['CandidateID']))
+            if eval_type == 'Training':
+                _training_apply_post_ta_decision(
+                    slot['CandidateID'],
+                    decision if eval_type == 'Training' else decision_raw,
+                    _candidate_training_lead_subtype(slot),
+                    insert_eval_type,
+                )
             flash('تم حفظ التقييم بنجاح', 'success')
             sd = slot.get('SlotDate')
             dstr = sd.strftime('%Y-%m-%d') if sd and hasattr(sd, 'strftime') else (str(sd)[:10] if sd else datetime.today().strftime('%Y-%m-%d'))
@@ -3234,6 +3493,26 @@ def mark_no_show():
     # 1. Update Slot Status
     query_db("UPDATE TASchedules SET Status='No Show' WHERE SlotID=?", (slot_id,))
     
+    # 1b. مسار التدريب: إرجاع الليد للمبيعات لإعادة الجدولة
+    slot_c = query_db("SELECT CandidateID FROM TASchedules WHERE SlotID=?", (slot_id,), one=True)
+    if slot_c and _taschedule_is_training_context(slot_meta):
+        try:
+            crow = query_db(
+                "SELECT PrimaryIntent, Status FROM Candidates WHERE CandidateID=?",
+                (slot_c['CandidateID'],),
+                one=True,
+            )
+            if _is_training_candidate_row(crow):
+                query_db(
+                    """
+                    UPDATE Candidates SET TrainingSalesQueue = ?, TrainingTA_Substatus = NULL
+                    WHERE CandidateID = ?
+                    """,
+                    (TRAINING_QUEUE_RETURN_SALES, slot_c['CandidateID']),
+                )
+        except Exception:
+            pass
+
     # 2. Notify Sales Agent (Create Alert/Notification)
     # We fetch the Sales Agent ID from the Candidate
     slot = query_db("SELECT CandidateID FROM TASchedules WHERE SlotID=?", (slot_id,), one=True)
@@ -3377,6 +3656,7 @@ def talent_exam_feedback(batch_id):
             return redirect(url_for('talent_dashboard', context='training'))
         return redirect(url_for('talent_dashboard', context='recruitment'))
     is_archived = (batch.get('Status') or '').strip() != 'Active'
+    session_date = (request.args.get('session_date') or '').strip() or datetime.today().strftime('%Y-%m-%d')
     students = query_db("""
         SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR
         FROM Enrollments E
@@ -3384,42 +3664,151 @@ def talent_exam_feedback(batch_id):
         WHERE E.BatchID = ? AND E.Status = 'Active'
         ORDER BY C.FullName
     """, (batch_id,)) or []
-    return render_template('talent/exam_feedback.html', batch=batch, students=students, is_archived=is_archived)
+    presence = {}
+    try:
+        prow = query_db(
+            """
+            SELECT EnrollmentID, IsPresent FROM BatchExamSessionPresence
+            WHERE BatchID = ? AND SessionDate = CAST(? AS DATE)
+            """,
+            (batch_id, session_date),
+        ) or []
+        for p in prow:
+            presence[int(p['EnrollmentID'])] = bool(p.get('IsPresent'))
+    except Exception:
+        presence = {}
+    return render_template(
+        'talent/exam_feedback.html',
+        batch=batch,
+        students=students,
+        is_archived=is_archived,
+        session_date=session_date,
+        presence_map=presence,
+    )
+
+
+@app.route('/talent/exam_feedback/<int:batch_id>/presence', methods=['POST'])
+@login_required
+@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training', 'Trainer', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
+def talent_exam_feedback_save_presence(batch_id):
+    """حضور/غياب يوم الامتحان للدفعة — يُقيَّم الامتحان للحاضرين فقط."""
+    session_date = (request.form.get('session_date') or '').strip()
+    if not session_date:
+        flash('تاريخ الجلسة مطلوب.', 'warning')
+        return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
+    enroll_rows = query_db(
+        "SELECT EnrollmentID FROM Enrollments WHERE BatchID=? AND Status='Active'",
+        (batch_id,),
+    ) or []
+    uid = session.get('user_id')
+    try:
+        query_db(
+            "DELETE FROM BatchExamSessionPresence WHERE BatchID=? AND SessionDate=CAST(? AS DATE)",
+            (batch_id, session_date),
+        )
+    except Exception:
+        pass
+    for r in enroll_rows:
+        eid = r.get('EnrollmentID')
+        if eid is None:
+            continue
+        is_pres = request.form.get(f'present_{eid}') in ('1', 'on', 'yes', 'true', 'True')
+        try:
+            query_db(
+                """
+                INSERT INTO BatchExamSessionPresence (BatchID, SessionDate, EnrollmentID, IsPresent, UpdatedBy)
+                VALUES (?, CAST(? AS DATE), ?, ?, ?)
+                """,
+                (batch_id, session_date, int(eid), 1 if is_pres else 0, uid),
+            )
+        except Exception:
+            pass
+    flash('تم حفظ حضور الجلسة.', 'success')
+    return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
+
 
 @app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>', defaults={'exam_kind': 'periodic'}, methods=['GET', 'POST'])
 @app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>/<exam_kind>', methods=['GET', 'POST'])
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training'])
 def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
-    """تقييم من الدفعة: تقييم دوري (periodic) أو اختبار تخرج (graduation) — يُحفظ في EvaluationType."""
-    ek = (exam_kind or 'periodic').strip().lower()
-    if ek not in ('periodic', 'graduation'):
+    """تقييم من الدفعة: دوري / تخرج / إعادة / Exit Make-Up — يُحفظ في EvaluationType."""
+    session_date = (request.args.get('session_date') or request.form.get('session_date') or '').strip() or datetime.today().strftime('%Y-%m-%d')
+    ek = (exam_kind or 'periodic').strip().lower().replace('-', '_')
+    if ek == 'exit makeup':
+        ek = 'exit_makeup'
+    if ek not in ('periodic', 'graduation', 'redo', 'exit_makeup'):
         ek = 'periodic'
-    cand = query_db("SELECT CandidateID, FullName, Phone, Email, Age, Status, CurrentCEFR, PrimaryIntent FROM Candidates WHERE CandidateID=?", (candidate_id,), one=True)
+    enroll = query_db(
+        "SELECT EnrollmentID FROM Enrollments WHERE BatchID=? AND CandidateID=? AND Status='Active'",
+        (batch_id, candidate_id),
+        one=True,
+    )
+    if enroll:
+        try:
+            pr = query_db(
+                """
+                SELECT IsPresent FROM BatchExamSessionPresence
+                WHERE BatchID=? AND SessionDate=CAST(? AS DATE) AND EnrollmentID=?
+                """,
+                (batch_id, session_date, enroll['EnrollmentID']),
+                one=True,
+            )
+            if pr and pr.get('IsPresent') is False:
+                flash('هذا المتدرب مُسجَّل غائباً في تاريخ الجلسة — لا يُسجَّل له امتحان.', 'warning')
+                return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
+        except Exception:
+            pass
+    cand = query_db(
+        """
+        SELECT CandidateID, FullName, Phone, Email, Age, Status, CurrentCEFR, PrimaryIntent,
+               TrainingLeadSubtype, TrainToHire_Link_Degree, TrainToHire_Link_AltEmail,
+               TrainToHire_Link_IdCard, TrainToHire_Link_Contract
+        FROM Candidates WHERE CandidateID=?
+        """,
+        (candidate_id,),
+        one=True,
+    )
     batch = query_db("SELECT B.*, C.CourseName FROM CourseBatches B JOIN Courses C ON B.CourseID = C.CourseID WHERE B.BatchID=?", (batch_id,), one=True)
     if not cand or not batch:
         flash('المرشح أو الدفعة غير موجودين.', 'danger')
-        return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
+        return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
     eval_subtype = _exam_kind_to_eval_type(ek)
     eval_display = 'Training'
     slot_dict = {k: cand[k] for k in cand} if cand else {}
     cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
-    exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
+    _exam_labels = {
+        'periodic': 'تقييم دوري',
+        'graduation': 'اختبار تخرج',
+        'redo': 'اختبار إعادة (Redo)',
+        'exit_makeup': 'Exit Make-Up',
+    }
+    exam_label_ar = _exam_labels.get(ek, 'تقييم')
     eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
     if request.method == 'POST':
         f = request.form
-        ek = (f.get('exam_kind') or 'periodic').strip().lower()
-        if ek not in ('periodic', 'graduation'):
+        session_date = (f.get('session_date') or session_date).strip() or datetime.today().strftime('%Y-%m-%d')
+        ek = (f.get('exam_kind') or ek).strip().lower().replace('-', '_')
+        if ek == 'exit makeup':
+            ek = 'exit_makeup'
+        if ek not in ('periodic', 'graduation', 'redo', 'exit_makeup'):
             ek = 'periodic'
         eval_subtype = _exam_kind_to_eval_type(ek)
-        exam_label_ar = 'تقييم دوري' if ek == 'periodic' else 'اختبار تخرج'
+        exam_label_ar = _exam_labels.get(ek, 'تقييم')
         cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
         eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
         cefr = (f.get('cefr_level') or '').strip()
-        decision = (f.get('decision') or '').strip()
+        decision_raw = (f.get('decision') or '').strip()
+        decision = _normalize_ta_training_decision(decision_raw)
+        if decision_raw == TA_TRAINING_LEGACY_TRAINING_DECISION:
+            decision = 'Accepted'
         if not cefr or not decision:
             flash('CEFR Level و Decision مطلوبان.', 'warning')
-            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
+            return render_template(
+                'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
+                from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+            )
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
         score_p = _safe_int(f.get('score_p'))
@@ -3428,14 +3817,15 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
         comments = (f.get('comments') or '')[:4000]
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
-        slot_type = 'Exam Feedback (Periodic)' if ek == 'periodic' else 'Exam Feedback (Graduation)'
+        slot_type = f"Exam Feedback ({ek})"
         try:
             db = get_db()
             cur = db.cursor()
+            syn_status = 'No Show' if decision == 'No Show' else 'Completed'
             cur.execute("""
                 INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType, AssessmentContext)
-                VALUES (CAST(GETDATE() AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), 'Completed', ?, ?, ?, ?, N'Training')
-            """, (session['user_id'], candidate_id, slot_type, 'Training'))
+                VALUES (CAST(? AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), ?, ?, ?, ?, N'Training')
+            """, (session_date, syn_status, session['user_id'], candidate_id, slot_type, 'Training'))
             cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
             slot_id = int(row[0]) if row and row[0] else None
@@ -3448,14 +3838,25 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
                 ''', (candidate_id, slot_id, score_c, score_f, score_p, score_s, score_v, cefr, decision, recommended_level, comments, session['user_id'], eval_subtype, recording_link))
                 query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', candidate_id))
+                _training_apply_post_ta_decision(
+                    candidate_id, decision, _candidate_training_lead_subtype(cand), eval_subtype,
+                )
                 flash('تم حفظ ' + exam_label_ar + ' بنجاح.', 'success')
             else:
                 flash('خطأ في الحصول على SlotID.', 'danger')
-            return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
+            return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
         except Exception as e:
             flash(f'خطأ: {str(e)[:80]}', 'danger')
-            return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
-    return render_template('talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track, from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar, eval_subtype=eval_subtype, eval_sidebar=eval_sidebar)
+            return render_template(
+                'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
+                from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+            )
+    return render_template(
+        'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
+        from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
+        eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+    )
 
 @app.route('/talent/training_completed_tests')
 @login_required
@@ -3464,13 +3865,18 @@ def talent_training_completed_tests():
     """ليدز التدريب الذين أُنجز لهم اختبار المواهب — مع اسم المختبر."""
     rows = []
     try:
-        params = (EVAL_TRAINING_PERIODIC, EVAL_TRAINING_GRADUATION, 'Training')
-        # الفلترة بالنوع فقط: Training_Periodic / Training_Graduation / Training (مسار التدريب).
-        # لا نربط بـ Status=Training_Lead لأن الحفظ يحدّث المرشح غالباً إلى Evaluated فيختفي من الفلتر القديم.
-        # ترتيب الاستعلامات: يعمل بدون عمود CreatedAt في Evaluations (غير موجود في كثير من القواعد).
+        params = (
+            EVAL_TRAINING_PLACEMENT,
+            EVAL_TRAINING_PERIODIC,
+            EVAL_TRAINING_GRADUATION,
+            EVAL_TRAINING_REDO,
+            EVAL_TRAINING_EXIT_MAKEUP,
+            'Training',
+        )
+        in6 = 'IN (?, ?, ?, ?, ?, ?)'
         queries = [
             (
-                """
+                f"""
             SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
                    E.EvaluationDate AS EvaluationDate,
                    C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
@@ -3478,13 +3884,13 @@ def talent_training_completed_tests():
             FROM Evaluations E
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-            WHERE E.EvaluationType IN (?, ?, ?)
+            WHERE E.EvaluationType {in6}
             ORDER BY E.EvaluationDate DESC, E.EvaluationID DESC
             """,
                 params,
             ),
             (
-                """
+                f"""
             SELECT E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
                    COALESCE(E.EvaluationDate, E.CreatedAt) AS EvaluationDate,
                    C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
@@ -3492,13 +3898,13 @@ def talent_training_completed_tests():
             FROM Evaluations E
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
             LEFT JOIN Users_1 U ON E.EvaluatorID = U.UserID
-            WHERE E.EvaluationType IN (?, ?, ?)
+            WHERE E.EvaluationType {in6}
             ORDER BY COALESCE(E.EvaluationDate, E.CreatedAt) DESC, E.EvaluationID DESC
             """,
                 params,
             ),
             (
-                """
+                f"""
             SELECT TOP 800 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
                    E.EvaluationDate AS EvaluationDate,
                    C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
@@ -3506,13 +3912,13 @@ def talent_training_completed_tests():
                    CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
             FROM Evaluations E
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-            WHERE E.EvaluationType IN (?, ?, ?)
+            WHERE E.EvaluationType {in6}
             ORDER BY E.EvaluationDate DESC, E.EvaluationID DESC
             """,
                 params,
             ),
             (
-                """
+                f"""
             SELECT TOP 800 E.EvaluationID, E.CandidateID, E.CEFR_Level, E.Decision, E.EvaluationType,
                    CAST(NULL AS DATETIME) AS EvaluationDate,
                    C.FullName, C.Phone, C.Email, C.Status, C.PrimaryIntent,
@@ -3520,7 +3926,7 @@ def talent_training_completed_tests():
                    CAST(NULL AS NVARCHAR(100)) AS EvaluatorUsername
             FROM Evaluations E
             INNER JOIN Candidates C ON E.CandidateID = C.CandidateID
-            WHERE E.EvaluationType IN (?, ?, ?)
+            WHERE E.EvaluationType {in6}
             ORDER BY E.EvaluationID DESC
             """,
                 params,
@@ -5467,7 +5873,8 @@ def training_sales_index():
     # مهتمو التدريب: من لم يُحجز لهم موعد بعد (بعد الحجز يختفون من هنا ويظهرون في متابعة المواعيد)
     try:
         training_leads = query_db("""
-            SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CreatedAt, C.PrimaryIntent
+            SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.Status, C.CreatedAt, C.PrimaryIntent,
+                   C.TrainingLeadSubtype, C.UniversityCollege, C.ResidenceArea, C.SourceChannel, C.GraduationStatus
             FROM Candidates C
             WHERE (C.PrimaryIntent = 'Training' OR C.Status = 'Training_Lead')
             AND NOT EXISTS (
@@ -5492,25 +5899,134 @@ def training_sales_register():
     f = request.form
     full_name = (f.get('full_name') or '').strip()
     phone = (f.get('phone') or '').strip()
-    email = (f.get('email') or '').strip() or None
-    if not full_name or not phone:
-        flash('الاسم ورقم الهاتف مطلوبان.', 'danger')
+    email = (f.get('email') or '').strip()
+    university = (f.get('university_college') or '').strip()
+    residence = (f.get('residence_area') or '').strip()
+    source = (f.get('lead_source') or '').strip()
+    age_s = (f.get('age') or '').strip()
+    birth_s = (f.get('birth_date') or '').strip()
+    graduate = (f.get('is_graduate') or '').strip()
+    train_to_hire = f.get('train_to_hire') in ('1', 'on', 'yes', 'true', 'True')
+    lk_deg = (f.get('tth_link_degree') or '').strip()
+    lk_mail = (f.get('tth_link_alt_email') or '').strip()
+    lk_id = (f.get('tth_link_idcard') or '').strip()
+    lk_ctr = (f.get('tth_link_contract') or '').strip()
+
+    if not full_name or not phone or not email:
+        flash('الاسم والهاتف والبريد إلزاميون.', 'danger')
         return redirect(url_for('training_sales_index'))
-    try:
-        query_db("""
-            INSERT INTO Candidates (FullName, Phone, Email, Status, CreatedAt, PrimaryIntent, SalesAgentID)
-            VALUES (?, ?, ?, 'Training_Lead', GETDATE(), 'Training', ?)
-        """, (full_name, phone, email, session.get('user_id')))
-        flash('تم تسجيل مهتم التدريب بنجاح.', 'success')
-    except Exception:
+    if not university or not residence or not source:
+        flash('الجامعة/الكلية ومنطقة السكن والمصدر إلزاميون.', 'danger')
+        return redirect(url_for('training_sales_index'))
+    if not age_s and not birth_s:
+        flash('أدخل العمر أو تاريخ الميلاد.', 'danger')
+        return redirect(url_for('training_sales_index'))
+    if not graduate:
+        flash('حدد هل المتخرج أم لا.', 'danger')
+        return redirect(url_for('training_sales_index'))
+    if train_to_hire:
+        for label, v in (
+            ('شهادة/قيد', lk_deg),
+            ('إيميل بديل', lk_mail),
+            ('بطاقة', lk_id),
+            ('تعاقد جهة', lk_ctr),
+        ):
+            if not v or not v.lower().startswith('http'):
+                flash(f'Train to Hire: رابط Google Drive إلزامي ({label}).', 'danger')
+                return redirect(url_for('training_sales_index'))
+
+    subtype = TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE if train_to_hire else TRAINING_LEAD_SUBTYPE_INTERESTED
+    birth_d = None
+    if birth_s:
         try:
-            query_db("""
-                INSERT INTO Candidates (FullName, Phone, Email, Status, CreatedAt)
-                VALUES (?, ?, ?, 'Training_Lead', GETDATE())
-            """, (full_name, phone, email))
+            birth_d = datetime.strptime(birth_s[:10], '%Y-%m-%d').date()
+        except ValueError:
+            flash('تاريخ الميلاد غير صالح (YYYY-MM-DD).', 'danger')
+            return redirect(url_for('training_sales_index'))
+    age_val = None
+    if age_s:
+        try:
+            age_val = int(age_s)
+        except ValueError:
+            flash('العمر رقماً صحيحاً.', 'danger')
+            return redirect(url_for('training_sales_index'))
+
+    agent = session.get('user_id')
+    try:
+        query_db(
+            """
+            INSERT INTO Candidates (
+                FullName, Phone, Email, Status, CreatedAt, PrimaryIntent, SalesAgentID,
+                SourceChannel, GraduationStatus, TrainingLeadSubtype,
+                UniversityCollege, ResidenceArea, BirthDate, Age,
+                TrainToHire_Link_Degree, TrainToHire_Link_AltEmail, TrainToHire_Link_IdCard, TrainToHire_Link_Contract
+            )
+            VALUES (?, ?, ?, 'Training_Lead', GETDATE(), 'Training', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                full_name,
+                phone,
+                email,
+                agent,
+                source,
+                graduate,
+                subtype,
+                university,
+                residence,
+                birth_d,
+                age_val,
+                lk_deg or None,
+                lk_mail or None,
+                lk_id or None,
+                lk_ctr or None,
+            ),
+        )
+        flash('تم تسجيل مهتم التدريب بنجاح.', 'success')
+    except Exception as e1:
+        try:
+            query_db(
+                """
+                INSERT INTO Candidates (FullName, Phone, Email, Status, CreatedAt, PrimaryIntent, SalesAgentID)
+                VALUES (?, ?, ?, 'Training_Lead', GETDATE(), 'Training', ?)
+                """,
+                (full_name, phone, email, agent),
+            )
+            cid_row = query_db(
+                "SELECT TOP 1 CandidateID FROM Candidates WHERE Phone=? ORDER BY CandidateID DESC",
+                (phone,),
+                one=True,
+            )
+            if cid_row:
+                cid = cid_row['CandidateID']
+                try:
+                    query_db(
+                        """
+                        UPDATE Candidates SET SourceChannel=?, GraduationStatus=?, TrainingLeadSubtype=?,
+                        UniversityCollege=?, ResidenceArea=?, BirthDate=?, Age=?,
+                        TrainToHire_Link_Degree=?, TrainToHire_Link_AltEmail=?,
+                        TrainToHire_Link_IdCard=?, TrainToHire_Link_Contract=?
+                        WHERE CandidateID=?
+                        """,
+                        (
+                            source,
+                            graduate,
+                            subtype,
+                            university,
+                            residence,
+                            birth_d,
+                            age_val,
+                            lk_deg or None,
+                            lk_mail or None,
+                            lk_id or None,
+                            lk_ctr or None,
+                            cid,
+                        ),
+                    )
+                except Exception:
+                    pass
             flash('تم تسجيل مهتم التدريب بنجاح.', 'success')
-        except Exception as e:
-            flash('خطأ عند التسجيل: ' + str(e)[:80], 'danger')
+        except Exception as e2:
+            flash('خطأ عند التسجيل: ' + str(e2)[:120], 'danger')
     return redirect(url_for('training_sales_index'))
 
 
@@ -5520,11 +6036,31 @@ def training_sales_register():
 def training_sales_book_slot(candidate_id):
     """حجز موعد اختبار مواهب تدريب لمهتم (عرض شاغر لمختبر مواهب التدريب)."""
     _ensure_taschedules_assessment_context_column()
-    cand = query_db("SELECT CandidateID, FullName, Phone FROM Candidates WHERE CandidateID = ?", (candidate_id,), one=True)
+    cand = query_db(
+        """
+        SELECT CandidateID, FullName, Phone, Email, PrimaryIntent, Status, TrainingLeadSubtype,
+               TrainToHire_Link_Degree, TrainToHire_Link_AltEmail, TrainToHire_Link_IdCard, TrainToHire_Link_Contract
+        FROM Candidates WHERE CandidateID = ?
+        """,
+        (candidate_id,),
+        one=True,
+    )
     if not cand:
         flash('المرشح غير موجود.', 'danger')
         return redirect(url_for('training_sales_index'))
+    subtype = _candidate_training_lead_subtype(cand)
+    has_exam_inv = _candidate_has_training_exam_fee_paid(candidate_id)
+    tth_ok = _train_to_hire_docs_complete(cand) if subtype == TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE else False
+    can_book = (subtype == TRAINING_LEAD_SUBTYPE_TRAIN_TO_HIRE and tth_ok) or (
+        subtype == TRAINING_LEAD_SUBTYPE_INTERESTED and has_exam_inv
+    )
     if request.method == 'POST':
+        if not can_book:
+            if subtype == TRAINING_LEAD_SUBTYPE_INTERESTED:
+                flash('لا يمكن الحجز قبل تسجيل دفع رسوم امتحان تحديد المستوى (Exam Fee).', 'danger')
+            else:
+                flash('Train to Hire: أكمل روابط المستندات الأربعة (Google Drive) قبل الحجز.', 'danger')
+            return redirect(url_for('training_sales_book_slot', candidate_id=candidate_id))
         slot_id = request.form.get('slot_id')
         test_mode = request.form.get('test_mode', 'Online')  # أون لاين أو أون سايت — مثل اختبار المواهب
         if slot_id:
@@ -5571,7 +6107,15 @@ def training_sales_book_slot(candidate_id):
                 available_slots = query_db(slot_q_training) or []
             except Exception:
                 pass
-    return render_template('training/sales_book_slot.html', candidate=cand, available_slots=available_slots or [])
+    return render_template(
+        'training/sales_book_slot.html',
+        candidate=cand,
+        available_slots=available_slots or [],
+        can_book_training_slot=can_book,
+        has_exam_fee_invoice=has_exam_inv,
+        train_to_hire_docs_ok=tth_ok,
+        training_lead_subtype=subtype,
+    )
 
 
 @app.route('/training/sales/scheduling')
@@ -5631,6 +6175,178 @@ def training_sales_followup():
         booked_today = []
         booked_upcoming = []
     return render_template('training/sales_followup.html', booked_today=booked_today or [], booked_upcoming=booked_upcoming or [], today=today)
+
+
+@app.route('/training/sales/to-be-close', methods=['GET', 'POST'])
+@login_required
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
+def training_sales_to_be_close():
+    """قائمة TO BE CLOSE — مهتم تدريب + Accepted (اختبار تحديد مستوى/تخرج) لمتابعة الإغلاق."""
+    if request.method == 'POST':
+        cid = request.form.get('candidate_id')
+        try:
+            cid_int = int(cid)
+        except (TypeError, ValueError):
+            cid_int = None
+        if not cid_int:
+            flash('مرشح غير محدد.', 'warning')
+            return redirect(url_for('training_sales_to_be_close'))
+        closer_uid = session.get('user_id')
+        closer_row = query_db("SELECT FullName, Username FROM Users_1 WHERE UserID=?", (closer_uid,), one=True)
+        closer_name = (request.form.get('closer_name') or '').strip() or (
+            (closer_row.get('FullName') or closer_row.get('Username') or '') if closer_row else ''
+        )
+        st = (request.form.get('closing_status') or '').strip()
+        if st and st not in TRAINING_CLOSING_STATUS_VALUES:
+            flash('Closing Status غير صالح.', 'danger')
+            return redirect(url_for('training_sales_to_be_close'))
+        try:
+            query_db(
+                """
+                UPDATE Candidates SET
+                    TrainingClosing_FollowUpDate = ?,
+                    TrainingClosing_CloserUserID = ?,
+                    TrainingClosing_CloserName = ?,
+                    TrainingClosing_LanguageFeedback = ?,
+                    TrainingClosing_Status = ?,
+                    TrainingClosing_StatusDate = ?,
+                    TrainingClosing_Reason = ?
+                WHERE CandidateID = ? AND TrainingSalesQueue = ?
+                """,
+                (
+                    request.form.get('follow_up_date') or None,
+                    closer_uid,
+                    closer_name or None,
+                    (request.form.get('language_feedback') or '')[:4000] or None,
+                    st or None,
+                    request.form.get('status_date') or None,
+                    (request.form.get('reason') or '')[:4000] or None,
+                    cid_int,
+                    TRAINING_QUEUE_TO_BE_CLOSE,
+                ),
+            )
+            flash('تم حفظ بيانات الإغلاق.', 'success')
+        except Exception as e:
+            flash('خطأ: ' + str(e)[:80], 'danger')
+        return redirect(url_for('training_sales_to_be_close'))
+    rows = query_db(
+        """
+        SELECT C.*, S.Username AS RegAgentUsername, S.FullName AS RegAgentName
+        FROM Candidates C
+        LEFT JOIN Users_1 S ON C.SalesAgentID = S.UserID
+        WHERE C.TrainingSalesQueue = ?
+          AND (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+        ORDER BY C.CreatedAt DESC
+        """,
+        (TRAINING_QUEUE_TO_BE_CLOSE,),
+    ) or []
+    return render_template(
+        'training/sales_to_be_close.html',
+        rows=rows,
+        closing_statuses=TRAINING_CLOSING_STATUS_VALUES,
+    )
+
+
+@app.route('/training/sales/acceptance-train-to-hire')
+@login_required
+@role_required(['TrainingSalesCoordinator', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'Manager', 'Finance'])
+def training_sales_acceptance_train_to_hire():
+    rows = query_db(
+        """
+        SELECT C.*, S.Username AS RegAgentUsername, S.FullName AS RegAgentName
+        FROM Candidates C
+        LEFT JOIN Users_1 S ON C.SalesAgentID = S.UserID
+        WHERE C.TrainingSalesQueue = ?
+          AND (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+        ORDER BY C.CreatedAt DESC
+        """,
+        (TRAINING_QUEUE_ACCEPTANCE_TTH,),
+    ) or []
+    return render_template('training/sales_acceptance_tth.html', rows=rows)
+
+
+@app.route('/training/sales/needs-reschedule')
+@login_required
+@role_required(['TrainingSales', 'TrainingSalesCoordinator', 'Manager'])
+def training_sales_needs_reschedule():
+    rows = query_db(
+        """
+        SELECT C.*, S.Username AS RegAgentUsername, S.FullName AS RegAgentName
+        FROM Candidates C
+        LEFT JOIN Users_1 S ON C.SalesAgentID = S.UserID
+        WHERE C.TrainingSalesQueue = ?
+          AND (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+        ORDER BY C.CreatedAt DESC
+        """,
+        (TRAINING_QUEUE_RETURN_SALES,),
+    ) or []
+    return render_template('training/sales_needs_reschedule.html', rows=rows)
+
+
+@app.route('/talent/training/pending-final')
+@login_required
+@role_required(['Talent_Training', 'TA-Training', 'Manager'])
+def talent_training_pending_final():
+    rows = query_db(
+        """
+        SELECT C.*, S.Username AS RegAgentUsername, S.FullName AS RegAgentName
+        FROM Candidates C
+        LEFT JOIN Users_1 S ON C.SalesAgentID = S.UserID
+        WHERE C.TrainingTA_Substatus = ?
+          AND (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+        ORDER BY C.CreatedAt DESC
+        """,
+        (TRAINING_TA_SUBSTATUS_PENDING,),
+    ) or []
+    return render_template('talent/training_pending_final.html', rows=rows)
+
+
+@app.route('/training/reports/current-courses')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_reports_current_courses():
+    df = (request.args.get('from') or '').strip()
+    dt = (request.args.get('to') or '').strip()
+    sql = """
+        SELECT B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
+               B.StartDate, B.EndDate, T.FullName AS trainer_name, B.WeekDays AS days,
+               B.StartTime, B.EndTime, B.Status
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        WHERE B.Status = N'Active'
+    """
+    params = []
+    if df:
+        sql += " AND B.StartDate >= CAST(? AS DATE)"
+        params.append(df)
+    if dt:
+        sql += " AND B.EndDate <= CAST(? AS DATE)"
+        params.append(dt)
+    sql += " ORDER BY B.StartDate, B.BatchName"
+    rows = query_db(sql, tuple(params)) if params else query_db(sql) or []
+    return render_template('training/reports_current_courses.html', rows=rows or [], df=df, dt=dt)
+
+
+@app.route('/training/reports/future-batches')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_reports_future_batches():
+    today = datetime.today().strftime('%Y-%m-%d')
+    rows = query_db(
+        """
+        SELECT B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
+               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        WHERE B.StartDate >= CAST(GETDATE() AS DATE)
+        ORDER BY B.StartDate, B.BatchName
+        """,
+    ) or []
+    return render_template('training/reports_future_batches.html', rows=rows, today=today)
 
 
 EXAM_FEE_DESCRIPTION = 'رسوم امتحان تحديد المستوى'
@@ -6930,11 +7646,29 @@ def training_attendance():
                 r['AssignmentStatus'] = _coerce_assignment_status_row(r)
                 students.append(r)
             
-    return render_template('training/attendance_grid.html', 
-                           batches=batches or [], 
-                           selected_batch=selected_batch, 
-                           students=students or [], 
-                           selected_date=selected_date)
+    session_guests = []
+    if selected_batch_id and selected_batch:
+        try:
+            session_guests = query_db(
+                """
+                SELECT GuestID, FullName, Phone, Email, SessionDate
+                FROM ClassSessionGuests
+                WHERE BatchID = ? AND SessionDate = CAST(? AS DATE)
+                ORDER BY GuestID
+                """,
+                (int(selected_batch_id), selected_date),
+            ) or []
+        except Exception:
+            session_guests = []
+
+    return render_template(
+        'training/attendance_grid.html',
+        batches=batches or [],
+        selected_batch=selected_batch,
+        students=students or [],
+        selected_date=selected_date,
+        session_guests=session_guests or [],
+    )
 
 
 @app.route('/training/save_attendance_grid', methods=['POST'])
@@ -7018,6 +7752,50 @@ def save_attendance_grid():
         pass
     flash('تم حفظ الحضور التفصيلي بنجاح', 'success')
     return redirect(url_for('training_attendance', batch_id=batch_id, date=date))
+
+
+@app.route('/training/attendance/add_guest', methods=['POST'])
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
+def training_attendance_add_guest():
+    batch_id = request.form.get('batch_id')
+    date_s = request.form.get('date')
+    name = (request.form.get('guest_name') or '').strip()
+    phone = (request.form.get('guest_phone') or '').strip() or None
+    email = (request.form.get('guest_email') or '').strip() or None
+    if not batch_id or not date_s or not name:
+        flash('الدفعة والتاريخ واسم الضيف مطلوبان.', 'warning')
+        return redirect(url_for('training_attendance', batch_id=batch_id, date=date_s))
+    try:
+        query_db(
+            """
+            INSERT INTO ClassSessionGuests (BatchID, SessionDate, FullName, Phone, Email, RecordedBy)
+            VALUES (?, CAST(? AS DATE), ?, ?, ?, ?)
+            """,
+            (int(batch_id), date_s, name, phone, email, session.get('user_id')),
+        )
+        flash('تمت إضافة الضيف (Guest).', 'success')
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:80], 'danger')
+    return redirect(url_for('training_attendance', batch_id=batch_id, date=date_s))
+
+
+@app.route('/training/attendance/delete_guest/<int:guest_id>', methods=['POST'])
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
+def training_attendance_delete_guest(guest_id):
+    row = query_db("SELECT BatchID, SessionDate FROM ClassSessionGuests WHERE GuestID=?", (guest_id,), one=True)
+    try:
+        query_db("DELETE FROM ClassSessionGuests WHERE GuestID=?", (guest_id,))
+        flash('تم حذف الضيف.', 'info')
+    except Exception as e:
+        flash('خطأ: ' + str(e)[:80], 'danger')
+    if row:
+        d = row['SessionDate']
+        ds = d.strftime('%Y-%m-%d') if d and hasattr(d, 'strftime') else str(d)[:10]
+        return redirect(url_for('training_attendance', batch_id=row['BatchID'], date=ds))
+    return redirect(url_for('training_attendance'))
+
 
 @app.route('/training/student_finance/<int:enrollment_id>')
 @login_required

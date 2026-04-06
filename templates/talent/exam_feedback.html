@@ -2,45 +2,73 @@
 
 {% block page_title %}
 <span class="en-bold">Batch exam feedback</span>
-<span class="ar-normal">فيدباك الدفعة — دوري وتخرج</span>
+<span class="ar-normal">— تحديد مستوى الدفعة / دوري / تخرج / Redo / Exit Make-Up</span>
 {% endblock %}
 
 {% block content %}
 {% set book_ctx = 'training' if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] else 'recruitment' %}
 <div class="container mt-4">
-    <div class="mb-4">
+    <div class="mb-3">
         <a href="{{ url_for('talent_book_self', context=book_ctx) }}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> رجوع لحجز المواعيد
+            <i class="fas fa-arrow-left"></i> رجوع
         </a>
+    </div>
+    <div class="card shadow-sm mb-3">
+        <div class="card-body row g-2 align-items-end">
+            <form method="get" action="{{ url_for('talent_exam_feedback', batch_id=batch.BatchID) }}" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label small mb-0 en-bold">Session date</label>
+                    <input type="date" name="session_date" class="form-control" value="{{ session_date }}">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-outline-primary">Load</button>
+                </div>
+            </form>
+        </div>
     </div>
     <div class="card shadow-sm">
         <div class="card-header bg-success text-white">
             <h4 class="mb-0">
-                <i class="fas fa-clipboard-check"></i>
-                <span class="ar-normal">فيدباك الدفعة — دوري وتخرج</span>
-                <span class="ar-normal">— {{ batch.BatchName }}</span>
+                <i class="fas fa-clipboard-check"></i> {{ batch.BatchName }}
                 <small class="d-block fs-6 opacity-75 mt-1">{{ batch.CourseName }}</small>
             </h4>
         </div>
         <div class="card-body">
             {% if is_archived %}
             <div class="alert alert-danger mb-3">
-                <i class="fas fa-archive"></i> <strong>دفعة مؤرشفة</strong> — التقييم الدوري معطّل؛ استخدم <strong>اختبار التخرج</strong> لإنهاء التقييمات قبل إغلاق الدورة.
+                <strong>دفعة مؤرشفة</strong> — التقييم الدوري معطّل؛ استخدم <strong>تخرج</strong> أو <strong>Exit Make-Up</strong> حسب الحاجة.
             </div>
             {% endif %}
-            <div class="alert alert-light border mb-3">
-                <strong class="d-block mb-2"><i class="fas fa-info-circle text-primary"></i> أين اختبار التخرج؟</strong>
-                <span class="ar-normal">لكل طالب في الجدول يوجد زرّان: <span class="badge bg-primary">تقييم دوري</span> و <span class="badge bg-success">تخرج</span> (أو زر تخرج أحمر إذا الدفعة مؤرشفة). اضغط <strong>تخرج</strong> لتسجيل <strong>اختبار تخرج الدفعة</strong> — يُحفظ كنوع <code>Training_Graduation</code>.</span>
-                <span class="d-block small text-muted mt-2 en-bold">Periodic = Training_Periodic · Graduation = Training_Graduation</span>
-            </div>
-            <p class="text-muted mb-3">اختر الطالب ثم نوع الاختبار: <strong>تقييم دوري</strong> أو <strong>اختبار تخرج</strong> (ليس «اختبار عادي» فقط).</p>
+            <form method="post" action="{{ url_for('talent_exam_feedback_save_presence', batch_id=batch.BatchID) }}" class="mb-4">
+                <input type="hidden" name="session_date" value="{{ session_date }}">
+                <h6 class="en-bold">Attendance for exam session <span class="text-muted">(حاضر = يُسمح بتسجيل الامتحان)</span></h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light"><tr><th>Trainee</th><th class="text-center">Present</th></tr></thead>
+                        <tbody>
+                            {% for st in students %}
+                            <tr>
+                                <td>{{ st.FullName }}</td>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input" name="present_{{ st.EnrollmentID }}" value="1"
+                                           {% if presence_map.get(st.EnrollmentID, True) %}checked{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-sm">Save presence</button>
+            </form>
+
+            <h6 class="en-bold mb-2">Exam types <small class="text-muted fw-normal">(للحاضرين فقط — حسب الجدول أعلاه)</small></h6>
             <table class="table table-hover">
                 <thead class="table-light">
                     <tr>
-                        <th>الاسم</th>
-                        <th>الهاتف</th>
-                        <th>CEFR الحالي</th>
-                        <th>إجراء <span class="text-muted fw-normal">(دوري / تخرج)</span></th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>CEFR</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -50,27 +78,18 @@
                         <td>{{ st.Phone or '-' }}</td>
                         <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
                         <td>
-                            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="نوع الاختبار">
-                                {% if is_archived %}
-                                <span class="btn btn-outline-secondary disabled" tabindex="-1" aria-disabled="true" title="غير متاح للدفعات المؤرشفة">
-                                    <i class="fas fa-calendar-check"></i> تقييم دوري
-                                </span>
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-danger text-nowrap" title="اختبار تخرج الدفعة">
-                                    <i class="fas fa-graduation-cap"></i> تخرج
-                                </a>
-                                {% else %}
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic') }}" class="btn btn-outline-primary text-nowrap" title="تقييم دوري">
-                                    <i class="fas fa-calendar-check"></i> تقييم دوري
-                                </a>
-                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-outline-success text-nowrap" title="اختبار تخرج الدفعة">
-                                    <i class="fas fa-graduation-cap"></i> تخرج
-                                </a>
+                            <div class="btn-group btn-group-sm flex-wrap">
+                                {% if not is_archived %}
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic', session_date=session_date) }}" class="btn btn-outline-primary">Periodic</a>
                                 {% endif %}
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation', session_date=session_date) }}" class="btn btn-outline-success">Exit / Graduation</a>
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='redo', session_date=session_date) }}" class="btn btn-outline-warning">Redo</a>
+                                <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='exit_makeup', session_date=session_date) }}" class="btn btn-outline-info">Exit Make-Up</a>
                             </div>
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="text-center text-muted py-4">لا يوجد طلاب في هذه الدفعة.</td></tr>
+                    <tr><td colspan="4" class="text-center text-muted py-4">لا يوجد طلاب.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

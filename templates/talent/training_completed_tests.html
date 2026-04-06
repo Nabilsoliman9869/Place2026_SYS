@@ -11,8 +11,17 @@
     </h4>
     <p class="text-muted small">يظهر نوع التقييم المحفوظ (تقييم دوري / تخرج / موعد قديم كـ Training) والمختبر الذي أجرى الاختبار.</p>
     <div class="table-responsive shadow-sm rounded border">
-        <table class="table table-hover table-sm align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0" id="tctTable">
             <thead class="table-light">
+                <tr>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="0" placeholder="Filter date"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="1" placeholder="Name"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="2" placeholder="Phone"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="3" placeholder="CEFR"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="4" placeholder="Type"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="5" placeholder="Decision"></th>
+                    <th><input type="text" class="form-control form-control-sm tctf" data-i="6" placeholder="Evaluator"></th>
+                </tr>
                 <tr>
                     <th><span class="ar-normal">التاريخ</span></th>
                     <th><span class="ar-normal">المرشح</span></th>
@@ -38,6 +47,12 @@
                         <span class="badge bg-info text-dark">تقييم دوري</span>
                         {% elif et == 'Training_Graduation' %}
                         <span class="badge bg-primary">اختبار تخرج</span>
+                        {% elif et == 'Training_Placement' %}
+                        <span class="badge bg-success">Placement</span>
+                        {% elif et == 'Training_Redo' %}
+                        <span class="badge bg-warning text-dark">Redo</span>
+                        {% elif et == 'Training_ExitMakeUp' %}
+                        <span class="badge bg-info text-dark">Exit Make-Up</span>
                         {% elif et == 'Training' %}
                         <span class="badge bg-secondary">Training (قديم)</span>
                         {% else %}
@@ -57,4 +72,26 @@
         </table>
     </div>
 </div>
+<script>
+(function(){
+  const t = document.getElementById('tctTable');
+  if (!t) return;
+  function apply(){
+    const ins = t.querySelectorAll('.tctf');
+    const qs = Array.from(ins).map(i => (i.value||'').toLowerCase());
+    t.querySelectorAll('tbody tr').forEach(tr => {
+      const td = tr.querySelectorAll('td');
+      if (td.length < 7) return;
+      let ok = true;
+      qs.forEach((q, idx) => {
+        if (!q) return;
+        const ev = idx === 6 ? (td[6].innerText||'') : (td[idx].textContent||'');
+        if (!ev.toLowerCase().includes(q)) ok = false;
+      });
+      tr.style.display = ok ? '' : 'none';
+    });
+  }
+  t.querySelectorAll('.tctf').forEach(i => i.addEventListener('input', apply));
+})();
+</script>
 {% endblock %}

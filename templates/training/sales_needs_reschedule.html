@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+    <h2 class="h4"><span class="en-bold">Needs reschedule / follow-up</span></h2>
+    <p class="text-muted small">من المختبر: No Show / Resc / Redo / Unreachable — أعد الاتصال واحجز موعداً جديداً.</p>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover">
+            <thead class="table-light"><tr><th>Name</th><th>Phone</th><th>Agent</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ r.FullName }}</td>
+                    <td>{{ r.Phone }}</td>
+                    <td>{{ r.RegAgentName or r.RegAgentUsername or '—' }}</td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('training_sales_book_slot', candidate_id=r.CandidateID) }}">Book test</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No leads in this queue.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

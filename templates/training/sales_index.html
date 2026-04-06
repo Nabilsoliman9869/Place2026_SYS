@@ -5,74 +5,131 @@
     <div class="col-md-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}"><span class="en-bold">Dashboard</span> <span class="ar-normal">لوحة مبيعات التدريب</span></a></li>
-                <li class="breadcrumb-item active"><span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('training_sales_dashboard') }}"><span class="en-bold">Dashboard</span></a></li>
+                <li class="breadcrumb-item active"><span class="en-bold">Leads</span></li>
             </ol>
         </nav>
-        <h2><i class="fas fa-user-plus text-success"></i> <span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span></h2>
-        <p class="text-muted"><span class="ar-normal">تسجيل مهتم تدريب جديد وعرض القائمة.</span></p>
+        <h2><i class="fas fa-user-plus text-success"></i> <span class="en-bold">Training Leads</span></h2>
+        <p class="text-muted small">إلزامي: الاسم، البريد، الموبايل، الجامعة/الكلية، السكن، المصدر، العمر أو تاريخ الميلاد، التخرج. نوع الليد: مهتم تدريب (يتطلب دفع امتحان قبل الحجز) أو Train to Hire (روابط Drive إلزامية، بدون دفع للمختبر).</p>
     </div>
 </div>
 
-<!-- تسجيل مهتم تدريب -->
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-success text-white">
-        <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i> <span class="en-bold">Register Lead</span> <span class="ar-normal">تسجيل مهتم تدريب</span></h6>
+        <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i> <span class="en-bold">Register lead</span></h6>
     </div>
     <div class="card-body">
         <form action="{{ url_for('training_sales_register') }}" method="POST" class="row g-3">
+            <div class="col-12 border-bottom pb-2 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="train_to_hire" value="1" id="tthChk">
+                    <label class="form-check-label en-bold" for="tthChk">Train to Hire</label>
+                    <span class="text-muted small ar-normal d-block">عند التفعيل: روابط Google Drive للمستندات الأربعة إلزامية؛ الحجز بدون دفع امتحان.</span>
+                </div>
+            </div>
             <div class="col-md-4">
-                <label class="form-label">الاسم الكامل</label>
-                <input type="text" name="full_name" class="form-control" required placeholder="الاسم">
+                <label class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+                <input type="text" name="full_name" class="form-control" required>
             </div>
-            <div class="col-md-3">
-                <label class="form-label">رقم الهاتف</label>
-                <input type="text" name="phone" class="form-control" required placeholder="الهاتف">
+            <div class="col-md-4">
+                <label class="form-label">البريد <span class="text-danger">*</span></label>
+                <input type="email" name="email" class="form-control" required>
             </div>
-            <div class="col-md-3">
-                <label class="form-label">البريد (اختياري)</label>
-                <input type="email" name="email" class="form-control" placeholder="email@example.com">
+            <div class="col-md-4">
+                <label class="form-label">الموبايل <span class="text-danger">*</span></label>
+                <input type="text" name="phone" class="form-control" required>
             </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-success w-100"><i class="fas fa-save me-1"></i> <span class="en-bold">Save</span> <span class="ar-normal">تسجيل</span></button>
+            <div class="col-md-6">
+                <label class="form-label">الجامعة / الكلية <span class="text-danger">*</span></label>
+                <input type="text" name="university_college" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">منطقة السكن <span class="text-danger">*</span></label>
+                <input type="text" name="residence_area" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">المصدر <span class="text-danger">*</span></label>
+                <input type="text" name="lead_source" class="form-control" required placeholder="Facebook, referral…">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">تاريخ الميلاد</label>
+                <input type="date" name="birth_date" class="form-control">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">العمر (بديل إن لم يُدخل تاريخ الميلاد)</label>
+                <input type="number" name="age" class="form-control" min="10" max="90" placeholder="مثال: 24">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">متخرج؟ <span class="text-danger">*</span></label>
+                <select name="is_graduate" class="form-select" required>
+                    <option value="">—</option>
+                    <option value="Yes">Yes / نعم</option>
+                    <option value="No">No / لا</option>
+                </select>
+            </div>
+            <div class="col-12 tth-docs d-none border rounded p-3 bg-light" id="tthBlock">
+                <h6 class="en-bold text-danger">Train to Hire — Google Drive links (http…)</h6>
+                <div class="row g-2">
+                    <div class="col-md-6"><label class="small">شهادة تخرج / قيد</label><input type="url" name="tth_link_degree" class="form-control form-control-sm tth-req" placeholder="https://drive.google.com/..."></div>
+                    <div class="col-md-6"><label class="small">إيميل بديل</label><input type="url" name="tth_link_alt_email" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
+                    <div class="col-md-6"><label class="small">صورة بطاقة</label><input type="url" name="tth_link_idcard" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
+                    <div class="col-md-6"><label class="small">إثبات تعاقد جهة توظيف</label><input type="url" name="tth_link_contract" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
+                </div>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i> Save</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- قائمة مهتمي التدريب (من لم يُحجز لهم موعد — بعد الحجز ينتقلون لمتابعة المواعيد) -->
 <div class="card shadow-sm">
-    <div class="card-header bg-white">
-        <h5 class="mb-0"><span class="en-bold">Leads</span> <span class="ar-normal">مهتمو التدريب</span> <span class="badge bg-secondary">{{ training_leads|length }}</span></h5>
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="mb-0"><span class="en-bold">Leads</span> <span class="badge bg-secondary">{{ training_leads|length }}</span></h5>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('training_sales_to_be_close') }}" class="btn btn-sm btn-outline-primary">TO BE CLOSE</a>
+            <a href="{{ url_for('training_sales_needs_reschedule') }}" class="btn btn-sm btn-outline-warning">Needs reschedule</a>
+        </div>
     </div>
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" id="leadsTable">
             <thead class="table-light">
                 <tr>
-                    <th><span class="en-bold">Name</span> <span class="ar-normal">الاسم</span></th>
-                    <th><span class="en-bold">Phone</span> <span class="ar-normal">الهاتف</span></th>
-                    <th><span class="en-bold">Email</span> <span class="ar-normal">البريد</span></th>
-                    <th><span class="en-bold">Status</span> <span class="ar-normal">الحالة</span></th>
-                    <th><span class="en-bold">Date</span> <span class="ar-normal">تاريخ التسجيل</span></th>
-                    <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
+                    <th><input type="text" class="form-control form-control-sm lf" data-i="0" placeholder="Filter name"></th>
+                    <th><input type="text" class="form-control form-control-sm lf" data-i="1" placeholder="Phone"></th>
+                    <th></th><th></th><th></th><th></th><th></th>
+                </tr>
+                <tr>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Type</th>
+                    <th>University</th>
+                    <th>Date</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% if not training_leads %}
-                <tr><td colspan="6" class="text-muted text-center py-4">لا يوجد مهتمون مسجلون بعد. استخدم النموذج أعلاه لتسجيل مهتم تدريب.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center py-4">لا يوجد مهتمون بدون موعد محجوز.</td></tr>
                 {% endif %}
                 {% for lead in training_leads %}
                 <tr>
-                    <td class="fw-bold">{{ lead.FullName }}</td>
+                    <td>{{ lead.FullName }}</td>
                     <td>{{ lead.Phone }}</td>
                     <td>{{ lead.Email or '-' }}</td>
-                    <td><span class="badge bg-info">{{ lead.Status or lead.PrimaryIntent or '-' }}</span></td>
+                    <td>
+                        {% if (lead.TrainingLeadSubtype or '')|lower == 'train_to_hire' %}
+                        <span class="badge bg-dark">Train to Hire</span>
+                        {% else %}
+                        <span class="badge bg-info text-dark">Interested</span>
+                        {% endif %}
+                    </td>
+                    <td><small>{{ lead.UniversityCollege or '—' }}</small></td>
                     <td><small>{{ lead.CreatedAt.strftime('%Y-%m-%d') if lead.CreatedAt else '-' }}</small></td>
                     <td>
-                        <a href="{{ url_for('training_sales_book_slot', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-primary" title="حجز موعد اختبار مواهب تدريب">
-                            <i class="fas fa-calendar-check"></i> <span class="en-bold">Book Test</span> <span class="ar-normal">حجز موعد اختبار</span>
-                        </a>
-                        <a href="{{ url_for('candidate_profile', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-outline-secondary"><span class="en-bold">File</span> <span class="ar-normal">ملف</span></a>
+                        <a href="{{ url_for('training_sales_book_slot', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-primary">Book test</a>
+                        <a href="{{ url_for('candidate_profile', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-outline-secondary">File</a>
                     </td>
                 </tr>
                 {% endfor %}
@@ -80,8 +137,31 @@
         </table>
     </div>
 </div>
-
-<div class="mt-3 small text-muted">
-    <strong>المسار:</strong> تسجيل مهتم → اختبار مبدئي → حجز موعد اختبار مواهب تدريب → متابعة الموعد → رسوم الاشتراك → يحدد مختبر المواهب للتدريب (ta_train) → بعد دفع رسم الامتحان ورغبة المتدرب يأخذه منسق التدريب (train_coord) من Academy — تسجيل طلاب.
-</div>
+<script>
+(function(){
+  const chk = document.getElementById('tthChk');
+  const blk = document.getElementById('tthBlock');
+  if (chk && blk) {
+    function sync(){ blk.classList.toggle('d-none', !chk.checked); blk.querySelectorAll('.tth-req').forEach(i => i.required = chk.checked); }
+    chk.addEventListener('change', sync); sync();
+  }
+  const t = document.getElementById('leadsTable');
+  const f0 = t && t.querySelector('.lf[data-i="0"]');
+  const f1 = t && t.querySelector('.lf[data-i="1"]');
+  function applyLeadsFilter(){
+    if (!t) return;
+    const qn = (f0 && f0.value || '').toLowerCase();
+    const qp = (f1 && f1.value || '').toLowerCase();
+    t.querySelectorAll('tbody tr').forEach(tr => {
+      const td = tr.querySelectorAll('td');
+      if (td.length < 2) return;
+      let ok = (!qn || (td[0].textContent||'').toLowerCase().includes(qn))
+            && (!qp || (td[1].textContent||'').toLowerCase().includes(qp));
+      tr.style.display = ok ? '' : 'none';
+    });
+  }
+  if (f0) f0.addEventListener('input', applyLeadsFilter);
+  if (f1) f1.addEventListener('input', applyLeadsFilter);
+})();
+</script>
 {% endblock %}
