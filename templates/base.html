@@ -11,10 +11,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
-    <!-- Turbo Drive for SPA Speed -->
-    <script type="module">
-        import hotwiredTurbo from 'https://cdn.skypack.dev/@hotwired/turbo';
-    </script>
+    <!-- Turbo Drive for SPA Speed (jsDelivr CDN - lighter and faster than Skypack) -->
+    {% if not config.get('DISABLE_TURBO') %}
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@hotwired/turbo@8.0.12/dist/turbo.es2017.esm.js"></script>
+    {% endif %}
 
     <style>
         .en-bold { font-weight: 700; }

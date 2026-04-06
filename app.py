@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from jinja2 import TemplateNotFound
 from markupsafe import Markup
 import functools
@@ -17,6 +18,8 @@ except Exception:
         pass
 
 app = Flask(__name__)
+# Fix HTTPS and host headers when behind Railway/Nginx proxy
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 perf_logger = logging.getLogger('performance')
 perf_logger.setLevel(logging.INFO)
