@@ -3482,6 +3482,13 @@ def talent_evaluate(slot_id):
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
         insert_eval_type = EVAL_TRAINING_PLACEMENT if eval_type == 'Training' else eval_type
+
+        # Guard against SQL Server truncation errors (8152) across differing DB schemas
+        cefr = (cefr or '')[:10]
+        decision_to_save = (decision if eval_type == 'Training' else decision_raw)[:50]
+        recommended_level = (recommended_level[:50] if recommended_level else None)
+        insert_eval_type = (insert_eval_type or '')[:50]
+        recording_link = (recording_link[:500] if recording_link else None)
         
         try:
             query_db('''
@@ -3489,7 +3496,7 @@ def talent_evaluate(slot_id):
                                          Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
             ''', (slot['CandidateID'], slot_id, score_c, score_f, score_p, score_s, score_v,
-                  cefr, decision if eval_type == 'Training' else decision_raw, recommended_level, comments, session['user_id'], insert_eval_type, recording_link))
+                  cefr, decision_to_save, recommended_level, comments, session['user_id'], insert_eval_type, recording_link))
             fin_dec = decision if eval_type == 'Training' else decision_raw
             slot_status = 'No Show' if (eval_type == 'Training' and fin_dec == 'No Show') else 'Completed'
             query_db("UPDATE TASchedules SET Status=? WHERE SlotID=?", (slot_status, slot_id))
@@ -3874,6 +3881,13 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
         slot_type = f"Exam Feedback ({ek})"
+
+        # Guard against SQL Server truncation errors (8152) across differing DB schemas
+        cefr = (cefr or '')[:10]
+        decision = (decision or '')[:50]
+        recommended_level = (recommended_level[:50] if recommended_level else None)
+        eval_subtype = (eval_subtype or '')[:50]
+        recording_link = (recording_link[:500] if recording_link else None)
         try:
             db = get_db()
             cur = db.cursor()
