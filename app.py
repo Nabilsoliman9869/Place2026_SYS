@@ -254,6 +254,52 @@ def _normalize_ta_training_decision(raw):
     return ''
 
 
+def _trainer_attendance_status(enrollment_id, session_date):
+    """حضور يوم الجلسة من جدول Attendance — مصدر المدرب/الكواوبريشن (شاشة التدريب Attendance)."""
+    try:
+        eid = int(enrollment_id)
+    except (TypeError, ValueError):
+        return ''
+    if not session_date:
+        return ''
+    try:
+        row = query_db(
+            "SELECT Status FROM Attendance WHERE EnrollmentID = ? AND Date = CAST(? AS DATE)",
+            (eid, session_date),
+            one=True,
+        )
+        return (row.get('Status') or "").strip() if row else ""
+    except Exception:
+        return ""
+
+
+def _trainer_attendance_allows_batch_exam(status_str):
+    st = (status_str or "").strip()
+    return st in ("Present", "Late")
+
+
+def _trainer_attendance_blocks_batch_exam(status_str):
+    st = (status_str or "").strip()
+    return st in ("Absent", "Excused")
+
+
+def _trainer_attendance_display(status_str):
+    st = (status_str or "").strip()
+    if st == "Present":
+        return {"label_ar": "حاضر", "badge_classes": "bg-success", "allows_exam": True}
+    if st == "Late":
+        return {"label_ar": "حاضر (متأخر)", "badge_classes": "bg-warning text-dark", "allows_exam": True}
+    if st == "Absent":
+        return {"label_ar": "غائب", "badge_classes": "bg-danger", "allows_exam": False}
+    if st == "Excused":
+        return {"label_ar": "معذور", "badge_classes": "bg-secondary", "allows_exam": False}
+    return {
+        "label_ar": "لم يُسجَّل الحضور",
+        "badge_classes": "bg-light text-dark border",
+        "allows_exam": False,
+    }
+
+
 def _training_eval_triggers_sales_queue(evaluation_type):
     et = (evaluation_type or '').strip()
     return et in (
@@ -2991,15 +3037,14 @@ def talent_dashboard():
                 """
                 SELECT B.BatchID, B.BatchName, Cr.CourseName,
                        E.CandidateID, E.EnrollmentID, C.FullName, C.CurrentCEFR,
-                       BESP.IsPresent AS SessionIsPresent
+                       ATT.Status AS TrainerAttendanceStatus
                 FROM CourseBatches B
                 JOIN Courses Cr ON B.CourseID = Cr.CourseID
                 JOIN Enrollments E ON E.BatchID = B.BatchID AND E.Status = 'Active'
                 JOIN Candidates C ON E.CandidateID = C.CandidateID
-                LEFT JOIN BatchExamSessionPresence BESP
-                  ON BESP.BatchID = B.BatchID
-                 AND BESP.EnrollmentID = E.EnrollmentID
-                 AND BESP.SessionDate = CAST(? AS DATE)
+                LEFT JOIN Attendance ATT
+                  ON ATT.EnrollmentID = E.EnrollmentID
+                 AND ATT.Date = CAST(? AS DATE)
                 WHERE B.Status = 'Active'
                 ORDER BY B.BatchName, C.FullName
                 """,
@@ -3020,14 +3065,17 @@ def talent_dashboard():
                         'students': [],
                     }
                     batches_with_students.append(current_entry)
-                sip = r.get('SessionIsPresent')
-                present_default = True if sip is None else bool(sip)
+                tas = (r.get('TrainerAttendanceStatus') or "").strip()
+                ad = _trainer_attendance_display(tas)
                 current_entry['students'].append({
                     'CandidateID': r['CandidateID'],
                     'EnrollmentID': r['EnrollmentID'],
                     'FullName': r['FullName'],
                     'CurrentCEFR': r['CurrentCEFR'],
-                    'session_present': present_default,
+                    'trainer_attendance_status': tas,
+                    'trainer_attendance_label_ar': ad['label_ar'],
+                    'trainer_attendance_badge_classes': ad['badge_classes'],
+                    'exam_allowed_by_attendance': ad['allows_exam'],
                 })
         except Exception:
             pass
@@ -3669,33 +3717,40 @@ def talent_exam_feedback(batch_id):
         return redirect(url_for('talent_dashboard', context='recruitment'))
     is_archived = (batch.get('Status') or '').strip() != 'Active'
     session_date = (request.args.get('session_date') or '').strip() or datetime.today().strftime('%Y-%m-%d')
-    students = query_db("""
-        SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR
+    raw_students = query_db(
+        """
+        SELECT E.EnrollmentID, E.CandidateID, C.FullName, C.Phone, C.CurrentCEFR,
+               ATT.Status AS TrainerAttendanceStatus
         FROM Enrollments E
         JOIN Candidates C ON E.CandidateID = C.CandidateID
+        LEFT JOIN Attendance ATT ON ATT.EnrollmentID = E.EnrollmentID AND ATT.Date = CAST(? AS DATE)
         WHERE E.BatchID = ? AND E.Status = 'Active'
         ORDER BY C.FullName
-    """, (batch_id,)) or []
-    presence = {}
-    try:
-        prow = query_db(
-            """
-            SELECT EnrollmentID, IsPresent FROM BatchExamSessionPresence
-            WHERE BatchID = ? AND SessionDate = CAST(? AS DATE)
-            """,
-            (batch_id, session_date),
-        ) or []
-        for p in prow:
-            presence[int(p['EnrollmentID'])] = bool(p.get('IsPresent'))
-    except Exception:
-        presence = {}
+        """,
+        (session_date, batch_id),
+    ) or []
+    students = []
+    for row in raw_students:
+        tas = (row.get('TrainerAttendanceStatus') or "").strip()
+        ad = _trainer_attendance_display(tas)
+        students.append(
+            {
+                'EnrollmentID': row['EnrollmentID'],
+                'CandidateID': row['CandidateID'],
+                'FullName': row['FullName'],
+                'Phone': row.get('Phone'),
+                'CurrentCEFR': row.get('CurrentCEFR'),
+                'trainer_attendance_label_ar': ad['label_ar'],
+                'trainer_attendance_badge_classes': ad['badge_classes'],
+                'exam_allowed_by_attendance': ad['allows_exam'],
+            }
+        )
     return render_template(
         'talent/exam_feedback.html',
         batch=batch,
         students=students,
         is_archived=is_archived,
         session_date=session_date,
-        presence_map=presence,
     )
 
 
@@ -3703,44 +3758,27 @@ def talent_exam_feedback(batch_id):
 @login_required
 @role_required(['Talent', 'Manager', 'Talent_Recruitment', 'Talent_Training', 'TA-Training', 'Trainer', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
 def talent_exam_feedback_save_presence(batch_id):
-    """حضور/غياب يوم الامتحان للدفعة — يُقيَّم الامتحان للحاضرين فقط."""
+    """موقوف: الحضور الفعلي من شاشة التدريب Attendance (المدرب/الكواوبريشن) فقط."""
     session_date = (request.form.get('session_date') or '').strip()
-    if not session_date:
-        flash('تاريخ الجلسة مطلوب.', 'warning')
-        return redirect(url_for('talent_exam_feedback', batch_id=batch_id))
-    enroll_rows = query_db(
-        "SELECT EnrollmentID FROM Enrollments WHERE BatchID=? AND Status='Active'",
-        (batch_id,),
-    ) or []
-    uid = session.get('user_id')
-    try:
-        query_db(
-            "DELETE FROM BatchExamSessionPresence WHERE BatchID=? AND SessionDate=CAST(? AS DATE)",
-            (batch_id, session_date),
-        )
-    except Exception:
-        pass
-    for r in enroll_rows:
-        eid = r.get('EnrollmentID')
-        if eid is None:
-            continue
-        is_pres = request.form.get(f'present_{eid}') in ('1', 'on', 'yes', 'true', 'True')
-        try:
-            query_db(
-                """
-                INSERT INTO BatchExamSessionPresence (BatchID, SessionDate, EnrollmentID, IsPresent, UpdatedBy)
-                VALUES (?, CAST(? AS DATE), ?, ?, ?)
-                """,
-                (batch_id, session_date, int(eid), 1 if is_pres else 0, uid),
-            )
-        except Exception:
-            pass
-    flash('تم حفظ حضور الجلسة.', 'success')
+    flash(
+        'تسجيل الحضور الفعلي من قائمة التدريب «Attendance» (المدرب أو منسق/كواوبريشن التدريب) — لا يُعدّه مختبر المواهب هنا.',
+        'info',
+    )
     if (request.form.get('from_dashboard') or '').strip() == '1':
         return redirect(
-            url_for('talent_dashboard', context='training', date=session_date),
+            url_for(
+                'talent_dashboard',
+                context='training',
+                date=session_date or datetime.today().strftime('%Y-%m-%d'),
+            ),
         )
-    return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
+    return redirect(
+        url_for(
+            'talent_exam_feedback',
+            batch_id=batch_id,
+            session_date=session_date or datetime.today().strftime('%Y-%m-%d'),
+        ),
+    )
 
 
 @app.route('/talent/exam_feedback/<int:batch_id>/evaluate/<int:candidate_id>', defaults={'exam_kind': 'periodic'}, methods=['GET', 'POST'])
@@ -3762,16 +3800,18 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
     )
     if enroll:
         try:
-            pr = query_db(
-                """
-                SELECT IsPresent FROM BatchExamSessionPresence
-                WHERE BatchID=? AND SessionDate=CAST(? AS DATE) AND EnrollmentID=?
-                """,
-                (batch_id, session_date, enroll['EnrollmentID']),
-                one=True,
-            )
-            if pr and pr.get('IsPresent') is False:
-                flash('هذا المتدرب مُسجَّل غائباً في تاريخ الجلسة — لا يُسجَّل له امتحان.', 'warning')
+            st_att = _trainer_attendance_status(enroll['EnrollmentID'], session_date)
+            if _trainer_attendance_blocks_batch_exam(st_att):
+                flash(
+                    'لا يُسمح بتسجيل الامتحان: الحضور الفعلي لهذا اليوم «غائب» أو «معذور» (من Training > Attendance).',
+                    'warning',
+                )
+                return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
+            if not _trainer_attendance_allows_batch_exam(st_att):
+                flash(
+                    'لم يُسجَّل حضور فعلي لهذا اليوم — يسجّله المدرب أو الكواوبريشن من قائمة التدريب «Attendance» أولاً (حاضر أو متأخر).',
+                    'warning',
+                )
                 return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
         except Exception:
             pass

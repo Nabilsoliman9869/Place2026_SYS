@@ -7,6 +7,7 @@
 
 {% block content %}
 {% set book_ctx = 'training' if session.get('role') in ['Talent_Training', 'TA-Training', 'Manager'] else 'recruitment' %}
+{% set can_open_training_attendance = session.get('role') in ['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'] %}
 <div class="container mt-4">
     <div class="mb-3">
         <a href="{{ url_for('talent_book_self', context=book_ctx) }}" class="btn btn-outline-secondary">
@@ -39,29 +40,30 @@
                 <strong>دفعة مؤرشفة</strong> — التقييم الدوري معطّل؛ استخدم <strong>تخرج</strong> أو <strong>Exit Make-Up</strong> حسب الحاجة.
             </div>
             {% endif %}
-            <form method="post" action="{{ url_for('talent_exam_feedback_save_presence', batch_id=batch.BatchID) }}" class="mb-4">
-                <input type="hidden" name="session_date" value="{{ session_date }}">
-                <h6 class="en-bold">Attendance for exam session <span class="text-muted">(حاضر = يُسمح بتسجيل الامتحان)</span></h6>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered">
-                        <thead class="table-light"><tr><th>Trainee</th><th class="text-center">Present</th></tr></thead>
+            <div class="alert alert-light border mb-4">
+                <h6 class="en-bold mb-2"><i class="fas fa-user-check text-secondary"></i> الحضور الفعلي (للقراءة فقط هنا)</h6>
+                <p class="small ar-normal mb-2">المصدر: جدول <strong>Attendance</strong> — يُسجَّله <strong>المدرب</strong> أو <strong>منسق/كواوبريشن التدريب</strong> من قائمة التدريب. يُسمح بامتحان الدفعة فقط عندما يكون السجل <strong>حاضر</strong> أو <strong>متأخر</strong> لنفس تاريخ الجلسة.</p>
+                {% if can_open_training_attendance %}
+                <a href="{{ url_for('training_attendance', batch_id=batch.BatchID, date=session_date) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-edit"></i> تعديل الحضور لهذا اليوم
+                </a>
+                {% endif %}
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Trainee</th><th class="text-center ar-normal">الحضور الفعلي</th></tr></thead>
                         <tbody>
                             {% for st in students %}
                             <tr>
                                 <td>{{ st.FullName }}</td>
-                                <td class="text-center">
-                                    <input type="checkbox" class="form-check-input" name="present_{{ st.EnrollmentID }}" value="1"
-                                           {% if presence_map.get(st.EnrollmentID, True) %}checked{% endif %}>
-                                </td>
+                                <td class="text-center"><span class="badge {{ st.trainer_attendance_badge_classes }}">{{ st.trainer_attendance_label_ar }}</span></td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                <button type="submit" class="btn btn-secondary btn-sm">Save presence</button>
-            </form>
+            </div>
 
-            <h6 class="en-bold mb-2">Exam types <small class="text-muted fw-normal">(للحاضرين فقط — حسب الجدول أعلاه)</small></h6>
+            <h6 class="en-bold mb-2">Exam types <small class="text-muted fw-normal">(يُفعّل عند الحضور الفعلي حسب الجدول أعلاه)</small></h6>
             <table class="table table-hover">
                 <thead class="table-light">
                     <tr>
@@ -78,6 +80,7 @@
                         <td>{{ st.Phone or '-' }}</td>
                         <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
                         <td>
+                            {% if st.exam_allowed_by_attendance %}
                             <div class="btn-group btn-group-sm flex-wrap">
                                 {% if not is_archived %}
                                 <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic', session_date=session_date) }}" class="btn btn-outline-primary">Periodic</a>
@@ -86,6 +89,9 @@
                                 <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='redo', session_date=session_date) }}" class="btn btn-outline-warning">Redo</a>
                                 <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=batch.BatchID, candidate_id=st.CandidateID, exam_kind='exit_makeup', session_date=session_date) }}" class="btn btn-outline-info">Exit Make-Up</a>
                             </div>
+                            {% else %}
+                            <span class="small text-muted ar-normal">لا يتوفر حضور فعلي مسجّل (حاضر/متأخر) لهذا التاريخ</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}
