@@ -3895,7 +3895,7 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
             cur.execute("""
                 INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType, AssessmentContext)
                 VALUES (CAST(? AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), ?, ?, ?, ?, N'Training')
-            """, (session_date, syn_status, session['user_id'], candidate_id, slot_type, 'Training'))
+            """, (session_date, syn_status, session['user_id'], candidate_id, slot_type))
             cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
             slot_id = int(row[0]) if row and row[0] else None
