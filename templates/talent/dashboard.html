@@ -179,55 +179,75 @@
                 <p class="text-muted small ar-normal mb-2">
                     <strong>اختبار تحديد المستوى (ليد / مهتم تدريب):</strong> من جدول <span class="en-bold">Daily Schedule</span> أعلاه عند وجود موعد محجوز — زر <strong>تقييم</strong> (وليس من قائمة الدفعات).
                 </p>
+                <p class="text-muted small ar-normal mb-2">
+                    <strong>تاريخ جلسة الامتحان للدفعة:</strong> يطابق تاريخ اللوحة أعلاه (<span class="en-bold">{{ selected_date }}</span>) — غيّر التاريخ من أعلى الصفحة إن كنت تعمل على يوم آخر.
+                </p>
                 <p class="text-muted small ar-normal mb-3">
-                    <strong>دوري / تخرج / إعادة / Exit Make-Up:</strong> للمتدربين المسجّلين في دفعة نشطة — نفس المنطق الكامل في صفحة الدفعة عبر الرابط أسفل كل جدول.
+                    <strong>الحضور:</strong> حدّد لكل متدرب <strong>حاضر</strong> ثم احفظ؛ الغائب لا يُسمح بتسجيل امتحان له في هذا التاريخ (نفس قاعدة صفحة الدفعة).
                 </p>
                 {% for item in batches_with_students|default([]) %}
-                <div class="mb-4">
+                <div class="mb-4 border rounded p-2 p-md-3 bg-white">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                         <h6 class="text-primary mb-0">
                             <span class="en-bold">{{ item.batch.BatchName }}</span>
                             <span class="ar-normal">— {{ item.batch.CourseName }}</span>
                         </h6>
                         <a href="{{ url_for('talent_exam_feedback', batch_id=item.batch.BatchID, session_date=selected_date) }}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-external-link-alt"></i> <span class="ar-normal">صفحة الدفعة</span> <small class="text-muted">(حضور + كل الأنواع)</small>
+                            <i class="fas fa-external-link-alt"></i> <span class="ar-normal">صفحة الدفعة</span>
                         </a>
                     </div>
-                    <table class="table table-sm table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th><span class="en-bold">Trainee</span> <span class="ar-normal">المتدرب</span></th>
-                                <th><span class="en-bold">CEFR</span></th>
-                                <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for st in item.students %}
-                            <tr>
-                                <td><span class="en-bold">{{ st.FullName }}</span></td>
-                                <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
-                                <td>
-                                    <div class="btn-group btn-group-sm flex-wrap" role="group">
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic', session_date=selected_date) }}" class="btn btn-outline-primary" title="تقييم دوري مرحلي">
-                                            <i class="fas fa-calendar-check"></i> <span class="ar-normal">دوري</span>
-                                        </a>
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation', session_date=selected_date) }}" class="btn btn-outline-success" title="اختبار تخرج Exit">
-                                            <i class="fas fa-graduation-cap"></i> <span class="ar-normal">تخرج</span>
-                                        </a>
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='redo', session_date=selected_date) }}" class="btn btn-outline-warning" title="إعادة — لم يُرصد في الموعد">
-                                            <i class="fas fa-redo"></i> <span class="en-bold small">Redo</span>
-                                        </a>
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='exit_makeup', session_date=selected_date) }}" class="btn btn-outline-info" title="Exit Make-Up">
-                                            <i class="fas fa-paste"></i> <span class="en-bold small">Make-Up</span>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="3" class="text-center text-muted py-2 ar-normal">لا يوجد متدربون في هذه الدفعة.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    <form method="post" action="{{ url_for('talent_exam_feedback_save_presence', batch_id=item.batch.BatchID) }}" class="batch-presence-form">
+                        <input type="hidden" name="session_date" value="{{ selected_date }}">
+                        <input type="hidden" name="from_dashboard" value="1">
+                        <table class="table table-sm table-hover align-middle mb-2">
+                            <thead class="table-light">
+                                <tr>
+                                    <th><span class="en-bold">Trainee</span> <span class="ar-normal">المتدرب</span></th>
+                                    <th class="text-center" style="min-width: 7rem;"><span class="en-bold">Present</span> <span class="ar-normal">حاضر</span></th>
+                                    <th><span class="en-bold">CEFR</span></th>
+                                    <th><span class="en-bold">Exam types</span> <span class="ar-normal">أنواع الاختبار</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for st in item.students %}
+                                <tr>
+                                    <td><span class="en-bold">{{ st.FullName }}</span></td>
+                                    <td class="text-center">
+                                        <div class="form-check form-switch d-flex justify-content-center mb-0">
+                                            <input class="form-check-input" type="checkbox" name="present_{{ st.EnrollmentID }}" value="1" id="pd_{{ item.batch.BatchID }}_{{ st.EnrollmentID }}"
+                                                   {% if st.session_present %}checked{% endif %} title="حاضر في جلسة {{ selected_date }}">
+                                            <label class="form-check-label small ar-normal ms-1 d-none d-md-inline" for="pd_{{ item.batch.BatchID }}_{{ st.EnrollmentID }}">حاضر</label>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm flex-wrap" role="group">
+                                            <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic', session_date=selected_date) }}" class="btn btn-outline-primary" title="تقييم دوري مرحلي">
+                                                <i class="fas fa-calendar-check"></i> <span class="ar-normal">دوري</span>
+                                            </a>
+                                            <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation', session_date=selected_date) }}" class="btn btn-outline-success" title="اختبار تخرج Exit">
+                                                <i class="fas fa-graduation-cap"></i> <span class="ar-normal">تخرج</span>
+                                            </a>
+                                            <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='redo', session_date=selected_date) }}" class="btn btn-outline-warning" title="إعادة — لم يُرصد في الموعد">
+                                                <i class="fas fa-redo"></i> <span class="en-bold small">Redo</span>
+                                            </a>
+                                            <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='exit_makeup', session_date=selected_date) }}" class="btn btn-outline-info" title="Exit Make-Up">
+                                                <i class="fas fa-paste"></i> <span class="en-bold small">Make-Up</span>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="4" class="text-center text-muted py-2 ar-normal">لا يوجد متدربون في هذه الدفعة.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% if item.students %}
+                        <button type="submit" class="btn btn-sm btn-dark">
+                            <i class="fas fa-save"></i> <span class="ar-normal">حفظ الحضور</span> <small class="text-white-50">({{ selected_date }})</small>
+                        </button>
+                        {% endif %}
+                    </form>
                 </div>
                 {% else %}
                 <p class="text-muted ar-normal mb-0">لا توجد دفعات نشطة.</p>

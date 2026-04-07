@@ -2987,16 +2987,24 @@ def talent_dashboard():
     batches_with_students = []
     if ui_ctx == TA_CTX_TRAINING:
         try:
-            rows = query_db("""
+            rows = query_db(
+                """
                 SELECT B.BatchID, B.BatchName, Cr.CourseName,
-                       E.CandidateID, C.FullName, C.CurrentCEFR
+                       E.CandidateID, E.EnrollmentID, C.FullName, C.CurrentCEFR,
+                       BESP.IsPresent AS SessionIsPresent
                 FROM CourseBatches B
                 JOIN Courses Cr ON B.CourseID = Cr.CourseID
                 JOIN Enrollments E ON E.BatchID = B.BatchID AND E.Status = 'Active'
                 JOIN Candidates C ON E.CandidateID = C.CandidateID
+                LEFT JOIN BatchExamSessionPresence BESP
+                  ON BESP.BatchID = B.BatchID
+                 AND BESP.EnrollmentID = E.EnrollmentID
+                 AND BESP.SessionDate = CAST(? AS DATE)
                 WHERE B.Status = 'Active'
                 ORDER BY B.BatchName, C.FullName
-            """) or []
+                """,
+                (selected_date,),
+            ) or []
             current_batch_id = None
             current_entry = None
             for r in rows:
@@ -3012,10 +3020,14 @@ def talent_dashboard():
                         'students': [],
                     }
                     batches_with_students.append(current_entry)
+                sip = r.get('SessionIsPresent')
+                present_default = True if sip is None else bool(sip)
                 current_entry['students'].append({
                     'CandidateID': r['CandidateID'],
+                    'EnrollmentID': r['EnrollmentID'],
                     'FullName': r['FullName'],
                     'CurrentCEFR': r['CurrentCEFR'],
+                    'session_present': present_default,
                 })
         except Exception:
             pass
@@ -3724,6 +3736,10 @@ def talent_exam_feedback_save_presence(batch_id):
         except Exception:
             pass
     flash('تم حفظ حضور الجلسة.', 'success')
+    if (request.form.get('from_dashboard') or '').strip() == '1':
+        return redirect(
+            url_for('talent_dashboard', context='training', date=session_date),
+        )
     return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
 
 
