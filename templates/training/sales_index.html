@@ -1,7 +1,43 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="row mb-4">
+<style>
+  .training-lead-register .lead-type-card {
+    border: 2px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    height: 100%;
+  }
+  .training-lead-register .lead-type-card:hover {
+    border-color: #adb5bd;
+  }
+  .training-lead-register .lead-type-card.active-interested {
+    border-color: #0dcaf0;
+    box-shadow: 0 0 0 0.2rem rgba(13, 202, 240, 0.2);
+    background: #f0fdff;
+  }
+  .training-lead-register .lead-type-card.active-tth {
+    border-color: #212529;
+    box-shadow: 0 0 0 0.2rem rgba(33, 37, 41, 0.15);
+    background: #f8f9fa;
+  }
+  .training-lead-register .tth-doc-row {
+    border-bottom: 1px solid #e9ecef;
+    padding: 0.65rem 0;
+  }
+  .training-lead-register .tth-doc-row:last-child {
+    border-bottom: none;
+  }
+  .training-lead-register .tth-docs-panel {
+    border: 1px dashed #dc3545;
+    border-radius: 0.5rem;
+    background: linear-gradient(180deg, #fff5f5 0%, #fff 48%);
+  }
+</style>
+
+<div class="row mb-4 training-lead-register">
     <div class="col-md-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
@@ -9,35 +45,74 @@
                 <li class="breadcrumb-item active"><span class="en-bold">Leads</span></li>
             </ol>
         </nav>
-        <h2><i class="fas fa-user-plus text-success"></i> <span class="en-bold">Training Leads</span></h2>
-        <p class="text-muted small">إلزامي: الاسم، البريد، الموبايل، الجامعة/الكلية، السكن، المصدر، العمر أو تاريخ الميلاد، التخرج. نوع الليد: مهتم تدريب (يتطلب دفع امتحان قبل الحجز) أو Train to Hire (روابط Drive إلزامية، بدون دفع للمختبر).</p>
+        <h2 class="mb-2"><i class="fas fa-user-plus text-success"></i> <span class="en-bold">Training Leads</span></h2>
+        <div class="alert alert-light border py-2 small mb-0">
+            <strong class="ar-normal">تعريف مهتم التدريب:</strong>
+            <span class="ar-normal">الحقول المميزة بـ <span class="text-danger">*</span> إلزامية. اختر نوع الليد في الأعلى —</span>
+            <span class="en-bold">Interested for training</span>
+            <span class="ar-normal">(مسار عادي + دفع امتحان قبل حجز مختبر التدريب)، أو</span>
+            <span class="en-bold">Train to Hire</span>
+            <span class="ar-normal">(أربعة روابط Google Drive إلزامية + حجز بدون دفع امتحان).</span>
+        </div>
     </div>
 </div>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-success text-white">
-        <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i> <span class="en-bold">Register lead</span></h6>
+<div class="card shadow-sm mb-4 training-lead-register border-success border-top border-3">
+    <div class="card-header bg-success text-white d-flex flex-wrap align-items-center gap-2">
+        <h6 class="mb-0"><i class="fas fa-id-card me-2"></i> <span class="en-bold">Register lead</span> <span class="ar-normal opacity-90">— تعريف المهتم</span></h6>
     </div>
     <div class="card-body">
-        <form action="{{ url_for('training_sales_register') }}" method="POST" class="row g-3">
-            <div class="col-12 border-bottom pb-2 mb-2">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="train_to_hire" value="1" id="tthChk">
-                    <label class="form-check-label en-bold" for="tthChk">Train to Hire</label>
-                    <span class="text-muted small ar-normal d-block">عند التفعيل: روابط Google Drive للمستندات الأربعة إلزامية؛ الحجز بدون دفع امتحان.</span>
+        <form action="{{ url_for('training_sales_register') }}" method="POST" class="row g-3" id="trainingLeadForm">
+            <div class="col-12">
+                <label class="form-label fw-bold ar-normal mb-2">نوع ليد التدريب <span class="text-danger">*</span></label>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="lead-type-card active-interested d-block mb-0" id="cardInterested" for="leadInterested">
+                            <div class="d-flex align-items-start gap-2">
+                                <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="training_lead_type" id="leadInterested" value="interested" checked>
+                                <div>
+                                    <div class="fw-bold en-bold">Interested for training purposes</div>
+                                    <div class="small text-muted ar-normal mt-1">مهتم لغرض التدريب — المسار الطبيعي؛ يظهر لدى مختبر مواهب التدريب بعد تسجيل دفع رسوم امتحان تحديد المستوى.</div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="lead-type-card d-block mb-0" id="cardTth" for="leadTth">
+                            <div class="d-flex align-items-start gap-2">
+                                <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="training_lead_type" id="leadTth" value="train_to_hire">
+                                <div>
+                                    <div class="fw-bold en-bold">Train to Hire</div>
+                                    <div class="small text-muted ar-normal mt-1">تدريب للتوظيف — يُرفق أربعة روابط مستندات (Google Drive) إلزامية؛ الحجز مع مختبر التدريب دون اشتراط فاتورة الامتحان.</div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
+
+            <div class="col-12">
+                <div class="p-3 rounded bg-info bg-opacity-10 border border-info border-opacity-25 small ar-normal" id="hintInterested">
+                    <i class="fas fa-info-circle text-info me-1"></i> تم اختيار <strong>مهتم تدريب</strong>: لن تُعرض حقول مستندات Train to Hire. بعد الحفظ، سجّل دفع الامتحان من <a href="{{ url_for('training_sales_exam_fee') }}">Exam Fee</a> قبل حجز الموعد.
+                </div>
+                <div class="p-3 rounded bg-danger bg-opacity-10 border border-danger border-opacity-25 small ar-normal d-none" id="hintTth">
+                    <i class="fas fa-file-alt text-danger me-1"></i> تم اختيار <strong>Train to Hire</strong>: أكمل الروابط الأربعة أدناه (كل رابط يبدأ بـ <code>http</code>).
+                </div>
+            </div>
+
+            <div class="col-12"><hr class="my-1 text-muted"></div>
+
             <div class="col-md-4">
                 <label class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
-                <input type="text" name="full_name" class="form-control" required>
+                <input type="text" name="full_name" class="form-control" required autocomplete="name">
             </div>
             <div class="col-md-4">
                 <label class="form-label">البريد <span class="text-danger">*</span></label>
-                <input type="email" name="email" class="form-control" required>
+                <input type="email" name="email" class="form-control" required autocomplete="email">
             </div>
             <div class="col-md-4">
                 <label class="form-label">الموبايل <span class="text-danger">*</span></label>
-                <input type="text" name="phone" class="form-control" required>
+                <input type="text" name="phone" class="form-control" required autocomplete="tel">
             </div>
             <div class="col-md-6">
                 <label class="form-label">الجامعة / الكلية <span class="text-danger">*</span></label>
@@ -67,17 +142,50 @@
                     <option value="No">No / لا</option>
                 </select>
             </div>
-            <div class="col-12 tth-docs d-none border rounded p-3 bg-light" id="tthBlock">
-                <h6 class="en-bold text-danger">Train to Hire — Google Drive links (http…)</h6>
-                <div class="row g-2">
-                    <div class="col-md-6"><label class="small">شهادة تخرج / قيد</label><input type="url" name="tth_link_degree" class="form-control form-control-sm tth-req" placeholder="https://drive.google.com/..."></div>
-                    <div class="col-md-6"><label class="small">إيميل بديل</label><input type="url" name="tth_link_alt_email" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
-                    <div class="col-md-6"><label class="small">صورة بطاقة</label><input type="url" name="tth_link_idcard" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
-                    <div class="col-md-6"><label class="small">إثبات تعاقد جهة توظيف</label><input type="url" name="tth_link_contract" class="form-control form-control-sm tth-req" placeholder="https://..."></div>
+
+            <div class="col-12 p-3 tth-docs-panel d-none" id="tthBlock" dir="rtl">
+                <h6 class="text-danger mb-3 border-bottom pb-2">
+                    <span class="en-bold">Train to Hire</span>
+                    <span class="ar-normal">— مستندات إلزامية (رابط Google Drive لكل بند)</span>
+                </h6>
+                <p class="small text-muted mb-3 ar-normal">المسمى على اليمين، حقل الرابط على اليسار (اتجاه عربي).</p>
+
+                <div class="tth-doc-row row align-items-center g-2 mx-0">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-0 fw-semibold ar-normal" for="tth_link_degree">شهادة تخرج أو إفادة جامعة أو إثبات قيد</label>
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <input type="url" name="tth_link_degree" id="tth_link_degree" class="form-control tth-req" dir="ltr" placeholder="https://drive.google.com/...">
+                    </div>
+                </div>
+                <div class="tth-doc-row row align-items-center g-2 mx-0">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-0 fw-semibold ar-normal" for="tth_link_alt_email">بريد إلكتروني بديل (مستند/إثبات)</label>
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <input type="url" name="tth_link_alt_email" id="tth_link_alt_email" class="form-control tth-req" dir="ltr" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="tth-doc-row row align-items-center g-2 mx-0">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-0 fw-semibold ar-normal" for="tth_link_idcard">صورة بطاقة الهوية</label>
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <input type="url" name="tth_link_idcard" id="tth_link_idcard" class="form-control tth-req" dir="ltr" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="tth-doc-row row align-items-center g-2 mx-0">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-0 fw-semibold ar-normal" for="tth_link_contract">إثبات تعاقد مع جهة التوظيف</label>
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <input type="url" name="tth_link_contract" id="tth_link_contract" class="form-control tth-req" dir="ltr" placeholder="https://...">
+                    </div>
                 </div>
             </div>
-            <div class="col-12">
-                <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i> Save</button>
+
+            <div class="col-12 pt-2">
+                <button type="submit" class="btn btn-success btn-lg px-4"><i class="fas fa-save me-1"></i> Save</button>
             </div>
         </form>
     </div>
@@ -139,12 +247,38 @@
 </div>
 <script>
 (function(){
-  const chk = document.getElementById('tthChk');
+  const interested = document.getElementById('leadInterested');
+  const tth = document.getElementById('leadTth');
   const blk = document.getElementById('tthBlock');
-  if (chk && blk) {
-    function sync(){ blk.classList.toggle('d-none', !chk.checked); blk.querySelectorAll('.tth-req').forEach(i => i.required = chk.checked); }
-    chk.addEventListener('change', sync); sync();
+  const cardInterested = document.getElementById('cardInterested');
+  const cardTth = document.getElementById('cardTth');
+  const hintInterested = document.getElementById('hintInterested');
+  const hintTth = document.getElementById('hintTth');
+
+  function isTth() { return tth && tth.checked; }
+
+  function sync(){
+    const tthOn = isTth();
+    if (blk) {
+      blk.classList.toggle('d-none', !tthOn);
+      blk.querySelectorAll('.tth-req').forEach(function(i){ i.required = tthOn; });
+    }
+    if (cardInterested) {
+      cardInterested.classList.toggle('active-interested', !tthOn);
+      cardInterested.classList.toggle('active-tth', false);
+    }
+    if (cardTth) {
+      cardTth.classList.toggle('active-tth', tthOn);
+      cardTth.classList.toggle('active-interested', false);
+    }
+    if (hintInterested) hintInterested.classList.toggle('d-none', tthOn);
+    if (hintTth) hintTth.classList.toggle('d-none', !tthOn);
   }
+
+  if (interested) interested.addEventListener('change', sync);
+  if (tth) tth.addEventListener('change', sync);
+  sync();
+
   const t = document.getElementById('leadsTable');
   const f0 = t && t.querySelector('.lf[data-i="0"]');
   const f1 = t && t.querySelector('.lf[data-i="1"]');
@@ -152,7 +286,7 @@
     if (!t) return;
     const qn = (f0 && f0.value || '').toLowerCase();
     const qp = (f1 && f1.value || '').toLowerCase();
-    t.querySelectorAll('tbody tr').forEach(tr => {
+    t.querySelectorAll('tbody tr').forEach(function(tr){
       const td = tr.querySelectorAll('td');
       if (td.length < 2) return;
       let ok = (!qn || (td[0].textContent||'').toLowerCase().includes(qn))

@@ -5906,7 +5906,14 @@ def training_sales_register():
     age_s = (f.get('age') or '').strip()
     birth_s = (f.get('birth_date') or '').strip()
     graduate = (f.get('is_graduate') or '').strip()
-    train_to_hire = f.get('train_to_hire') in ('1', 'on', 'yes', 'true', 'True')
+    _tl = (f.get('training_lead_type') or '').strip().lower()
+    train_to_hire = _tl == 'train_to_hire' or f.get('train_to_hire') in (
+        '1',
+        'on',
+        'yes',
+        'true',
+        'True',
+    )
     lk_deg = (f.get('tth_link_degree') or '').strip()
     lk_mail = (f.get('tth_link_alt_email') or '').strip()
     lk_id = (f.get('tth_link_idcard') or '').strip()
