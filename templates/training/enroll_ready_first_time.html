@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+    <div>
+      <h2 class="h4 mb-1"><span class="en-bold">Ready to enroll (first time)</span> <span class="ar-normal text-muted">— جاهزين للاشتراك أول مرة</span></h2>
+      <p class="text-muted small mb-0">الشرط: <span class="en-bold">Accepted</span> (Placement) + <span class="en-bold">Confirmed Training</span> من الإغلاق + لا يوجد Enrollment سابق.</p>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>CEFR</th>
+          <th>Closing</th>
+          <th>Enroll to batch</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="fw-semibold">{{ r.FullName }}</td>
+          <td>{{ r.Phone }}</td>
+          <td><span class="badge bg-secondary">{{ r.CurrentCEFR or '-' }}</span></td>
+          <td class="small">
+            <div><span class="text-muted">Closer:</span> {{ r.TrainingClosing_CloserName or '—' }}</div>
+            <div><span class="text-muted">Date:</span> {{ (r.TrainingClosing_StatusDate|string)[:10] if r.TrainingClosing_StatusDate else '—' }}</div>
+            {% if r.LastPlacementAcceptedDate %}<div><span class="text-muted">TA Accepted:</span> {{ (r.LastPlacementAcceptedDate|string)[:10] }}</div>{% endif %}
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('enroll_student') }}" class="row g-1 align-items-end">
+              <input type="hidden" name="candidate_id" value="{{ r.CandidateID }}">
+              <div class="col-md-6">
+                <label class="small text-muted mb-0">Batch/Wave</label>
+                <select name="batch_id" class="form-select form-select-sm" required>
+                  <option value="">— اختر دفعة —</option>
+                  {% for b in active_batches %}
+                  <option value="{{ b.BatchID }}">{{ b.BatchName }} — {{ b.CourseName }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="small text-muted mb-0">Agreed price</label>
+                <input type="number" step="0.01" name="agreed_price" class="form-control form-control-sm" placeholder="Default">
+              </div>
+              <div class="col-md-3">
+                <button type="submit" class="btn btn-sm btn-success w-100"><i class="fas fa-user-plus"></i> Enroll</button>
+              </div>
+              <div class="col-12">
+                <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes (اختياري)">
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">لا يوجد مرشحون جاهزون للاشتراك أول مرة.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

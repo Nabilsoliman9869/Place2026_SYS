@@ -468,6 +468,18 @@
                 <i class="fas fa-handshake"></i>
                 <span class="link-text"><span class="en-bold">TO BE CLOSE</span> <span class="ar-normal">إغلاق مهتمين</span></span>
             </a>
+            {% endif %}
+            {% if session.get('role') in ['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'] %}
+            <a href="{{ url_for('training_enrollment_ready_first_time') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_enrollment_ready_first_time' else '' }}">
+                <i class="fas fa-user-plus"></i>
+                <span class="link-text"><span class="en-bold">Ready to enroll</span> <span class="ar-normal">اشتراك أول مرة</span></span>
+            </a>
+            <a href="{{ url_for('training_enrollment_upgrade_level') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'training_enrollment_upgrade_level' else '' }}">
+                <i class="fas fa-level-up-alt"></i>
+                <span class="link-text"><span class="en-bold">Upgrade level</span> <span class="ar-normal">تحديث مستوى</span></span>
+            </a>
             <a href="{{ url_for('training_sales_needs_reschedule') }}"
                 class="nav-link {{ 'active' if request.endpoint == 'training_sales_needs_reschedule' else '' }}">
                 <i class="fas fa-phone-alt"></i>

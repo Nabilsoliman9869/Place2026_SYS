@@ -6324,6 +6324,69 @@ def training_sales_to_be_close():
     )
 
 
+# --- اشتراكات التدريب (بعد Close): أول مرة / Upgrade level ---
+@app.route('/training/enrollment/ready-first-time')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_enrollment_ready_first_time():
+    """جاهزين للاشتراك أول مرة: Accepted (Placement) + Close Confirmed Training + بدون أي Enrollment سابق."""
+    active_batches = query_db(
+        "SELECT B.BatchID, B.BatchName, C.CourseName, C.DefaultPrice "
+        "FROM CourseBatches B JOIN Courses C ON B.CourseID=C.CourseID "
+        "WHERE B.Status='Active' ORDER BY B.StartDate DESC, B.BatchName"
+    ) or []
+    rows = query_db(
+        """
+        SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.CurrentCEFR,
+               C.TrainingClosing_CloserName, C.TrainingClosing_StatusDate,
+               C.TrainingClosing_LanguageFeedback,
+               (SELECT TOP 1 E.EvaluationDate FROM Evaluations E
+                 WHERE E.CandidateID=C.CandidateID AND E.EvaluationType=? AND E.Decision='Accepted'
+                 ORDER BY E.EvaluationDate DESC) AS LastPlacementAcceptedDate
+        FROM Candidates C
+        WHERE (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+          AND C.TrainingSalesQueue = ?
+          AND C.TrainingClosing_Status = N'Confirmed Training'
+          AND NOT EXISTS (SELECT 1 FROM Enrollments En WHERE En.CandidateID = C.CandidateID)
+          AND EXISTS (SELECT 1 FROM Evaluations E WHERE E.CandidateID=C.CandidateID AND E.EvaluationType=? AND E.Decision='Accepted')
+        ORDER BY ISNULL(C.TrainingClosing_StatusDate, C.CreatedAt) DESC
+        """,
+        (EVAL_TRAINING_PLACEMENT, TRAINING_QUEUE_TO_BE_CLOSE, EVAL_TRAINING_PLACEMENT),
+    ) or []
+    return render_template('training/enroll_ready_first_time.html', rows=rows, active_batches=active_batches)
+
+
+@app.route('/training/enrollment/upgrade-level')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_enrollment_upgrade_level():
+    """Upgrade level: Close Confirmed Training + لديه Enrollments سابقة + Accepted (Graduation/Exit)."""
+    active_batches = query_db(
+        "SELECT B.BatchID, B.BatchName, C.CourseName, C.DefaultPrice "
+        "FROM CourseBatches B JOIN Courses C ON B.CourseID=C.CourseID "
+        "WHERE B.Status='Active' ORDER BY B.StartDate DESC, B.BatchName"
+    ) or []
+    rows = query_db(
+        """
+        SELECT C.CandidateID, C.FullName, C.Phone, C.Email, C.CurrentCEFR,
+               C.TrainingClosing_CloserName, C.TrainingClosing_StatusDate,
+               (SELECT TOP 1 B.BatchName FROM Enrollments En JOIN CourseBatches B ON En.BatchID=B.BatchID
+                 WHERE En.CandidateID=C.CandidateID ORDER BY En.EnrollmentDate DESC) AS LastBatch,
+               (SELECT TOP 1 E.EvaluationDate FROM Evaluations E
+                 WHERE E.CandidateID=C.CandidateID AND E.EvaluationType=? AND E.Decision='Accepted'
+                 ORDER BY E.EvaluationDate DESC) AS LastExitAcceptedDate
+        FROM Candidates C
+        WHERE (C.PrimaryIntent = N'Training' OR C.Status = N'Training_Lead')
+          AND C.TrainingClosing_Status = N'Confirmed Training'
+          AND EXISTS (SELECT 1 FROM Enrollments En WHERE En.CandidateID = C.CandidateID)
+          AND EXISTS (SELECT 1 FROM Evaluations E WHERE E.CandidateID=C.CandidateID AND E.EvaluationType=? AND E.Decision='Accepted')
+        ORDER BY ISNULL(C.TrainingClosing_StatusDate, C.CreatedAt) DESC
+        """,
+        (EVAL_TRAINING_GRADUATION, EVAL_TRAINING_GRADUATION),
+    ) or []
+    return render_template('training/enroll_upgrade_level.html', rows=rows, active_batches=active_batches)
+
+
 @app.route('/training/sales/acceptance-train-to-hire')
 @login_required
 @role_required(['TrainingSalesCoordinator', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'Manager', 'Finance'])
@@ -7528,6 +7591,15 @@ def enroll_student():
              
     # Update Candidate Status
     query_db("UPDATE Candidates SET Status='Enrolled' WHERE CandidateID=?", (cand_id,))
+
+    # After enrollment: clear sales queue flags for closed leads
+    try:
+        query_db(
+            "UPDATE Candidates SET TrainingSalesQueue=NULL, TrainingTA_Substatus=NULL WHERE CandidateID=?",
+            (cand_id,),
+        )
+    except Exception:
+        pass
     
     flash('Student Enrolled Successfully', 'success')
     return redirect(request.referrer)
