@@ -176,13 +176,23 @@
                 </h5>
             </div>
             <div class="card-body">
-                <p class="text-muted small ar-normal mb-3">استعرض الدفعات النشطة وقم بتقييم المتدربين على مستوى السطر.</p>
+                <p class="text-muted small ar-normal mb-2">
+                    <strong>اختبار تحديد المستوى (ليد / مهتم تدريب):</strong> من جدول <span class="en-bold">Daily Schedule</span> أعلاه عند وجود موعد محجوز — زر <strong>تقييم</strong> (وليس من قائمة الدفعات).
+                </p>
+                <p class="text-muted small ar-normal mb-3">
+                    <strong>دوري / تخرج / إعادة / Exit Make-Up:</strong> للمتدربين المسجّلين في دفعة نشطة — نفس المنطق الكامل في صفحة الدفعة عبر الرابط أسفل كل جدول.
+                </p>
                 {% for item in batches_with_students|default([]) %}
                 <div class="mb-4">
-                    <h6 class="text-primary">
-                        <span class="en-bold">{{ item.batch.BatchName }}</span>
-                        <span class="ar-normal">— {{ item.batch.CourseName }}</span>
-                    </h6>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <h6 class="text-primary mb-0">
+                            <span class="en-bold">{{ item.batch.BatchName }}</span>
+                            <span class="ar-normal">— {{ item.batch.CourseName }}</span>
+                        </h6>
+                        <a href="{{ url_for('talent_exam_feedback', batch_id=item.batch.BatchID, session_date=selected_date) }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-external-link-alt"></i> <span class="ar-normal">صفحة الدفعة</span> <small class="text-muted">(حضور + كل الأنواع)</small>
+                        </a>
+                    </div>
                     <table class="table table-sm table-hover align-middle">
                         <thead class="table-light">
                             <tr>
@@ -197,12 +207,18 @@
                                 <td><span class="en-bold">{{ st.FullName }}</span></td>
                                 <td><span class="badge bg-secondary">{{ st.CurrentCEFR or '-' }}</span></td>
                                 <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic') }}" class="btn btn-outline-primary" title="تقييم دوري">
+                                    <div class="btn-group btn-group-sm flex-wrap" role="group">
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='periodic', session_date=selected_date) }}" class="btn btn-outline-primary" title="تقييم دوري مرحلي">
                                             <i class="fas fa-calendar-check"></i> <span class="ar-normal">دوري</span>
                                         </a>
-                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation') }}" class="btn btn-outline-success" title="اختبار تخرج">
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='graduation', session_date=selected_date) }}" class="btn btn-outline-success" title="اختبار تخرج Exit">
                                             <i class="fas fa-graduation-cap"></i> <span class="ar-normal">تخرج</span>
+                                        </a>
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='redo', session_date=selected_date) }}" class="btn btn-outline-warning" title="إعادة — لم يُرصد في الموعد">
+                                            <i class="fas fa-redo"></i> <span class="en-bold small">Redo</span>
+                                        </a>
+                                        <a href="{{ url_for('talent_exam_feedback_evaluate', batch_id=item.batch.BatchID, candidate_id=st.CandidateID, exam_kind='exit_makeup', session_date=selected_date) }}" class="btn btn-outline-info" title="Exit Make-Up">
+                                            <i class="fas fa-paste"></i> <span class="en-bold small">Make-Up</span>
                                         </a>
                                     </div>
                                 </td>
