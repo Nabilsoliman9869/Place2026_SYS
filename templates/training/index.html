@@ -48,12 +48,16 @@
             <a href="{{ url_for('training_index', view='active') }}" class="btn btn-{{ 'primary' if view == 'active' else 'outline-secondary' }}">
                 <span class="en-bold">Active</span> <span class="ar-normal">الدفعات النشطة</span>
             </a>
+            <a href="{{ url_for('training_index', view='planned') }}" class="btn btn-{{ 'warning' if view == 'planned' else 'outline-secondary' }}">
+                <span class="en-bold">PLANNED</span> <span class="ar-normal">UPCOMING WAVE</span>
+            </a>
             <a href="{{ url_for('training_index', view='archive') }}" class="btn btn-{{ 'secondary' if view == 'archive' else 'outline-secondary' }}">
                 <span class="en-bold">Archive</span> <span class="ar-normal">الأرشيف</span>
             </a>
         </div>
         <span class="ms-2 small text-muted ar-normal">
             {% if view == 'active' %}تاريخ النهاية لم ينتهِ أو منشطة
+            {% elif view == 'planned' %}دفعات مخطط لها: تاريخ البداية أكبر من تاريخ اليوم
             {% else %}كل ما كان عليها — غير منشطة أو منتهية
             {% endif %}
         </span>
@@ -62,8 +66,16 @@
 
 <div class="card shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><span class="en-bold">{% if view == 'active' %}Active{% else %}Archive{% endif %} Waves</span> <span class="ar-normal">({% if view == 'active' %}الدفعات النشطة{% else %}الأرشيف{% endif %})</span></h5>
-        {% if view == 'active' %}
+        <h5 class="mb-0">
+            <span class="en-bold">
+                {% if view == 'active' %}Active{% elif view == 'planned' %}Planned{% else %}Archive{% endif %}
+                Waves
+            </span>
+            <span class="ar-normal">
+                ({% if view == 'active' %}الدفعات النشطة{% elif view == 'planned' %}دفعات مخطط لها{% else %}الأرشيف{% endif %})
+            </span>
+        </h5>
+        {% if view in ['active', 'planned'] %}
         <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBatchModal">
             <i class="fas fa-plus"></i> <span class="en-bold">New Wave</span>
         </button>
@@ -73,13 +85,20 @@
         <table class="table table-hover align-middle mb-0" id="training-waves-table">
             <thead class="table-light">
                 <tr>
-                    <th><span class="en-bold">Wave</span> <span class="ar-normal">الدفعة</span></th>
-                    <th><span class="en-bold">Course</span> <span class="ar-normal">الدورة</span></th>
-                    <th><span class="en-bold">Trainer</span> <span class="ar-normal">المدرب</span></th>
-                    <th><span class="en-bold">Room</span> <span class="ar-normal">القاعة</span></th>
-                    <th><span class="en-bold">Dates</span> <span class="ar-normal">التواريخ</span></th>
-                    <th><span class="en-bold">Status</span> <span class="ar-normal">الحالة</span></th>
-                    <th><span class="en-bold">Action</span> <span class="ar-normal">إجراء</span></th>
+                    <th>Wave</th>
+                    <th>Level / Course</th>
+                    <th>Room</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Trainer</th>
+                    <th>Days</th>
+                    <th>Time</th>
+                    <th>Periodic exams</th>
+                    <th class="text-center">Max</th>
+                    <th class="text-center">Enrolled</th>
+                    <th class="text-center">Available</th>
+                    <th>Status</th>
+                    <th class="text-end">Action</th>
                 </tr>
                 <tr class="table-secondary bg-opacity-25">
                     <th class="p-1">
@@ -96,20 +115,35 @@
                         </select>
                     </th>
                     <th class="p-1">
-                        <select class="form-select form-select-sm js-wave-filter" id="filter-trainer" title="فلترة المدرب">
-                            <option value="">— كل المدربين —</option>
-                            {% for n in filter_trainer_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
-                        </select>
-                    </th>
-                    <th class="p-1">
                         <select class="form-select form-select-sm js-wave-filter" id="filter-room" title="فلترة القاعة">
                             <option value="">— كل القاعات —</option>
                             {% for n in filter_room_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
                         </select>
                     </th>
                     <th class="p-1">
-                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-dates" placeholder="تاريخ…" title="بحث في بداية/نهاية الدفعة">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-start" placeholder="Start…" title="بحث في تاريخ البداية">
                     </th>
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-end" placeholder="End…" title="بحث في تاريخ النهاية">
+                    </th>
+                    <th class="p-1">
+                        <select class="form-select form-select-sm js-wave-filter" id="filter-trainer" title="فلترة المدرب">
+                            <option value="">— كل المدربين —</option>
+                            {% for n in filter_trainer_names|default([]) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </th>
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-days" placeholder="Days…" title="بحث في أيام الأسبوع">
+                    </th>
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-time" placeholder="Time…" title="بحث في الوقت">
+                    </th>
+                    <th class="p-1">
+                        <input type="text" class="form-control form-control-sm js-wave-filter" id="filter-exams" placeholder="Exams…" title="بحث في تواريخ الامتحانات الدورية">
+                    </th>
+                    <th class="p-1"></th>
+                    <th class="p-1"></th>
+                    <th class="p-1"></th>
                     <th class="p-1">
                         <select class="form-select form-select-sm js-wave-filter" id="filter-status" title="فلترة الحالة">
                             <option value="">— كل الحالات —</option>
@@ -125,9 +159,11 @@
             </thead>
             <tbody>
                 {% if not batches %}
-                <tr><td colspan="7" class="text-muted text-center py-4">
+                <tr><td colspan="14" class="text-muted text-center py-4">
                     {% if view == 'active' %}
                     <span class="ar-normal">لا توجد دفعات نشطة.</span> <span class="en-bold">New Wave</span> <span class="ar-normal">أعلاه.</span>
+                    {% elif view == 'planned' %}
+                    <span class="ar-normal">لا توجد دفعات مخطط لها.</span>
                     {% else %}
                     <span class="ar-normal">لا توجد دفعات في الأرشيف.</span>
                     {% endif %}
@@ -139,15 +175,32 @@
                     data-course="{{ (wave.CourseName or '')|e }}"
                     data-trainer="{{ (wave.TrainerName or '')|e }}"
                     data-room="{{ (wave.RoomName or '')|e }}"
-                    data-dates="{{ ((wave.StartDate|string if wave.StartDate else '') ~ ' ' ~ (wave.EndDate|string if wave.EndDate else ''))|e }}"
+                    data-start="{{ (wave.StartDate|string if wave.StartDate else '')|e }}"
+                    data-end="{{ (wave.EndDate|string if wave.EndDate else '')|e }}"
+                    data-days="{{ (wave.WeekDays or '')|e }}"
+                    data-time="{{ ((wave.StartTimeStr or '') ~ ' - ' ~ (wave.EndTimeStr or ''))|e }}"
+                    data-exams="{{ (wave.PeriodicExamDates or '')|e }}"
                     data-status="{{ (wave.Status or '')|e }}">
+                    {% set maxc = wave.MaxCapacity if wave.MaxCapacity is not none else 0 %}
+                    {% set en = wave.EnrolledCount if wave.EnrolledCount is not none else 0 %}
+                    {% set avail = (maxc - en) if maxc and en is not none else None %}
                     <td class="fw-bold">{{ wave.BatchName }}</td>
                     <td>{{ wave.CourseName }}</td>
-                    <td>{{ wave.TrainerName or '-' }}</td>
                     <td>{{ wave.RoomName or '-' }}</td>
-                    <td>
-                        <small class="d-block">{{ wave.StartDate or '-' }}</small>
-                        <small class="text-muted">{{ wave.EndDate or '-' }}</small>
+                    <td><small>{{ wave.StartDate|dmy }}</small></td>
+                    <td><small>{{ wave.EndDate|dmy }}</small></td>
+                    <td>{{ wave.TrainerName or '-' }}</td>
+                    <td class="small">{{ wave.WeekDays or '—' }}</td>
+                    <td class="small">{{ wave.StartTimeStr or '—' }} — {{ wave.EndTimeStr or '—' }}</td>
+                    <td class="small">{{ wave.PeriodicExamDates or '—' }}</td>
+                    <td class="text-center">{{ wave.MaxCapacity if wave.MaxCapacity is not none else '—' }}</td>
+                    <td class="text-center"><span class="badge bg-secondary">{{ en }}</span></td>
+                    <td class="text-center">
+                        {% if avail is none %}
+                        —
+                        {% else %}
+                        <span class="badge bg-{{ 'danger' if avail <= 0 else ('warning text-dark' if avail <= 3 else 'success') }}">{{ avail }}</span>
+                        {% endif %}
                     </td>
                     <td>
                         <span class="badge bg-{{ 'success' if wave.Status == 'Active' else 'secondary' }}">{{ wave.Status or '-' }}</span>
@@ -164,11 +217,11 @@
                         </form>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="text-end">
                         <a href="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="btn btn-sm btn-primary">
                             <i class="fas fa-eye"></i> <span class="en-bold">Manage</span>
                         </a>
-                        {% if view == 'active' and session.get('role') in ['TrainingCoordinator', 'Trainer', 'TrainingLead', 'TrainingSalesCoordinator'] %}
+                        {% if view in ['active', 'planned'] and session.get('role') in ['TrainingCoordinator', 'Trainer', 'TrainingLead', 'TrainingSalesCoordinator'] %}
                         <a href="{{ url_for('batch_details', batch_id=wave.BatchID) }}" class="btn btn-sm btn-success ms-1" title="تسجيل طالب في الدفعة">
                             <i class="fas fa-user-plus"></i> <span class="ar-normal">تسجيل طلاب</span>
                         </a>
@@ -331,7 +384,11 @@
         var cv = (document.getElementById('filter-course') && document.getElementById('filter-course').value || '').trim();
         var tv = (document.getElementById('filter-trainer') && document.getElementById('filter-trainer').value || '').trim();
         var rv = (document.getElementById('filter-room') && document.getElementById('filter-room').value || '').trim();
-        var dv = norm(document.getElementById('filter-dates') && document.getElementById('filter-dates').value);
+        var stv = norm(document.getElementById('filter-start') && document.getElementById('filter-start').value);
+        var edv = norm(document.getElementById('filter-end') && document.getElementById('filter-end').value);
+        var dayv = norm(document.getElementById('filter-days') && document.getElementById('filter-days').value);
+        var timev = norm(document.getElementById('filter-time') && document.getElementById('filter-time').value);
+        var exv = norm(document.getElementById('filter-exams') && document.getElementById('filter-exams').value);
         var sv = (document.getElementById('filter-status') && document.getElementById('filter-status').value || '').trim();
         document.querySelectorAll('#training-waves-table tbody tr.wave-data-row').forEach(function (tr) {
             var ok = true;
@@ -339,7 +396,11 @@
             if (cv && (tr.getAttribute('data-course') || '').trim() !== cv) ok = false;
             if (tv && (tr.getAttribute('data-trainer') || '').trim() !== tv) ok = false;
             if (rv && (tr.getAttribute('data-room') || '').trim() !== rv) ok = false;
-            if (dv && norm(tr.getAttribute('data-dates')).indexOf(dv) === -1) ok = false;
+            if (stv && norm(tr.getAttribute('data-start')).indexOf(stv) === -1) ok = false;
+            if (edv && norm(tr.getAttribute('data-end')).indexOf(edv) === -1) ok = false;
+            if (dayv && norm(tr.getAttribute('data-days')).indexOf(dayv) === -1) ok = false;
+            if (timev && norm(tr.getAttribute('data-time')).indexOf(timev) === -1) ok = false;
+            if (exv && norm(tr.getAttribute('data-exams')).indexOf(exv) === -1) ok = false;
             if (sv && (tr.getAttribute('data-status') || '').trim() !== sv) ok = false;
             tr.style.display = ok ? '' : 'none';
         });

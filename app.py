@@ -7049,16 +7049,37 @@ def training_open_assessment_slots():
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingHead', 'TrainingManager', 'TrainingLead', 'TrainingCoordinator', 'TrainingSales', 'TrainingSalesCoordinator'])
 def training_index():
-    view = request.args.get('view', 'active')  # active | archive
-    base_sql = """
-        SELECT B.*, C.CourseName, T.FullName as TrainerName, R.RoomName 
-        FROM CourseBatches B 
-        JOIN Courses C ON B.CourseID = C.CourseID 
-        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID 
+    view = request.args.get('view', 'active')  # active | archive | planned
+    _ensure_course_batches_capacity_column()
+    has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
+    # Periodic exams aggregation: compatible (no STRING_AGG)
+    agg_exam_dates_sql = """
+        STUFF((
+            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
+            FROM BatchExamDates BE
+            WHERE BE.BatchID = B.BatchID
+            ORDER BY BE.ExamDate
+            FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 3, N'')
+    """
+    base_sql = f"""
+        SELECT B.BatchID, B.BatchName, B.CourseID, B.TrainerID, B.RoomID,
+               B.StartDate, B.EndDate, B.StartTime, B.EndTime, B.WeekDays, B.Status,
+               C.CourseName, T.FullName as TrainerName, R.RoomName,
+               {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
+               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS EnrolledCount,
+               ({agg_exam_dates_sql}) AS PeriodicExamDates
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
         LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
     """
     if view == 'archive':
         waves = query_db(base_sql + " WHERE (B.Status != 'Active' OR B.Status IS NULL) ORDER BY B.StartDate DESC, B.BatchName")
+    elif view == 'planned':
+        # Planned / Upcoming: starts in the future (regardless of status)
+        waves = query_db(base_sql + " WHERE B.StartDate > CAST(GETDATE() AS DATE) ORDER BY B.StartDate ASC, B.BatchName")
     else:
         waves = query_db(base_sql + " WHERE B.Status = 'Active' ORDER BY B.StartDate DESC, B.BatchName")
     
@@ -7068,6 +7089,13 @@ def training_index():
     classrooms = query_db("SELECT * FROM Classrooms")
 
     batches_list = waves or []
+    for w in batches_list:
+        try:
+            w['StartTimeStr'] = _safe_time_str(w.get('StartTime'))
+            w['EndTimeStr'] = _safe_time_str(w.get('EndTime'))
+        except Exception:
+            w['StartTimeStr'] = ''
+            w['EndTimeStr'] = ''
     filter_batch_names = sorted(
         {(b.get('BatchName') or '').strip() for b in batches_list if (b.get('BatchName') or '').strip()},
         key=lambda x: x.lower(),
