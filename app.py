@@ -897,6 +897,23 @@ def query_db(query, args=(), one=False):
         cursor.close()
         raise e
 
+
+def _db_has_column(table_name: str, column_name: str) -> bool:
+    """Check column existence safely (SQL Server)."""
+    try:
+        row = query_db(
+            """
+            SELECT 1 AS ok
+            FROM sys.columns
+            WHERE Object_ID = Object_ID(?) AND Name = ?
+            """,
+            (table_name, column_name),
+            one=True,
+        )
+        return bool(row)
+    except Exception:
+        return False
+
 # --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
 _USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
 
@@ -6508,15 +6525,26 @@ def training_reports_current_courses():
     _ensure_course_batches_capacity_column()
     df = (request.args.get('from') or '').strip()
     dt = (request.args.get('to') or '').strip()
-    sql = """
+    has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
+    # Use XML PATH aggregation for compatibility (works on SQL Server 2012+).
+    agg_exam_dates_sql = """
+        STUFF((
+            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
+            FROM BatchExamDates BE
+            WHERE BE.BatchID = B.BatchID
+            ORDER BY BE.ExamDate
+            FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 3, N'')
+    """
+    sql = f"""
         SELECT B.BatchID,
                B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
                B.StartDate, B.EndDate, T.FullName AS trainer_name, B.WeekDays AS days,
                B.StartTime, B.EndTime, B.Status,
-               B.MaxCapacity,
+               {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
                (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
-               (SELECT STRING_AGG(CONVERT(NVARCHAR(10), BE.ExamDate, 23) + COALESCE(N' (' + BE.ExamLabel + N')', N''), N' | ')
-                  FROM BatchExamDates BE WHERE BE.BatchID=B.BatchID) AS periodic_exam_dates
+               ({agg_exam_dates_sql}) AS periodic_exam_dates
         FROM CourseBatches B
         JOIN Courses C ON B.CourseID = C.CourseID
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
@@ -6531,7 +6559,33 @@ def training_reports_current_courses():
         sql += " AND B.EndDate <= CAST(? AS DATE)"
         params.append(dt)
     sql += " ORDER BY B.StartDate, B.BatchName"
-    rows = query_db(sql, tuple(params)) if params else query_db(sql) or []
+    try:
+        rows = query_db(sql, tuple(params)) if params else (query_db(sql) or [])
+    except Exception:
+        # Last resort fallback: no capacity, no exam-date aggregation (avoid 500)
+        sql2 = """
+            SELECT B.BatchID,
+                   B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
+                   B.StartDate, B.EndDate, T.FullName AS trainer_name, B.WeekDays AS days,
+                   B.StartTime, B.EndTime, B.Status,
+                   NULL AS MaxCapacity,
+                   (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+                   NULL AS periodic_exam_dates
+            FROM CourseBatches B
+            JOIN Courses C ON B.CourseID = C.CourseID
+            LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+            LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+            WHERE B.Status = N'Active'
+        """
+        params2 = []
+        if df:
+            sql2 += " AND B.StartDate >= CAST(? AS DATE)"
+            params2.append(df)
+        if dt:
+            sql2 += " AND B.EndDate <= CAST(? AS DATE)"
+            params2.append(dt)
+        sql2 += " ORDER BY B.StartDate, B.BatchName"
+        rows = query_db(sql2, tuple(params2)) if params2 else (query_db(sql2) or [])
     return render_template('training/reports_current_courses.html', rows=rows or [], df=df, dt=dt)
 
 
@@ -6541,21 +6595,48 @@ def training_reports_current_courses():
 def training_reports_future_batches():
     _ensure_course_batches_capacity_column()
     today = datetime.today().strftime('%Y-%m-%d')
-    rows = query_db(
-        """
+    has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
+    agg_exam_dates_sql = """
+        STUFF((
+            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
+            FROM BatchExamDates BE
+            WHERE BE.BatchID = B.BatchID
+            ORDER BY BE.ExamDate
+            FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 3, N'')
+    """
+    sql = f"""
         SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
-               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status, B.MaxCapacity,
+               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status,
+               {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
                (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
-               (SELECT STRING_AGG(CONVERT(NVARCHAR(10), BE.ExamDate, 23) + COALESCE(N' (' + BE.ExamLabel + N')', N''), N' | ')
-                  FROM BatchExamDates BE WHERE BE.BatchID=B.BatchID) AS periodic_exam_dates
+               ({agg_exam_dates_sql}) AS periodic_exam_dates
         FROM CourseBatches B
         JOIN Courses C ON B.CourseID = C.CourseID
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
         LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
         WHERE B.StartDate >= CAST(GETDATE() AS DATE)
         ORDER BY B.StartDate, B.BatchName
-        """,
-    ) or []
+    """
+    try:
+        rows = query_db(sql) or []
+    except Exception:
+        rows = query_db(
+            """
+            SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
+                   R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status,
+                   NULL AS MaxCapacity,
+                   (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+                   NULL AS periodic_exam_dates
+            FROM CourseBatches B
+            JOIN Courses C ON B.CourseID = C.CourseID
+            LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+            LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+            WHERE B.StartDate >= CAST(GETDATE() AS DATE)
+            ORDER BY B.StartDate, B.BatchName
+            """
+        ) or []
     return render_template('training/reports_future_batches.html', rows=rows, today=today)
 
 
