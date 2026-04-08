@@ -1841,7 +1841,7 @@ def recruiter_interviews_followup():
 def recruiter_interviews_results():
     # Show interviews that passed (or all scheduled) to record result
     interviews = query_db("""
-        SELECT M.*, C.FullName, CR.JobTitle, Cl.CompanyName 
+        SELECT M.*, C.FullName, CR.JobTitle, Cl.CompanyName, CR.ClientID
         FROM Matches M
         JOIN Candidates C ON M.CandidateID = C.CandidateID
         JOIN ClientRequests CR ON M.RequestID = CR.RequestID
@@ -1858,6 +1858,8 @@ def save_interview_result():
     match_id = f['match_id']
     result = f['result'] # Accepted / Rejected / Pending
     feedback = f['feedback']
+    invoice_amount_s = (f.get('invoice_amount') or '').strip()
+    invoice_due_s = (f.get('invoice_due_date') or '').strip()
     
     status = 'Interview Done'
     if result == 'Accepted': status = 'Accepted' # Hired? Or Offer? Let's say Accepted for now
@@ -1868,6 +1870,48 @@ def save_interview_result():
         SET Status = ?, ClientFeedback = ?
         WHERE MatchID = ?
     """, (status, feedback, match_id))
+
+    # Deal closure: issue invoice (recruitment fee if accepted, test fee if rejected)
+    try:
+        amt = float(invoice_amount_s) if invoice_amount_s else None
+    except Exception:
+        amt = None
+    if amt and amt > 0 and result in ('Accepted', 'Rejected'):
+        try:
+            info = query_db(
+                """
+                SELECT M.MatchID, M.CandidateID, M.RequestID,
+                       C.FullName AS CandidateName,
+                       CR.JobTitle, CR.ClientID,
+                       Cl.CompanyName
+                FROM Matches M
+                JOIN Candidates C ON M.CandidateID = C.CandidateID
+                JOIN ClientRequests CR ON M.RequestID = CR.RequestID
+                JOIN Clients Cl ON CR.ClientID = Cl.ClientID
+                WHERE M.MatchID = ?
+                """,
+                (match_id,),
+                one=True,
+            )
+            if info and info.get('ClientID'):
+                service_type = 'Recruitment Fee' if result == 'Accepted' else 'Test Fee'
+                desc = f"{service_type} — {info.get('CompanyName','')} — {info.get('JobTitle','')} — {info.get('CandidateName','')}"
+                query_db(
+                    """
+                    INSERT INTO CorporateInvoices (ClientID, ServiceType, Description, Amount, IssueDate, DueDate, Status, CreatedBy)
+                    VALUES (?, ?, ?, ?, GETDATE(), CAST(? AS DATE), 'Unpaid', ?)
+                    """,
+                    (
+                        int(info['ClientID']),
+                        service_type,
+                        (desc or '')[:4000],
+                        amt,
+                        (invoice_due_s or datetime.today().strftime('%Y-%m-%d')),
+                        session.get('user_id'),
+                    ),
+                )
+        except Exception:
+            pass
     
     flash('Interview Result Recorded', 'success')
     return redirect(url_for('recruiter_interviews_results'))

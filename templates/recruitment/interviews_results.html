@@ -70,6 +70,18 @@
                                                             <option value="Pending">Pending Decision</option>
                                                         </select>
                                                     </div>
+
+                                                    <div class="row g-2 mb-3">
+                                                        <div class="col-md-6">
+                                                            <label class="form-label fw-bold">Invoice amount</label>
+                                                            <input type="number" step="0.01" min="0" name="invoice_amount" class="form-control" placeholder="مثال: 15000">
+                                                            <div class="form-text small">Accepted = Recruitment Fee، Rejected = Test Fee (إن تركته فارغاً لن تُصدر فاتورة).</div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label fw-bold">Due date</label>
+                                                            <input type="date" name="invoice_due_date" class="form-control">
+                                                        </div>
+                                                    </div>
                                                     
                                                     <div class="mb-3">
                                                         <label class="form-label">Client Feedback</label>
