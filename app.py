@@ -2303,7 +2303,7 @@ def dashboard():
 # --- TALENT ACQUISITION (TA) ---
 @app.route('/talent/conduct_test', methods=['GET', 'POST'])
 @login_required
-@role_required(['Talent', 'Manager', 'Talent_Recruitment', 'TA-Training'])
+@role_required(['Talent', 'Manager', 'Talent_Recruitment'])
 def talent_conduct_test():
     # 1. GET: Show Scheduled Tests
     if request.method == 'GET':
