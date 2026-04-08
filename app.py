@@ -7115,6 +7115,7 @@ def add_batch():
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def update_batch_schedule(batch_id):
     """تحديث كل بيانات الدفعة: الاسم، الدورة، المدرب، القاعة، التواريخ، الأوقات، الأيام."""
+    _ensure_course_batches_capacity_column()
     f = request.form
     b = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
     if not b:
@@ -7131,6 +7132,15 @@ def update_batch_schedule(batch_id):
     start_time = (f.get('start_time') or '').strip() or None
     end_time = (f.get('end_time') or '').strip() or None
     week_days = (f.get('week_days') or '').strip() or None
+    max_cap_raw = (f.get('max_capacity') or '').strip()
+    max_cap = None
+    if max_cap_raw:
+        try:
+            max_cap = int(max_cap_raw)
+        except (TypeError, ValueError):
+            max_cap = None
+    if max_cap is not None and max_cap < 1:
+        max_cap = None
     if not batch_name:
         batch_name = query_db("SELECT BatchName FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
         batch_name = batch_name['BatchName'] if batch_name else ''
@@ -7140,9 +7150,9 @@ def update_batch_schedule(batch_id):
     try:
         query_db("""
             UPDATE CourseBatches SET BatchName=?, CourseID=?, TrainerID=?, RoomID=?,
-                   StartDate=?, EndDate=?, StartTime=?, EndTime=?, WeekDays=?
+                   StartDate=?, EndDate=?, StartTime=?, EndTime=?, WeekDays=?, MaxCapacity=?
             WHERE BatchID=?
-        """, (batch_name, course_id, trainer_id, room_id, start_date, end_date, start_time, end_time, week_days, batch_id))
+        """, (batch_name, course_id, trainer_id, room_id, start_date, end_date, start_time, end_time, week_days, max_cap, batch_id))
         flash('تم تحديث بيانات الدفعة بنجاح.', 'success')
     except Exception as e:
         try:
@@ -7171,6 +7181,13 @@ def add_batch_exam_date(batch_id):
     if not b:
         flash('الدفعة غير موجودة.', 'danger')
         return redirect(url_for('training_index'))
+    try:
+        cnt = query_db("SELECT COUNT(*) as c FROM BatchExamDates WHERE BatchID=?", (batch_id,), one=True)
+        if cnt and int(cnt.get('c') or 0) >= 3:
+            flash('الحد الأقصى للامتحانات الدورية هو 3 فقط لهذه الدفعة.', 'warning')
+            return redirect(url_for('wave_details', wave_id=batch_id))
+    except Exception:
+        pass
     try:
         query_db("INSERT INTO BatchExamDates (BatchID, ExamDate, ExamLabel) VALUES (?, ?, ?)", (batch_id, exam_date, exam_label))
         flash('تم إضافة يوم الامتحان.', 'success')
@@ -7238,6 +7255,19 @@ def _ensure_enrollment_ssr_initial_fb_table():
                 CreatedAt DATETIME DEFAULT GETDATE(),
                 UNIQUE (EnrollmentID, WeekNumber)
             )
+            """
+        )
+    except Exception:
+        pass
+
+
+def _ensure_course_batches_capacity_column():
+    """العدد الأقصى للدفعة (للإشغال/التسويق)."""
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'MaxCapacity' AND Object_ID = Object_ID(N'CourseBatches'))
+                ALTER TABLE CourseBatches ADD MaxCapacity INT NULL;
             """
         )
     except Exception:
