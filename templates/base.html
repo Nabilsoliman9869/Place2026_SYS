@@ -808,6 +808,45 @@
             });
         });
 
+        // --- Double click: open full candidate profile ---
+        (function () {
+            function openUrl(url) {
+                if (!url) return;
+                try {
+                    window.open(url, '_blank', 'noopener');
+                } catch (e) {
+                    window.location.href = url;
+                }
+            }
+            document.addEventListener('dblclick', function (e) {
+                // Ignore selection double-click inside inputs/textarea
+                const tag = (e.target && e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+                // 1) If there is already a link to candidate profile under the cursor, open it
+                const a = e.target && e.target.closest && e.target.closest('a[href]');
+                if (a) {
+                    const href = a.getAttribute('href') || '';
+                    if (href.includes('/candidate/') && (href.includes('/profile/') || href.includes('/view/'))) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return openUrl(a.href);
+                    }
+                }
+
+                // 2) If any ancestor has candidate id, open profile
+                const el = e.target && e.target.closest && e.target.closest('[data-candidate-id]');
+                if (el) {
+                    const cid = el.getAttribute('data-candidate-id');
+                    if (cid) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return openUrl(`/candidate/profile/${encodeURIComponent(cid)}`);
+                    }
+                }
+            });
+        })();
+
         // --- Page Tour (مرشد النوافذ - أول زيارة لكل شاشة) ---
         (function () {
             const STORAGE_KEY = 'place2026_tour_seen';
