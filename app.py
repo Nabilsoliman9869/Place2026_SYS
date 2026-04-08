@@ -71,6 +71,22 @@ def _safe_date_str(d, fmt='%Y-%m-%d'):
     return str(d)[:10] if d else '-'
 
 
+@app.template_filter('dmy')
+def _tpl_dmy(d):
+    """dd/mm/yyyy formatting for display (inputs remain type=date)."""
+    if d is None:
+        return '-'
+    try:
+        if hasattr(d, 'strftime'):
+            return d.strftime('%d/%m/%Y')
+        s = str(d).strip()
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
+        return s[:10]
+    except Exception:
+        return str(d)[:10] if d else '-'
+
+
 # حالات الواجب اليومي (Attendance grid) — تُخزَّن كنص في AssignmentStatus
 ASSIGNMENT_STATUS_VALUES = ('Done', 'not submitted', 'cancelled', 'postponed')
 ASSIGNMENT_STATUS_SET = frozenset(ASSIGNMENT_STATUS_VALUES)

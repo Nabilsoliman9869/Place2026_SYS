@@ -234,7 +234,7 @@
                         {% endif %}
                     </td>
                     <td><small>{{ lead.UniversityCollege or '—' }}</small></td>
-                    <td><small>{{ lead.CreatedAt.strftime('%Y-%m-%d') if lead.CreatedAt else '-' }}</small></td>
+                    <td><small>{{ lead.CreatedAt|dmy }}</small></td>
                     <td>
                         <a href="{{ url_for('training_sales_book_slot', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-primary">Book test</a>
                         <a href="{{ url_for('candidate_profile', candidate_id=lead.CandidateID) }}" class="btn btn-sm btn-outline-secondary">File</a>

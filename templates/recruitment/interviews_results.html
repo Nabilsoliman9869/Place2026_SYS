@@ -29,7 +29,7 @@
                     <tbody>
                         {% for i in interviews %}
                         <tr>
-                            <td>{{ i.InterviewDate.strftime('%Y-%m-%d') if i.InterviewDate else '-' }}</td>
+                            <td>{{ i.InterviewDate|dmy }}</td>
                             <td class="fw-bold">{{ i.FullName }}</td>
                             <td>{{ i.JobTitle }} at {{ i.CompanyName }}</td>
                             <td>

@@ -76,7 +76,7 @@
                 {% endif %}
                 {% for row in booked_upcoming %}
                 <tr>
-                    <td><small>{{ row.SlotDate.strftime('%Y-%m-%d') if row.SlotDate else '-' }}</small></td>
+                    <td><small>{{ row.SlotDate|dmy }}</small></td>
                     <td>{{ row.SlotTime or '-' }}</td>
                     <td class="fw-bold">{{ row.FullName }}</td>
                     <td>{{ row.Phone }}</td>
