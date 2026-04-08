@@ -3713,30 +3713,34 @@ def talent_book_self():
         """, (user_id,)) or []
     except Exception:
         my_available = []
+    # For recruitment TA context: do NOT show training waves/exams panels
     batches_with_exams = []
-    try:
-        batches_with_exams = query_db("""
-            SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate,
-                   BE.ExamDateID, BE.ExamDate, BE.ExamLabel
-            FROM CourseBatches B
-            JOIN Courses C ON B.CourseID = C.CourseID
-            JOIN BatchExamDates BE ON BE.BatchID = B.BatchID
-            WHERE B.Status = 'Active' AND BE.ExamDate >= CAST(GETDATE() AS DATE)
-            ORDER BY BE.ExamDate
-        """) or []
-    except Exception:
-        pass
-    exam_dates_today = [b for b in batches_with_exams if str(b.get('ExamDate', ''))[:10] == selected_date]
-    try:
-        active_waves = query_db("""
-            SELECT B.BatchID, B.BatchName, C.CourseName
-            FROM CourseBatches B
-            JOIN Courses C ON B.CourseID = C.CourseID
-            WHERE B.Status = 'Active'
-            ORDER BY B.BatchName
-        """) or []
-    except Exception:
-        active_waves = []
+    exam_dates_today = []
+    active_waves = []
+    if ui_ctx == TA_CTX_TRAINING:
+        try:
+            batches_with_exams = query_db("""
+                SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate,
+                       BE.ExamDateID, BE.ExamDate, BE.ExamLabel
+                FROM CourseBatches B
+                JOIN Courses C ON B.CourseID = C.CourseID
+                JOIN BatchExamDates BE ON BE.BatchID = B.BatchID
+                WHERE B.Status = 'Active' AND BE.ExamDate >= CAST(GETDATE() AS DATE)
+                ORDER BY BE.ExamDate
+            """) or []
+        except Exception:
+            batches_with_exams = []
+        exam_dates_today = [b for b in batches_with_exams if str(b.get('ExamDate', ''))[:10] == selected_date]
+        try:
+            active_waves = query_db("""
+                SELECT B.BatchID, B.BatchName, C.CourseName
+                FROM CourseBatches B
+                JOIN Courses C ON B.CourseID = C.CourseID
+                WHERE B.Status = 'Active'
+                ORDER BY B.BatchName
+            """) or []
+        except Exception:
+            active_waves = []
     ctx_label = 'training' if ui_ctx == TA_CTX_TRAINING else 'recruitment'
     return render_template(
         'talent/book_self.html',
@@ -4149,6 +4153,12 @@ def _merged_cefr_options_for_edit():
 def talent_tests_registry():
     """All leads with at least one talent evaluation; shows who tested them; links to edit."""
     q = (request.args.get('q') or '').strip()
+    ui_ctx = _talent_schedule_ui_context()
+    # Recruitment TA should see only recruitment; Training TA only training.
+    if ui_ctx == TA_CTX_TRAINING:
+        ctx_sql = " WHERE (E.EvaluationType LIKE N'Training%' OR E.EvaluationType = N'Training') "
+    else:
+        ctx_sql = " WHERE (E.EvaluationType = N'Recruitment') "
     base_sql = """
         SELECT TOP 2000 E.EvaluationID, E.CandidateID, E.SlotID,
                E.Score_Comprehension, E.Score_Fluency, E.Score_Pronunciation, E.Score_Structure, E.Score_Vocabulary,
@@ -4163,11 +4173,11 @@ def talent_tests_registry():
     if q:
         like = f"%{q}%"
         rows = query_db(
-            base_sql + " WHERE (C.FullName LIKE ? OR ISNULL(C.Phone,'') LIKE ? OR CAST(C.CandidateID AS VARCHAR(20)) LIKE ?) ORDER BY E.EvaluationDate DESC",
+            base_sql + ctx_sql + " AND (C.FullName LIKE ? OR ISNULL(C.Phone,'') LIKE ? OR CAST(C.CandidateID AS VARCHAR(20)) LIKE ?) ORDER BY E.EvaluationDate DESC",
             (like, like, like),
         )
     else:
-        rows = query_db(base_sql + " ORDER BY E.EvaluationDate DESC")
+        rows = query_db(base_sql + ctx_sql + " ORDER BY E.EvaluationDate DESC")
     return render_template('talent/tests_registry.html', rows=rows or [], q=q)
 
 
@@ -7175,16 +7185,26 @@ def add_batch():
             flash('القاعة المختارة غير موجودة.', 'danger')
             return redirect(url_for('training_index'))
 
+    _ensure_course_batches_capacity_column()
     start_time = (f.get('start_time') or '').strip() or None
     end_time = (f.get('end_time') or '').strip() or None
     week_days = (f.get('week_days') or '').strip() or None
+    max_cap_raw = (f.get('max_capacity') or '').strip()
+    max_cap = None
+    if max_cap_raw:
+        try:
+            max_cap = int(max_cap_raw)
+        except (TypeError, ValueError):
+            max_cap = None
+    if max_cap is not None and max_cap < 1:
+        max_cap = None
 
     try:
         # محاولة مع الأعمدة الجديدة (StartTime, EndTime, WeekDays)
         query_db("""
-            INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
-        """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+            INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, MaxCapacity, Status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+        """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days, max_cap))
     except Exception as e:
         err_msg = str(e).lower()
         # إذا الأعمدة غير موجودة (قاعدة قديمة)، نضيفها ثم نعيد المحاولة أو نستخدم INSERT بسيط
@@ -7203,9 +7223,9 @@ def add_batch():
                 pass
             try:
                 query_db("""
-                    INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, Status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
-                """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days))
+                    INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, StartTime, EndTime, WeekDays, MaxCapacity, Status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+                """, (f['batch_name'], f['course_id'], f.get('trainer_id') or None, room_id, f.get('start_date'), f.get('end_date'), start_time, end_time, week_days, max_cap))
             except Exception:
                 query_db("""
                     INSERT INTO CourseBatches (BatchName, CourseID, TrainerID, RoomID, StartDate, EndDate, Status)

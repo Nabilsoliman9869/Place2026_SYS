@@ -70,8 +70,9 @@
             </div>
         </div>
 
-        <!-- الدفعات النشطة — اختبار (نافذة الفيدباك الأصلية) -->
+        <!-- الدفعات النشطة — اختبار (مخصص للتدريب فقط) -->
         <div class="col-md-4">
+            {% if talent_schedule_context|default('recruitment') == 'training' %}
             <div class="card shadow-sm mb-3">
                 <div class="card-header bg-success text-white">
                     <h6 class="mb-0"><i class="fas fa-vial"></i> الدفعات — اختبار</h6>
@@ -112,6 +113,7 @@
                     {% endfor %}
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
