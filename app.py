@@ -6489,12 +6489,18 @@ def talent_training_pending_final():
 @login_required
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def training_reports_current_courses():
+    _ensure_course_batches_capacity_column()
     df = (request.args.get('from') or '').strip()
     dt = (request.args.get('to') or '').strip()
     sql = """
-        SELECT B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
+        SELECT B.BatchID,
+               B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
                B.StartDate, B.EndDate, T.FullName AS trainer_name, B.WeekDays AS days,
-               B.StartTime, B.EndTime, B.Status
+               B.StartTime, B.EndTime, B.Status,
+               B.MaxCapacity,
+               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+               (SELECT STRING_AGG(CONVERT(NVARCHAR(10), BE.ExamDate, 23) + COALESCE(N' (' + BE.ExamLabel + N')', N''), N' | ')
+                  FROM BatchExamDates BE WHERE BE.BatchID=B.BatchID) AS periodic_exam_dates
         FROM CourseBatches B
         JOIN Courses C ON B.CourseID = C.CourseID
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
@@ -6517,11 +6523,15 @@ def training_reports_current_courses():
 @login_required
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def training_reports_future_batches():
+    _ensure_course_batches_capacity_column()
     today = datetime.today().strftime('%Y-%m-%d')
     rows = query_db(
         """
-        SELECT B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
-               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status
+        SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
+               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status, B.MaxCapacity,
+               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+               (SELECT STRING_AGG(CONVERT(NVARCHAR(10), BE.ExamDate, 23) + COALESCE(N' (' + BE.ExamLabel + N')', N''), N' | ')
+                  FROM BatchExamDates BE WHERE BE.BatchID=B.BatchID) AS periodic_exam_dates
         FROM CourseBatches B
         JOIN Courses C ON B.CourseID = C.CourseID
         LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
