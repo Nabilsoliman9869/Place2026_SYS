@@ -914,6 +914,23 @@ def _db_has_column(table_name: str, column_name: str) -> bool:
     except Exception:
         return False
 
+
+def _db_has_table(table_name: str) -> bool:
+    """Check table existence safely (SQL Server)."""
+    try:
+        row = query_db(
+            """
+            SELECT 1 AS ok
+            FROM sys.objects
+            WHERE object_id = OBJECT_ID(?) AND type = 'U'
+            """,
+            (table_name,),
+            one=True,
+        )
+        return bool(row)
+    except Exception:
+        return False
+
 # --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
 _USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
 
@@ -7052,23 +7069,39 @@ def training_index():
     view = request.args.get('view', 'active')  # active | archive | planned
     _ensure_course_batches_capacity_column()
     has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
-    # Periodic exams aggregation: compatible (no STRING_AGG)
-    agg_exam_dates_sql = """
-        STUFF((
-            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
-                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
-            FROM BatchExamDates BE
-            WHERE BE.BatchID = B.BatchID
-            ORDER BY BE.ExamDate
-            FOR XML PATH(''), TYPE
-        ).value('.', 'nvarchar(max)'), 1, 3, N'')
-    """
+    has_exam_dates = _db_has_table('BatchExamDates')
+    has_enrollments = _db_has_table('Enrollments')
+    has_enroll_status = _db_has_column('Enrollments', 'Status')
+
+    # Periodic exams aggregation: compatible (no STRING_AGG). If table missing, return NULL.
+    if has_exam_dates:
+        agg_exam_dates_sql = """
+            STUFF((
+                SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                       COALESCE(N' (' + BE.ExamLabel + N')', N'')
+                FROM BatchExamDates BE
+                WHERE BE.BatchID = B.BatchID
+                ORDER BY BE.ExamDate
+                FOR XML PATH(''), TYPE
+            ).value('.', 'nvarchar(max)'), 1, 3, N'')
+        """
+    else:
+        agg_exam_dates_sql = "NULL"
+
+    # Enrollment count subquery: if enrollments missing, return 0. If no Status column, count all rows.
+    if not has_enrollments:
+        enrolled_count_sql = "0"
+    else:
+        if has_enroll_status:
+            enrolled_count_sql = "(SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active')"
+        else:
+            enrolled_count_sql = "(SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID)"
     base_sql = f"""
         SELECT B.BatchID, B.BatchName, B.CourseID, B.TrainerID, B.RoomID,
                B.StartDate, B.EndDate, B.StartTime, B.EndTime, B.WeekDays, B.Status,
                C.CourseName, T.FullName as TrainerName, R.RoomName,
                {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
-               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS EnrolledCount,
+               {enrolled_count_sql} AS EnrolledCount,
                ({agg_exam_dates_sql}) AS PeriodicExamDates
         FROM CourseBatches B
         JOIN Courses C ON B.CourseID = C.CourseID
