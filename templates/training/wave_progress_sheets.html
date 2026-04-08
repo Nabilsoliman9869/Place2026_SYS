@@ -35,9 +35,9 @@
                 </thead>
                 <tbody>
                     {% for s in students %}
-                    <tr>
+                    <tr data-candidate-id="{{ s.CandidateID }}">
                         <td class="fw-bold">
-                            <a href="{{ url_for('candidate_profile', candidate_id=s.CandidateID) }}" target="_blank">{{ s.FullName }}</a>
+                            <a href="{{ url_for('candidate_profile', candidate_id=s.CandidateID) }}" target="_blank" rel="noopener">{{ s.FullName }}</a>
                         </td>
                         <td class="text-center">
                             <span class="badge bg-{{ 'success' if s.SavedLines else 'secondary' }}">{{ s.SavedLines or 0 }}</span>
@@ -45,6 +45,9 @@
                         <td class="text-end">
                             <a href="{{ url_for('enrollment_progress_sheet', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-primary">
                                 <i class="fas fa-edit"></i> Open progress sheet
+                            </a>
+                            <a href="{{ url_for('enrollment_ssr_initial_fb', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-warning">
+                                <i class="fas fa-clipboard-check"></i> SSR & Initial FB
                             </a>
                         </td>
                     </tr>

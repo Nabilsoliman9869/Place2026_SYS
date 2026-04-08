@@ -7220,6 +7220,30 @@ def _ensure_enrollment_week_progress_lines_table():
         pass
 
 
+def _ensure_enrollment_ssr_initial_fb_table():
+    """SSR & Initial FB: كويز/امتحان من المدرب + ملاحظات أولية على مستوى (متدرب, أسبوع)."""
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='EnrollmentSSRInitialFB' AND xtype='U')
+            CREATE TABLE EnrollmentSSRInitialFB (
+                EntryID INT IDENTITY(1,1) PRIMARY KEY,
+                EnrollmentID INT NOT NULL,
+                WeekNumber INT NOT NULL,
+                SSR NVARCHAR(MAX) NULL,
+                InitialFeedback NVARCHAR(MAX) NULL,
+                QuizScore DECIMAL(5,2) NULL,
+                QuizNotes NVARCHAR(MAX) NULL,
+                CreatedBy INT NULL,
+                CreatedAt DATETIME DEFAULT GETDATE(),
+                UNIQUE (EnrollmentID, WeekNumber)
+            )
+            """
+        )
+    except Exception:
+        pass
+
+
 @app.route('/training/wave/<int:wave_id>/progress-sheets')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
@@ -7350,6 +7374,87 @@ def enrollment_progress_sheet(enrollment_id):
         lines_by_aspect=lines_by_aspect,
         aspects=PROGRESS_SHEET_ASPECTS,
     )
+
+
+@app.route('/training/enrollment/<int:enrollment_id>/ssr-initial-fb', methods=['GET', 'POST'])
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+def enrollment_ssr_initial_fb(enrollment_id):
+    """SSR & Initial FB — نموذج المدرب لتسجيل كويز/SSR وملاحظات أولية."""
+    _ensure_enrollment_ssr_initial_fb_table()
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        flash('التسجيل غير موجود.', 'danger')
+        return redirect(url_for('training_index'))
+    try:
+        week = int((request.args.get('week') or request.form.get('week_number') or 1))
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+
+    if request.method == 'POST':
+        f = request.form
+        ssr = (f.get('ssr') or '')[:8000]
+        init_fb = (f.get('initial_feedback') or '')[:8000]
+        quiz_notes = (f.get('quiz_notes') or '')[:8000]
+        score_s = (f.get('quiz_score') or '').strip()
+        score = None
+        if score_s:
+            try:
+                score = float(score_s)
+            except Exception:
+                score = None
+        uid = session.get('user_id')
+        try:
+            # Upsert by unique(EnrollmentID, WeekNumber)
+            existing = query_db(
+                "SELECT EntryID FROM EnrollmentSSRInitialFB WHERE EnrollmentID=? AND WeekNumber=?",
+                (enrollment_id, week),
+                one=True,
+            )
+            if existing:
+                query_db(
+                    """
+                    UPDATE EnrollmentSSRInitialFB
+                    SET SSR=?, InitialFeedback=?, QuizScore=?, QuizNotes=?, CreatedBy=?, CreatedAt=GETDATE()
+                    WHERE EnrollmentID=? AND WeekNumber=?
+                    """,
+                    (ssr or None, init_fb or None, score, quiz_notes or None, uid, enrollment_id, week),
+                )
+            else:
+                query_db(
+                    """
+                    INSERT INTO EnrollmentSSRInitialFB (EnrollmentID, WeekNumber, SSR, InitialFeedback, QuizScore, QuizNotes, CreatedBy)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (enrollment_id, week, ssr or None, init_fb or None, score, quiz_notes or None, uid),
+                )
+            flash('تم حفظ SSR & Initial FB.', 'success')
+        except Exception as ex:
+            flash('تعذر الحفظ: ' + str(ex)[:200], 'danger')
+        return redirect(url_for('enrollment_ssr_initial_fb', enrollment_id=enrollment_id, week=week))
+
+    row = query_db(
+        """
+        SELECT SSR, InitialFeedback, QuizScore, QuizNotes, CreatedAt
+        FROM EnrollmentSSRInitialFB
+        WHERE EnrollmentID=? AND WeekNumber=?
+        """,
+        (enrollment_id, week),
+        one=True,
+    ) or {}
+    return render_template('training/enrollment_ssr_initial_fb.html', student=stu, week=week, row=row)
 
 
 @app.route('/training/wave/<int:wave_id>')
