@@ -61,10 +61,10 @@
             </div>
         </div>
 
-        <!-- Weekly Reports History -->
+        <!-- Weekly Reports History (Recommendations to trainer) -->
         <div class="card shadow-sm">
             <div class="card-header bg-light">
-                <h5 class="mb-0">Weekly Progress Reports (تقارير التقدم)</h5>
+                <h5 class="mb-0">Trainer guidance (توصيات مدير فريق التدريب للمدرب)</h5>
             </div>
             <div class="card-body">
                 {% if reports %}
@@ -248,14 +248,14 @@
     </div>
 </div>
 
-<!-- Add Weekly Report Modal -->
+<!-- Add Weekly Recommendation Modal -->
 <div class="modal fade" id="addReportModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form action="{{ url_for('add_weekly_report') }}" method="POST">
                 <input type="hidden" name="wave_id" value="{{ wave.BatchID }}">
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Weekly Progress Report</h5>
+                    <h5 class="modal-title">Weekly recommendation to trainer (توصية أسبوعية للمدرب)</h5>
                     <button class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -276,11 +276,11 @@
                     
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label>Strengths (نقاط القوة)</label>
+                            <label>Observed strengths (نقاط القوة الملحوظة)</label>
                             <textarea name="strengths" class="form-control" rows="2"></textarea>
                         </div>
                         <div class="col-md-6">
-                            <label>Weaknesses (نقاط الضعف)</label>
+                            <label>Weak points to focus (نقاط الضعف المطلوب التركيز عليها)</label>
                             <textarea name="weaknesses" class="form-control" rows="2"></textarea>
                         </div>
                     </div>

@@ -7401,6 +7401,7 @@ def wave_details(wave_id):
 
 @app.route('/training/add_report', methods=['POST'])
 @login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
 def add_weekly_report():
     f = request.form
     aspect = (f.get('language_aspect') or '').strip()
