@@ -1727,7 +1727,11 @@ def recruiter_scheduling():
     # Fetch candidates ready for scheduling (Status='Talent_Pool')
     try:
         candidates = query_db("""
-            SELECT C.*, CA.Name as CampaignName 
+            SELECT TOP 300
+                C.CandidateID, C.FullName, C.Phone, C.Email, C.CreatedAt,
+                C.UniversityCollege, C.ResidenceArea, C.SourceChannel,
+                C.Status, C.CampaignID,
+                CA.Name as CampaignName
             FROM Candidates C
             LEFT JOIN Campaigns CA ON C.CampaignID = CA.CampaignID
             WHERE C.SalesAgentID = ? AND C.Status = 'Talent_Pool'
@@ -1742,10 +1746,14 @@ def recruiter_scheduling():
         candidates = []
 
     # مواعيد شاغرة — مجمع مختبر التوظيف فقط (AssessmentContext)
-    today = datetime.today().strftime('%Y-%m-%d')
-    end_date = (datetime.today() + timedelta(days=14)).strftime('%Y-%m-%d')
+    # IMPORTANT: do NOT auto-generate slots on every page load (very expensive).
+    # Slot generation should be done from the dedicated "Open recruitment test slots" screen.
+    today = datetime.today().date()
+    start_s = today.strftime('%Y-%m-%d')
+    end_d = today + timedelta(days=13)
+    end_s = end_d.strftime('%Y-%m-%d')
+    end_next_s = (end_d + timedelta(days=1)).strftime('%Y-%m-%d')
     available_slots = []
-    ta_ids = []
     slot_sql = f"""
         SELECT T.SlotID, T.SlotDate, T.SlotTime, T.Status, U.Username AS EvaluatorName
         FROM TASchedules T
@@ -1754,20 +1762,17 @@ def recruiter_scheduling():
           AND T.EvaluatorID IS NOT NULL
           {_SQL_TA_T_RECRUITER_BOOKING.strip()}
           AND (
-                LOWER(LTRIM(RTRIM(ISNULL(T.Status, N'')))) = N'available'
+                T.Status = N'Available'
                 OR T.Status IS NULL
                 OR LTRIM(RTRIM(ISNULL(T.Status, N''))) = N''
           )
-          AND CAST(T.SlotDate AS DATE) >= CAST(? AS DATE)
-          AND CAST(T.SlotDate AS DATE) <= CAST(? AS DATE)
+          AND T.SlotDate >= CAST(? AS DATE)
+          AND T.SlotDate < CAST(? AS DATE)
         ORDER BY T.SlotDate ASC, T.SlotTime ASC, U.Username
     """
     try:
         _ensure_taschedules_assessment_context_column()
-        ta_ids = _recruitment_ta_booking_evaluator_ids()
-        if ta_ids:
-            _ensure_ta_slots_for_date_range(ta_ids, datetime.today().date(), datetime.today().date() + timedelta(days=13), TA_CTX_RECRUITMENT)
-        available_slots = query_db(slot_sql, (today, end_date)) or []
+        available_slots = query_db(slot_sql, (start_s, end_next_s)) or []
     except Exception as e:
         try:
             app.logger.exception('recruiter_scheduling slots: %s', e)
@@ -1783,7 +1788,7 @@ def recruiter_scheduling():
         'recruitment/scheduling.html',
         candidates=candidates or [],
         available_slots=available_slots or [],
-        has_ta_evaluators=bool(ta_ids),
+        has_ta_evaluators=True,
         open_recruitment_talent_slots_url=url_for('recruitment_open_talent_slots'),
         can_open_recruitment_talent_slots=(session.get('role') in OPEN_RECRUITMENT_TALENT_SLOT_ROLES),
     )
