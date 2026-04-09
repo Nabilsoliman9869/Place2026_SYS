@@ -5926,6 +5926,22 @@ def candidate_profile(candidate_id):
     except Exception:
         trainer_comms = []
 
+    enrollment_options = []
+    try:
+        enrollment_options = query_db(
+            """
+            SELECT E.EnrollmentID, B.BatchName, Cr.CourseName
+            FROM Enrollments E
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            WHERE E.CandidateID = ?
+            ORDER BY B.StartDate DESC, B.BatchName
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        enrollment_options = []
+
     # --- Training weekly progress (trainer) + weekly guidance (manager) + SSR ---
     week_progress_summary = []
     weekly_guidance = []
@@ -6070,6 +6086,7 @@ def candidate_profile(candidate_id):
         sheet_data_list=sheet_data_list,
         trainer_notes_list=trainer_notes_list,
         trainer_comms=trainer_comms,
+        enrollment_options=enrollment_options,
         week_progress_summary=week_progress_summary,
         weekly_guidance=weekly_guidance,
         ssr_entries=ssr_entries,
@@ -6081,6 +6098,53 @@ def candidate_profile(candidate_id):
         recruiter_feedback_by_name=recruiter_feedback_by_name,
         recruiter_feedback_date=recruiter_feedback_date,
     )
+
+
+@app.route('/profile/<int:candidate_id>/add-trainer-comm', methods=['POST'])
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'Trainer'])
+def profile_add_trainer_comm(candidate_id):
+    """Add communication note about contacting trainer (stored per candidate, optional enrollment)."""
+    # Ensure table exists (same definition as read path)
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TrainerCommunications' AND xtype='U')
+            CREATE TABLE TrainerCommunications (
+                CommID INT IDENTITY(1,1) PRIMARY KEY,
+                CandidateID INT NOT NULL,
+                EnrollmentID INT NULL,
+                CommType NVARCHAR(50) NULL,
+                Notes NVARCHAR(MAX) NULL,
+                CreatedBy INT NULL,
+                CreatedAt DATETIME DEFAULT GETDATE()
+            )
+            """
+        )
+    except Exception:
+        pass
+    f = request.form
+    comm_type = (f.get('comm_type') or '').strip()[:50] or 'Note'
+    notes = (f.get('notes') or '').strip()
+    enr = (f.get('enrollment_id') or '').strip()
+    enrollment_id = None
+    if enr and enr.isdigit():
+        enrollment_id = int(enr)
+    if len(notes) < 3:
+        flash('يرجى كتابة الملاحظة (3 أحرف على الأقل).', 'warning')
+        return redirect(url_for('candidate_profile', candidate_id=candidate_id))
+    try:
+        query_db(
+            """
+            INSERT INTO TrainerCommunications (CandidateID, EnrollmentID, CommType, Notes, CreatedBy)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (candidate_id, enrollment_id, comm_type, notes[:8000], session.get('user_id')),
+        )
+        flash('تم إضافة التواصل بنجاح.', 'success')
+    except Exception as ex:
+        flash('تعذر الحفظ: ' + str(ex)[:120], 'danger')
+    return redirect(url_for('candidate_profile', candidate_id=candidate_id))
 
 def _append_sheet_row(candidate_id, sheet_name, new_row):
     """إضافة سجل واحد لجدول TraineeSheetData (للتشغيل اليومي)."""
@@ -7876,6 +7940,123 @@ def enrollment_progress_sheet(enrollment_id):
         lines_by_aspect=lines_by_aspect,
         aspects=PROGRESS_SHEET_ASPECTS,
     )
+
+
+@app.route('/training/enrollment/<int:enrollment_id>/progress-sheet/print')
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def enrollment_progress_sheet_print(enrollment_id):
+    """عرض فقط/طباعة لشيت التقدم الأسبوعي."""
+    _ensure_enrollment_week_progress_lines_table()
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        return 'Enrollment not found', 404
+    try:
+        week = int(request.args.get('week') or 1)
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+    raw_lines = query_db(
+        """
+        SELECT LanguageAspect, LineOrder, RFI, Severity, ActionPlan, ProgressComment
+        FROM EnrollmentWeekProgressLines
+        WHERE EnrollmentID=? AND WeekNumber=?
+        ORDER BY LanguageAspect, LineOrder
+        """,
+        (enrollment_id, week),
+    ) or []
+    lines_by_aspect = {a: [] for a in PROGRESS_SHEET_ASPECTS}
+    for row in raw_lines:
+        asp = (row.get('LanguageAspect') or '').strip()
+        if asp in lines_by_aspect:
+            lines_by_aspect[asp].append(row)
+    return render_template('training/enrollment_progress_sheet_print.html', student=stu, week=week, aspects=PROGRESS_SHEET_ASPECTS, lines_by_aspect=lines_by_aspect)
+
+
+@app.route('/training/enrollment/<int:enrollment_id>/ssr-initial-fb/print')
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
+def enrollment_ssr_initial_fb_print(enrollment_id):
+    """عرض فقط/طباعة لصفحة SSR & Initial FB."""
+    _ensure_enrollment_ssr_initial_fb_table()
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        return 'Enrollment not found', 404
+    try:
+        week = int(request.args.get('week') or 1)
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+    row = query_db(
+        """
+        SELECT SSR, InitialFeedback, QuizScore, QuizNotes, CreatedAt
+        FROM EnrollmentSSRInitialFB
+        WHERE EnrollmentID=? AND WeekNumber=?
+        """,
+        (enrollment_id, week),
+        one=True,
+    ) or {}
+    return render_template('training/enrollment_ssr_initial_fb_print.html', student=stu, week=week, row=row)
+
+
+@app.route('/training/enrollment/<int:enrollment_id>/weekly-guidance/print')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'Trainer'])
+def enrollment_weekly_guidance_print(enrollment_id):
+    """عرض فقط/طباعة لتوصية مدير فريق التدريب (WeeklyProgress) لأسبوع محدد."""
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        return 'Enrollment not found', 404
+    try:
+        week = int(request.args.get('week') or 1)
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+    rows = query_db(
+        """
+        SELECT WP.WeekNumber, WP.Strengths, WP.Weaknesses, WP.RFI, WP.ActionPlan, WP.Severity, WP.UpdatedAt,
+               U.FullName AS AuthorName, U.Username AS AuthorUsername
+        FROM WeeklyProgress WP
+        LEFT JOIN Users_1 U ON WP.TrainerID = U.UserID
+        WHERE WP.EnrollmentID=? AND WP.WeekNumber=?
+        ORDER BY WP.UpdatedAt DESC
+        """,
+        (enrollment_id, week),
+    ) or []
+    return render_template('training/enrollment_weekly_guidance_print.html', student=stu, week=week, rows=rows)
 
 
 @app.route('/training/enrollment/<int:enrollment_id>/ssr-initial-fb', methods=['GET', 'POST'])
