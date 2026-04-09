@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h4 class="mb-0"><i class="fas fa-file-contract text-primary"></i> <span class="en-bold">Interview closure</span> <span class="ar-normal">إغلاق مقابلات العميل</span></h4>
+            <p class="text-muted small mb-0 ar-normal">استعداد المرشح (الريكروتر) + قرار العميل (المُوزّع) + ملخص حسب العميل تمهيداً للفوترة.</p>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 align-items-end mb-3">
+        <div class="col-md-3">
+            <label class="form-label small">Client / العميل</label>
+            <select name="client_id" class="form-select form-select-sm">
+                <option value="">— All / الكل —</option>
+                {% for cl in clients %}
+                <option value="{{ cl.ClientID }}" {% if client_id|string == cl.ClientID|string %}selected{% endif %}>{{ cl.CompanyName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Filter / الفلتر</label>
+            <select name="bucket" class="form-select form-select-sm">
+                <option value="all" {{ 'selected' if bucket == 'all' }}>All</option>
+                <option value="pending_recruiter" {{ 'selected' if bucket == 'pending_recruiter' }}>Pending recruiter confirm</option>
+                <option value="pending_client" {{ 'selected' if bucket == 'pending_client' }}>Ready — pending client decision</option>
+                <option value="accepted" {{ 'selected' if bucket == 'accepted' }}>Accepted / مسار قبول</option>
+                <option value="rejected" {{ 'selected' if bucket == 'rejected' }}>Rejected / مرفوض</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">From</label>
+            <input type="date" name="from" class="form-control form-control-sm" value="{{ df }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">To</label>
+            <input type="date" name="to" class="form-control form-control-sm" value="{{ dt }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">Apply</button>
+        </div>
+    </form>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><span class="en-bold">Summary by client</span> <span class="ar-normal">ملخص حسب العميل</span></h6>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Client</th>
+                        <th class="text-center">Accepted</th>
+                        <th class="text-center">Rejected</th>
+                        <th class="text-center">Pending client</th>
+                        <th class="text-center">Pending recruiter</th>
+                        <th class="text-center">Other</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in summary_rows %}
+                    <tr>
+                        <td class="fw-semibold">{{ s.CompanyName }}</td>
+                        <td class="text-center"><span class="badge bg-success">{{ s.accepted }}</span></td>
+                        <td class="text-center"><span class="badge bg-danger">{{ s.rejected }}</span></td>
+                        <td class="text-center"><span class="badge bg-info text-dark">{{ s.pending_client }}</span></td>
+                        <td class="text-center"><span class="badge bg-warning text-dark">{{ s.pending_recruiter }}</span></td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ s.other }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted py-3">No data.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h6 class="mb-0"><span class="en-bold">Detail</span> <span class="ar-normal">التفاصيل</span> <span class="badge bg-dark">{{ rows|length }}</span></h6>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Candidate</th>
+                        <th>Client / Job</th>
+                        <th>Interview</th>
+                        <th>Recruiter readiness</th>
+                        <th>Client decision</th>
+                        <th>Reason / notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr data-candidate-id="{{ r.CandidateID }}">
+                        <td>
+                            <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" target="_blank" rel="noopener" class="fw-bold">{{ r.FullName }}</a>
+                            <br><small class="text-muted">{{ r.Phone or '' }}</small>
+                        </td>
+                        <td>
+                            <strong>{{ r.CompanyName }}</strong><br>
+                            <small class="text-muted">{{ r.JobTitle }}</small>
+                        </td>
+                        <td class="small text-nowrap">
+                            {% if r.InterviewDate %}
+                            {{ r.InterviewDate|dmy }}
+                            {% if r.InterviewDate.strftime %}<br><span class="text-muted">{{ r.InterviewDate.strftime('%H:%M') }}</span>{% endif %}
+                            {% else %}
+                            —
+                            {% endif %}
+                            <br><span class="badge bg-light text-dark border">{{ r.Status }}</span>
+                        </td>
+                        <td class="small">
+                            {% if r.RecruiterReadinessStatus %}
+                            <span class="badge bg-secondary">{{ r.RecruiterReadinessStatus }}</span>
+                            {% else %}
+                            —
+                            {% endif %}
+                            {% if r.RecruiterReadinessNote %}<br>{{ r.RecruiterReadinessNote }}{% endif %}
+                        </td>
+                        <td class="small">
+                            {% if r.ClientDecision %}
+                            <span class="badge bg-{{ 'success' if r.ClientDecision == 'Accepted' else 'danger' }}">{{ r.ClientDecision }}</span>
+                            {% if r.ClientDecisionAt %}<br><span class="text-muted">{{ r.ClientDecisionAt|dmy }}</span>{% endif %}
+                            {% if r.ClientDecisionByName %}<br><span class="text-muted">{{ r.ClientDecisionByName }}</span>{% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="small">{{ r.ClientDecisionDetail or '—' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No rows for this filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

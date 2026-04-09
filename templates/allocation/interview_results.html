@@ -5,7 +5,10 @@
     <h2 class="mb-4"><i class="fas fa-poll"></i> Interview Results Log</h2>
     
     <div class="alert alert-info border-start border-5 border-info">
-        <i class="fas fa-info-circle"></i> Log the outcome of client interviews. If accepted, the candidate will move to the next stage (Offer/2nd Interview).
+        <i class="fas fa-info-circle"></i>
+        <span class="ar-normal">سجّل هنا <strong>قرار العميل</strong> بعد المقابلة. عند الرفض يجب كتابة السبب — يظهر للمُوزّع وللتقارير وتمهيد الفوترة.</span>
+        <span class="en-bold d-block mt-1">Log client decision after interview; rejection requires a reason.</span>
+        <a href="{{ url_for('allocation_interview_closure_report') }}" class="btn btn-sm btn-outline-primary mt-2">تقرير الإغلاق حسب العميل / Closure report</a>
     </div>
 
     <div class="card shadow-sm">
@@ -20,6 +23,7 @@
                             <th>Candidate</th>
                             <th>Client & Job</th>
                             <th>Interview Date</th>
+                            <th>Recruiter readiness</th>
                             <th>Current Status</th>
                             <th>Action</th>
                         </tr>
@@ -35,19 +39,38 @@
                                 <small class="text-muted">{{ m.JobTitle }}</small>
                             </td>
                             <td>
-                                <span class="badge bg-secondary">{{ m.InterviewDate.strftime('%Y-%m-%d %H:%M') if m.InterviewDate else 'TBD' }}</span>
+                                {% if m.InterviewDate %}
+                                <span class="badge bg-secondary">{{ m.InterviewDate|dmy }}{% if m.InterviewDate.strftime %} {{ m.InterviewDate.strftime('%H:%M') }}{% endif %}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">TBD</span>
+                                {% endif %}
+                            </td>
+                            <td class="small">
+                                {% if m.get('RecruiterReadinessStatus') %}
+                                <span class="badge bg-light text-dark border">{{ m.RecruiterReadinessStatus }}</span>
+                                {% endif %}
+                                {% if m.get('RecruiterReadinessNote') %}<br>{{ m.RecruiterReadinessNote }}{% endif %}
+                                {% if not m.get('RecruiterReadinessStatus') and not m.get('RecruiterReadinessNote') %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
                             </td>
                             <td>
-                                {% if m.Status == 'Confirmed by Candidate' %}
+                                {% if m.get('ClientDecision') %}
+                                <span class="badge bg-{{ 'success' if m.ClientDecision == 'Accepted' else 'danger' }}">{{ m.ClientDecision }}</span>
+                                {% elif m.Status == 'Confirmed by Candidate' %}
                                 <span class="badge bg-success">Confirmed by Cand.</span>
                                 {% else %}
                                 <span class="badge bg-warning text-dark">{{ m.Status }}</span>
                                 {% endif %}
                             </td>
                             <td>
+                                {% if m.get('ClientDecision') %}
+                                <span class="text-muted small">تم تسجيل قرار العميل</span>
+                                {% else %}
                                 <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#resultModal{{ m.MatchID }}">
                                     <i class="fas fa-edit"></i> Log Result
                                 </button>
+                                {% endif %}
                             </td>
                         </tr>
 
@@ -82,8 +105,8 @@
                                             </div>
                                             
                                             <div class="mb-3">
-                                                <label class="form-label">Feedback / Reason / Next Steps</label>
-                                                <textarea name="notes" class="form-control" rows="3" placeholder="e.g. Good technical skills, wants 2nd interview..."></textarea>
+                                                <label class="form-label">Feedback / سبب الرفض / ملاحظات</label>
+                                                <textarea name="notes" class="form-control" rows="3" placeholder="إلزامي عند الرفض — Optional detail when accepted"></textarea>
                                             </div>
                                         </div>
                                         <div class="modal-footer">
@@ -105,7 +128,7 @@
                         }
                         </script>
                         {% else %}
-                        <tr><td colspan="5" class="text-center py-4 text-muted">No interviews pending results.</td></tr>
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No interviews pending results.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

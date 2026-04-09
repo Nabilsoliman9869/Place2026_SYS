@@ -372,6 +372,18 @@
                 <i class="fas fa-random"></i>
                 <span class="link-text"><span class="en-bold">Matching Center</span> <span class="ar-normal">مركز المطابقة</span></span>
             </a>
+            {% if session.get('role') in ['Manager', 'Allocator', 'AllocationManager', 'AllocationSpecialist', 'AccountManager'] %}
+            <a href="{{ url_for('allocation_interview_results') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'allocation_interview_results' else '' }}">
+                <i class="fas fa-clipboard-check"></i>
+                <span class="link-text"><span class="en-bold">Client interview result</span> <span class="ar-normal">تسجيل قرار العميل</span></span>
+            </a>
+            <a href="{{ url_for('allocation_interview_closure_report') }}"
+                class="nav-link {{ 'active' if request.endpoint == 'allocation_interview_closure_report' else '' }}">
+                <i class="fas fa-chart-pie"></i>
+                <span class="link-text"><span class="en-bold">Closure by client</span> <span class="ar-normal">تقرير إغلاق حسب العميل</span></span>
+            </a>
+            {% endif %}
             {% endif %}
 
             <!-- ============================================= -->

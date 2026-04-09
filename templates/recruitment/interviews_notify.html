@@ -5,7 +5,9 @@
     <h2 class="mb-4"><i class="fas fa-bell"></i> Interview Notifications</h2>
     
     <div class="alert alert-info border-start border-5 border-info">
-        <i class="fas fa-info-circle"></i> Please contact the candidates below to confirm their scheduled interviews with clients.
+        <i class="fas fa-info-circle"></i>
+        <span class="ar-normal">تواصل مع المرشح لتأكيد استعداده لحضور مقابلة العميل؛ بعد التأكيد يظهر للمُوزّع أن المرشح جاهز ثم يُسجَّل قرار العميل (قبول/رفض) من شاشة المُوزّع.</span>
+        <span class="en-bold d-block mt-1">Contact candidates to confirm interview attendance — the allocator then logs the client decision.</span>
     </div>
 
     <div class="card shadow-sm">
@@ -71,13 +73,17 @@
                                             <input type="hidden" name="match_id" value="{{ i.MatchID }}">
                                             
                                             <div class="mb-3">
-                                                <label class="form-label">Outcome</label>
+                                                <label class="form-label">Outcome / النتيجة</label>
                                                 <select name="status" class="form-select" required>
-                                                    <option value="Confirmed">Confirmed (Will Attend)</option>
-                                                    <option value="Reschedule Requested">Candidate Requested Reschedule</option>
-                                                    <option value="Declined">Candidate Declined</option>
-                                                    <option value="Unreachable">Unreachable (No Answer)</option>
+                                                    <option value="Confirmed">Confirmed (Will Attend) — مؤكد الحضور</option>
+                                                    <option value="Reschedule Requested">Reschedule Requested — طلب تأجيل</option>
+                                                    <option value="Declined">Declined — رفض المرشح</option>
+                                                    <option value="Unreachable">Unreachable — لا يجيب</option>
                                                 </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">ملاحظات للمُوزّع / Notes for allocator</label>
+                                                <textarea name="readiness_note" class="form-control" rows="2" placeholder="مثال: أكد الهاتف، أو سبب التأجيل…"></textarea>
                                             </div>
                                         </div>
                                         <div class="modal-footer">

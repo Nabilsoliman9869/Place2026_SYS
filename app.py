@@ -931,6 +931,32 @@ def _db_has_table(table_name: str) -> bool:
     except Exception:
         return False
 
+
+def _ensure_matches_interview_closure_columns():
+    """استعداد الريكروتر للمقابلة + قرار العميل (مقبول/مرفوض) وأسباب الرفض — للمُوزّع والتقارير والفوترة."""
+    if not _db_has_table('Matches'):
+        return
+    pairs = [
+        ('RecruiterReadinessStatus', 'NVARCHAR(80) NULL'),
+        ('RecruiterReadinessNote', 'NVARCHAR(MAX) NULL'),
+        ('RecruiterReadinessAt', 'DATETIME NULL'),
+        ('ClientDecision', 'NVARCHAR(50) NULL'),
+        ('ClientDecisionDetail', 'NVARCHAR(MAX) NULL'),
+        ('ClientDecisionAt', 'DATETIME NULL'),
+        ('ClientDecisionBy', 'INT NULL'),
+    ]
+    for name, typ in pairs:
+        try:
+            query_db(
+                f"""
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'{name}' AND Object_ID = Object_ID(N'Matches'))
+                    ALTER TABLE Matches ADD [{name}] {typ};
+                """
+            )
+        except Exception:
+            pass
+
+
 # --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
 _USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
 
@@ -2918,6 +2944,7 @@ def allocation_schedule_interview(match_id):
 @app.route('/recruiter/interviews/notify')
 @login_required
 def recruiter_interviews_notify():
+    _ensure_matches_interview_closure_columns()
     # Fetch Scheduled Interviews for this Recruiter's candidates (Status: Interview Scheduled or Confirmed by Candidate)
     # Join with Matches, Candidates, ClientRequests, Clients
     interviews = query_db("""
@@ -2936,23 +2963,50 @@ def recruiter_interviews_notify():
 @app.route('/recruiter/confirm_interview', methods=['POST'])
 @login_required
 def recruiter_confirm_interview():
+    _ensure_matches_interview_closure_columns()
     match_id = request.form['match_id']
     status = request.form['status'] # Confirmed, Reschedule Needed, Cancelled
-    
+    note = (request.form.get('readiness_note') or '').strip()[:4000]
+
     # Update Match Status or Add Note
     if status == 'Confirmed':
-        query_db("UPDATE Matches SET Status='Confirmed by Candidate' WHERE MatchID=?", (match_id,))
+        try:
+            query_db(
+                """
+                UPDATE Matches SET Status=N'Confirmed by Candidate',
+                    RecruiterReadinessStatus=?, RecruiterReadinessNote=?, RecruiterReadinessAt=GETDATE()
+                WHERE MatchID=?
+                """,
+                (status, note or None, match_id),
+            )
+        except Exception:
+            query_db("UPDATE Matches SET Status='Confirmed by Candidate' WHERE MatchID=?", (match_id,))
         flash('Candidate Attendance Confirmed.', 'success')
     else:
-        query_db("UPDATE Matches SET Status=?, ReviewNotes=COALESCE(ReviewNotes, '') + ' | Recruiter Update: ' + ? WHERE MatchID=?", (status, status, match_id))
+        try:
+            query_db(
+                """
+                UPDATE Matches SET Status=?,
+                    RecruiterReadinessStatus=?, RecruiterReadinessNote=?, RecruiterReadinessAt=GETDATE(),
+                    ReviewNotes=COALESCE(ReviewNotes, N'') + N' | Recruiter: ' + CAST(? AS NVARCHAR(4000))
+                WHERE MatchID=?
+                """,
+                (status, status, note or None, (note or status)[:500], match_id),
+            )
+        except Exception:
+            query_db(
+                "UPDATE Matches SET Status=?, ReviewNotes=COALESCE(ReviewNotes, '') + ' | Recruiter Update: ' + ? WHERE MatchID=?",
+                (status, status, match_id),
+            )
         flash(f'Status Updated: {status}', 'warning')
-        
+
     return redirect(url_for('recruiter_interviews_notify'))
 
 @app.route('/allocation/interview_results')
 @login_required
-@role_required(['Allocator', 'Manager', 'AllocationSpecialist'])
+@role_required(['Allocator', 'Manager', 'AllocationManager', 'AllocationSpecialist'])
 def allocation_interview_results():
+    _ensure_matches_interview_closure_columns()
     # List matches that are 'Confirmed by Candidate' or 'Interview Scheduled' (pending result)
     # Allows Allocator to mark result (Accepted/Rejected)
     matches = query_db("""
@@ -2968,32 +3022,158 @@ def allocation_interview_results():
 
 @app.route('/allocation/log_interview_result', methods=['POST'])
 @login_required
-@role_required(['Allocator', 'Manager', 'AllocationSpecialist'])
+@role_required(['Allocator', 'Manager', 'AllocationManager', 'AllocationSpecialist'])
 def allocation_log_interview_result():
+    _ensure_matches_interview_closure_columns()
     match_id = request.form['match_id']
     result = request.form['result'] # Accepted / Rejected
-    notes = request.form.get('notes', '')
+    notes = (request.form.get('notes') or '').strip()[:8000]
     next_step = request.form.get('next_step') # 2nd_interview / offer / docs
-    
+    uid = session.get('user_id')
+
+    if result == 'Rejected' and len(notes) < 3:
+        flash('يرجى كتابة سبب الرفض أو ملاحظة العميل (3 أحرف على الأقل).', 'warning')
+        return redirect(url_for('allocation_interview_results'))
+
     new_status = 'Rejected'
+    client_decision = 'Rejected'
     if result == 'Accepted':
-        # Logic: If 2nd Interview, Status = '2nd Interview Pending'
-        # If Offer/Docs, Status = 'Offer Stage'
+        client_decision = 'Accepted'
         if next_step == '2nd_interview':
             new_status = '2nd Interview Pending'
         elif next_step == 'offer':
             new_status = 'Offer Stage'
         else:
-            new_status = 'Accepted' # Generic fallback
-            
-    query_db("""
-        UPDATE Matches 
-        SET Status = ?, ReviewNotes = COALESCE(ReviewNotes, '') + ' | Client Result: ' + ? 
-        WHERE MatchID = ?
-    """, (new_status, notes, match_id))
-    
+            new_status = 'Accepted'
+
+    detail = notes
+    if result == 'Accepted' and next_step:
+        detail = (notes + ' | Next: ' + next_step).strip(' |')
+
+    try:
+        query_db(
+            """
+            UPDATE Matches
+            SET Status = ?,
+                ClientDecision = ?,
+                ClientDecisionDetail = ?,
+                ClientDecisionAt = GETDATE(),
+                ClientDecisionBy = ?,
+                ReviewNotes = COALESCE(ReviewNotes, N'') + N' | Client Result: ' + CAST(? AS NVARCHAR(4000))
+            WHERE MatchID = ?
+            """,
+            (new_status, client_decision, detail or None, uid, (detail or '')[:500], match_id),
+        )
+    except Exception:
+        query_db(
+            """
+            UPDATE Matches
+            SET Status = ?, ReviewNotes = COALESCE(ReviewNotes, '') + ' | Client Result: ' + ?
+            WHERE MatchID = ?
+            """,
+            (new_status, detail or '', match_id),
+        )
+
     flash(f'Interview Result Logged: {new_status}', 'success')
     return redirect(url_for('allocation_interview_results'))
+
+
+@app.route('/allocation/interview-closure')
+@login_required
+@role_required(['Allocator', 'Manager', 'AllocationManager', 'AllocationSpecialist', 'AccountManager'])
+def allocation_interview_closure_report():
+    """تقرير إغلاق مقابلات العميل: استعداد المرشح + قرار العميل — مجمّع حسب العميل تمهيداً للفوترة."""
+    _ensure_matches_interview_closure_columns()
+    client_id = (request.args.get('client_id') or '').strip()
+    bucket = (request.args.get('bucket') or 'all').strip().lower()  # all | pending_client | accepted | rejected
+    df = (request.args.get('from') or '').strip()
+    dt = (request.args.get('to') or '').strip()
+
+    clients = query_db("SELECT ClientID, CompanyName FROM Clients ORDER BY CompanyName") or []
+
+    sql = """
+        SELECT M.MatchID, M.Status, M.InterviewDate, M.MatchDate,
+               M.RecruiterReadinessStatus, M.RecruiterReadinessNote, M.RecruiterReadinessAt,
+               M.ClientDecision, M.ClientDecisionDetail, M.ClientDecisionAt, M.ClientDecisionBy,
+               C.CandidateID, C.FullName, C.Phone,
+               CR.RequestID, CR.JobTitle,
+               Cl.ClientID, Cl.CompanyName,
+               U.FullName AS ClientDecisionByName, U.Username AS ClientDecisionByUsername
+        FROM Matches M
+        JOIN Candidates C ON M.CandidateID = C.CandidateID
+        JOIN ClientRequests CR ON M.RequestID = CR.RequestID
+        JOIN Clients Cl ON CR.ClientID = Cl.ClientID
+        LEFT JOIN Users_1 U ON M.ClientDecisionBy = U.UserID
+        WHERE M.Status NOT IN ('Proposed', 'Withdrawn')
+          AND M.Status IS NOT NULL
+    """
+    params = []
+    if client_id.isdigit():
+        sql += " AND Cl.ClientID = ?"
+        params.append(int(client_id))
+    if df:
+        sql += " AND CAST(COALESCE(M.ClientDecisionAt, M.InterviewDate, M.MatchDate) AS DATE) >= CAST(? AS DATE)"
+        params.append(df)
+    if dt:
+        sql += " AND CAST(COALESCE(M.ClientDecisionAt, M.InterviewDate, M.MatchDate) AS DATE) <= CAST(? AS DATE)"
+        params.append(dt)
+
+    sql += " ORDER BY Cl.CompanyName, M.ClientDecisionAt DESC, M.InterviewDate DESC"
+    rows = query_db(sql, tuple(params)) if params else query_db(sql) or []
+
+    def outcome_row(r):
+        cd = (r.get('ClientDecision') or '').strip()
+        st = (r.get('Status') or '').strip()
+        if cd == 'Rejected' or st == 'Rejected':
+            return 'rejected'
+        if cd == 'Accepted' or st in ('Accepted', 'Offer Stage', '2nd Interview Pending', 'Hired', 'Invoiced'):
+            return 'accepted'
+        if st == 'Confirmed by Candidate':
+            return 'pending_client'
+        if st == 'Interview Scheduled':
+            return 'pending_recruiter'
+        return 'other'
+
+    filtered = []
+    for r in rows:
+        o = outcome_row(r)
+        r['_outcome_bucket'] = o
+        if bucket == 'all':
+            filtered.append(r)
+        elif bucket == 'pending_client' and o == 'pending_client':
+            filtered.append(r)
+        elif bucket == 'accepted' and o == 'accepted':
+            filtered.append(r)
+        elif bucket == 'rejected' and o == 'rejected':
+            filtered.append(r)
+        elif bucket == 'pending_recruiter' and o == 'pending_recruiter':
+            filtered.append(r)
+
+    summary_map = {}
+    for r in rows:
+        cid = r.get('ClientID')
+        cname = r.get('CompanyName') or ''
+        key = (cid, cname)
+        if key not in summary_map:
+            summary_map[key] = {'accepted': 0, 'rejected': 0, 'pending_client': 0, 'pending_recruiter': 0, 'other': 0}
+        o = outcome_row(r)
+        summary_map[key][o] = summary_map[key].get(o, 0) + 1
+
+    summary_rows = [
+        {'ClientID': k[0], 'CompanyName': k[1], **v}
+        for k, v in sorted(summary_map.items(), key=lambda x: (x[0][1] or '').lower())
+    ]
+
+    return render_template(
+        'allocation/interview_closure_report.html',
+        rows=filtered,
+        summary_rows=summary_rows,
+        clients=clients,
+        client_id=client_id,
+        bucket=bucket,
+        df=df,
+        dt=dt,
+    )
 
 @app.route('/recruiter/onboarding')
 @login_required
