@@ -957,6 +957,46 @@ def _ensure_matches_interview_closure_columns():
             pass
 
 
+def _ensure_corporate_invoices_tables():
+    """Ensure corporate invoicing tables exist (for recruitment billing)."""
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='CorporateInvoices' AND xtype='U')
+            CREATE TABLE CorporateInvoices (
+                InvoiceID INT IDENTITY(1,1) PRIMARY KEY,
+                ClientID INT FOREIGN KEY REFERENCES Clients(ClientID),
+                ServiceType NVARCHAR(100),
+                Description NVARCHAR(MAX),
+                Amount DECIMAL(18, 2) NOT NULL,
+                IssueDate DATETIME DEFAULT GETDATE(),
+                DueDate DATE,
+                Status NVARCHAR(50) DEFAULT 'Unpaid',
+                CreatedBy INT
+            )
+            """
+        )
+    except Exception:
+        pass
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='CorporatePayments' AND xtype='U')
+            CREATE TABLE CorporatePayments (
+                PaymentID INT IDENTITY(1,1) PRIMARY KEY,
+                InvoiceID INT FOREIGN KEY REFERENCES CorporateInvoices(InvoiceID),
+                Amount DECIMAL(18, 2) NOT NULL,
+                PaymentDate DATETIME DEFAULT GETDATE(),
+                PaymentMethod NVARCHAR(50),
+                ReferenceNumber NVARCHAR(100),
+                ReceivedBy INT
+            )
+            """
+        )
+    except Exception:
+        pass
+
+
 # --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
 _USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
 
@@ -1958,6 +1998,7 @@ def save_interview_result():
     except Exception:
         amt = None
     if amt and amt > 0 and result in ('Accepted', 'Rejected'):
+        _ensure_corporate_invoices_tables()
         try:
             info = query_db(
                 """
@@ -1992,7 +2033,7 @@ def save_interview_result():
                     ),
                 )
         except Exception:
-            pass
+            flash('تم حفظ النتيجة ولكن تعذر إنشاء الفاتورة (CorporateInvoices).', 'warning')
     
     flash('Interview Result Recorded', 'success')
     return redirect(url_for('recruiter_interviews_results'))
@@ -3244,11 +3285,53 @@ def accounting_invoices():
 def accounting_issue_invoice():
     match_id = request.form['match_id']
     amount = request.form['amount']
-    
-    # Simple Logic: Mark as Invoiced
-    query_db("UPDATE Matches SET Status='Invoiced', ReviewNotes=COALESCE(ReviewNotes, '') + ' | Invoice Issued: ' + ? WHERE MatchID=?", (amount, match_id))
-    
-    flash(f'Invoice Issued for {amount}. Process Complete.', 'success')
+
+    # Create a real corporate invoice then mark match invoiced
+    _ensure_corporate_invoices_tables()
+    try:
+        amt = float(amount)
+    except Exception:
+        amt = 0
+    if amt <= 0:
+        flash('قيمة الفاتورة غير صحيحة.', 'warning')
+        return redirect(url_for('accounting_invoices'))
+
+    info = query_db(
+        """
+        SELECT M.MatchID, M.CandidateID, M.RequestID,
+               C.FullName AS CandidateName,
+               CR.JobTitle, CR.ClientID,
+               Cl.CompanyName
+        FROM Matches M
+        JOIN Candidates C ON M.CandidateID = C.CandidateID
+        JOIN ClientRequests CR ON M.RequestID = CR.RequestID
+        JOIN Clients Cl ON CR.ClientID = Cl.ClientID
+        WHERE M.MatchID = ?
+        """,
+        (match_id,),
+        one=True,
+    )
+    if not info or not info.get('ClientID'):
+        flash('تعذر تحديد العميل لإصدار الفاتورة.', 'danger')
+        return redirect(url_for('accounting_invoices'))
+
+    service_type = 'Recruitment Fee'
+    desc = f"{service_type} — {info.get('CompanyName','')} — {info.get('JobTitle','')} — {info.get('CandidateName','')}"
+    try:
+        query_db(
+            """
+            INSERT INTO CorporateInvoices (ClientID, ServiceType, Description, Amount, IssueDate, DueDate, Status, CreatedBy)
+            VALUES (?, ?, ?, ?, GETDATE(), CAST(GETDATE() AS DATE), 'Unpaid', ?)
+            """,
+            (int(info['ClientID']), service_type, (desc or '')[:4000], amt, session.get('user_id')),
+        )
+        query_db(
+            "UPDATE Matches SET Status='Invoiced', ReviewNotes=COALESCE(ReviewNotes, '') + ' | Invoice Issued: ' + ? WHERE MatchID=?",
+            (str(amt), match_id),
+        )
+        flash(f'Invoice created (CorporateInvoices) for {amt}.', 'success')
+    except Exception as ex:
+        flash('تعذر إصدار الفاتورة: ' + str(ex)[:120], 'danger')
     return redirect(url_for('accounting_invoices'))
 
 @app.route('/talent/dashboard')
