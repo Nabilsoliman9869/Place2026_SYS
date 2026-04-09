@@ -5887,6 +5887,106 @@ def candidate_profile(candidate_id):
         ''', (candidate_id,)) or []
     except Exception:
         pass
+
+    # --- Trainer communications: any user notes about contacting trainer ---
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TrainerCommunications' AND xtype='U')
+            CREATE TABLE TrainerCommunications (
+                CommID INT IDENTITY(1,1) PRIMARY KEY,
+                CandidateID INT NOT NULL,
+                EnrollmentID INT NULL,
+                CommType NVARCHAR(50) NULL,
+                Notes NVARCHAR(MAX) NULL,
+                CreatedBy INT NULL,
+                CreatedAt DATETIME DEFAULT GETDATE()
+            )
+            """
+        )
+    except Exception:
+        pass
+    trainer_comms = []
+    try:
+        trainer_comms = query_db(
+            """
+            SELECT TC.CommID, TC.CommType, TC.Notes, TC.CreatedAt,
+                   U.FullName AS CreatedByName, U.Username AS CreatedByUsername,
+                   B.BatchName, Cr.CourseName
+            FROM TrainerCommunications TC
+            LEFT JOIN Users_1 U ON TC.CreatedBy = U.UserID
+            LEFT JOIN Enrollments E ON TC.EnrollmentID = E.EnrollmentID
+            LEFT JOIN CourseBatches B ON E.BatchID = B.BatchID
+            LEFT JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            WHERE TC.CandidateID = ?
+            ORDER BY TC.CreatedAt DESC
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        trainer_comms = []
+
+    # --- Training weekly progress (trainer) + weekly guidance (manager) + SSR ---
+    week_progress_summary = []
+    weekly_guidance = []
+    ssr_entries = []
+    try:
+        week_progress_summary = query_db(
+            """
+            SELECT TOP 60 E.EnrollmentID, B.BatchName, Cr.CourseName,
+                   L.WeekNumber,
+                   COUNT(*) AS LinesCount,
+                   MAX(L.TrainerID) AS TrainerID,
+                   MAX(L.UpdatedAt) AS UpdatedAt
+            FROM EnrollmentWeekProgressLines L
+            JOIN Enrollments E ON L.EnrollmentID = E.EnrollmentID
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            WHERE E.CandidateID = ?
+            GROUP BY E.EnrollmentID, B.BatchName, Cr.CourseName, L.WeekNumber
+            ORDER BY MAX(L.UpdatedAt) DESC
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        week_progress_summary = []
+    try:
+        weekly_guidance = query_db(
+            """
+            SELECT TOP 60 WP.WeekNumber, WP.Strengths, WP.Weaknesses, WP.RFI, WP.ActionPlan, WP.Severity,
+                   WP.UpdatedAt,
+                   E.EnrollmentID, B.BatchName, Cr.CourseName,
+                   U.FullName AS AuthorName, U.Username AS AuthorUsername
+            FROM WeeklyProgress WP
+            JOIN Enrollments E ON WP.EnrollmentID = E.EnrollmentID
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            LEFT JOIN Users_1 U ON WP.TrainerID = U.UserID
+            WHERE E.CandidateID = ?
+            ORDER BY WP.WeekNumber DESC, WP.UpdatedAt DESC
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        weekly_guidance = []
+    try:
+        ssr_entries = query_db(
+            """
+            SELECT TOP 60 S.WeekNumber, S.SSR, S.InitialFeedback, S.QuizScore, S.QuizNotes, S.CreatedAt,
+                   E.EnrollmentID, B.BatchName, Cr.CourseName,
+                   U.FullName AS AuthorName, U.Username AS AuthorUsername
+            FROM EnrollmentSSRInitialFB S
+            JOIN Enrollments E ON S.EnrollmentID = E.EnrollmentID
+            JOIN CourseBatches B ON E.BatchID = B.BatchID
+            JOIN Courses Cr ON B.CourseID = Cr.CourseID
+            LEFT JOIN Users_1 U ON S.CreatedBy = U.UserID
+            WHERE E.CandidateID = ?
+            ORDER BY S.CreatedAt DESC
+            """,
+            (candidate_id,),
+        ) or []
+    except Exception:
+        ssr_entries = []
     # معلومات الفوترة للمتدرب — الفواتير المسجلة له (رسوم امتحان، ايراد دورات، إلخ) من InvoiceHeaders
     candidate_invoices = []
     try:
@@ -5969,6 +6069,10 @@ def candidate_profile(candidate_id):
         marketing_assessment=marketing_assessment,
         sheet_data_list=sheet_data_list,
         trainer_notes_list=trainer_notes_list,
+        trainer_comms=trainer_comms,
+        week_progress_summary=week_progress_summary,
+        weekly_guidance=weekly_guidance,
+        ssr_entries=ssr_entries,
         candidate_invoices=candidate_invoices,
         talent_feedback_training=talent_feedback_training,
         talent_feedback_recruitment=talent_feedback_recruitment,

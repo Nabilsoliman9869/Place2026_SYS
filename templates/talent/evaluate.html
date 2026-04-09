@@ -26,6 +26,9 @@
                     <div class="text-start small">
                         <p class="mb-2"><strong>Soft Skills <span class="text-muted">المهارات الشخصية</span>:</strong><br><span class="text-break">{{ c.SoftSkills or '—' }}</span></p>
                         <p class="mb-2"><strong>English / CEFR <span class="text-muted">مستوى الإنجليزية</span>:</strong><br>{{ c.EnglishLevel or c.CurrentCEFR or '—' }}</p>
+                        {% if c.ResidenceArea %}
+                        <p class="mb-2"><strong>Location / City <span class="text-muted">المنطقة</span>:</strong><br>{{ c.ResidenceArea }}</p>
+                        {% endif %}
                         <p class="mb-2"><strong>Registration <span class="text-muted">تاريخ التسجيل</span>:</strong><br>
                             {% if c.CreatedAt %}{{ c.CreatedAt.strftime('%d-%m-%Y') if c.CreatedAt.strftime is defined else (c.CreatedAt|string)[:10] }}{% else %}—{% endif %}
                         </p>

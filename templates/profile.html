@@ -34,6 +34,10 @@
                 </p>
                 {% endif %}
 
+                {% if cand.ResidenceArea %}
+                <p class="mb-1"><strong>Location / City <small class="text-muted">المنطقة</small>:</strong> {{ cand.ResidenceArea }}</p>
+                {% endif %}
+
                 {% if cand.Age %}
                 <p class="mb-1"><strong>Age <small class="text-muted">العمر</small>:</strong> {{ cand.Age }}</p>
                 {% endif %}
@@ -273,6 +277,103 @@
             </div>
         </div>
 
+        <!-- 1a. Weekly progress (Trainer) — summary -->
+        {% if week_progress_summary %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-success"><i class="fas fa-clipboard-list"></i> Weekly progress report (Trainer) <small class="text-muted fs-6">تقرير التقدم الأسبوعي</small></h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">ملخص الأسابيع التي تم حفظ شيت التقدم لها (عدد السطور).</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr><th>Course / Wave</th><th class="text-center">Week</th><th class="text-center">Lines</th><th>Last update</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for w in week_progress_summary %}
+                            <tr>
+                                <td><small>{{ w.CourseName }} — {{ w.BatchName }}</small></td>
+                                <td class="text-center"><span class="badge bg-secondary">{{ w.WeekNumber }}</span></td>
+                                <td class="text-center"><span class="badge bg-success">{{ w.LinesCount }}</span></td>
+                                <td class="small text-muted">{{ (w.UpdatedAt|string)[:16] if w.UpdatedAt else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 1b. Weekly guidance (Training manager) -->
+        {% if weekly_guidance %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-primary"><i class="fas fa-bullseye"></i> Training team manager recommendation <small class="text-muted fs-6">توصية مدير فريق التدريب للمدرب</small></h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr><th>Course / Wave</th><th class="text-center">Week</th><th>Priority</th><th>Key notes</th><th>By</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for r in weekly_guidance %}
+                            <tr>
+                                <td><small>{{ r.CourseName }} — {{ r.BatchName }}</small></td>
+                                <td class="text-center"><span class="badge bg-secondary">{{ r.WeekNumber }}</span></td>
+                                <td><span class="badge bg-{{ 'danger' if r.Severity == 'High' else 'warning text-dark' if r.Severity == 'Medium' else 'success' if r.Severity else 'secondary' }}">{{ r.Severity or '—' }}</span></td>
+                                <td class="small text-break" style="max-width:420px">
+                                    {% if r.ActionPlan %}<div><strong>Plan:</strong> {{ r.ActionPlan }}</div>{% endif %}
+                                    {% if r.RFI %}<div><strong>RFI:</strong> {{ r.RFI }}</div>{% endif %}
+                                    {% if r.Strengths or r.Weaknesses %}
+                                    <div class="text-muted">+ {{ r.Strengths or '' }} {% if r.Weaknesses %} | - {{ r.Weaknesses }}{% endif %}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted">{{ r.AuthorName or r.AuthorUsername or '—' }}<br>{{ (r.UpdatedAt|string)[:16] if r.UpdatedAt else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 1c. SSR & Initial FB -->
+        {% if ssr_entries %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-warning"><i class="fas fa-clipboard-check"></i> SSR & Initial FB <small class="text-muted fs-6">كويز المدرب</small></h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr><th>Course / Wave</th><th class="text-center">Week</th><th class="text-center">Score</th><th>SSR / Feedback</th><th>By</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for s in ssr_entries %}
+                            <tr>
+                                <td><small>{{ s.CourseName }} — {{ s.BatchName }}</small></td>
+                                <td class="text-center"><span class="badge bg-secondary">{{ s.WeekNumber }}</span></td>
+                                <td class="text-center">{% if s.QuizScore is not none %}<span class="badge bg-dark">{{ s.QuizScore }}</span>{% else %}—{% endif %}</td>
+                                <td class="small text-break" style="max-width:420px">
+                                    {% if s.SSR %}<div><strong>SSR:</strong> {{ s.SSR }}</div>{% endif %}
+                                    {% if s.InitialFeedback %}<div><strong>FB:</strong> {{ s.InitialFeedback }}</div>{% endif %}
+                                    {% if s.QuizNotes %}<div class="text-muted"><strong>Notes:</strong> {{ s.QuizNotes }}</div>{% endif %}
+                                </td>
+                                <td class="small text-muted">{{ s.AuthorName or s.AuthorUsername or '—' }}<br>{{ (s.CreatedAt|string)[:16] if s.CreatedAt else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- 1b. سجل ملاحظات المدرب اليومية (ليطلع عليه الإدارة) -->
         {% if trainer_notes_list %}
         <div class="card shadow-sm mb-4">
@@ -298,6 +399,33 @@
                             <td class="text-break">{{ n.Notes }}</td>
                             <td class="text-muted small">{{ n.TrainerName or '-' }}</td>
                             <td class="small text-muted">{{ (n.CreatedAt | string)[:16] if n.CreatedAt else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 1d. Communications / Comments about contacting trainer (any user) -->
+        {% if trainer_comms %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0 text-secondary"><i class="fas fa-comments"></i> Communications (trainer contact) <small class="text-muted fs-6">اتصالات/تعليقات تخص التواصل مع المدرب</small></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr><th>Type</th><th>Wave</th><th>Notes</th><th>By</th><th>At</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for c in trainer_comms %}
+                        <tr>
+                            <td><span class="badge bg-light text-dark border">{{ c.CommType or 'Note' }}</span></td>
+                            <td class="small">{{ c.CourseName or '' }}{% if c.BatchName %} — {{ c.BatchName }}{% endif %}</td>
+                            <td class="text-break">{{ c.Notes }}</td>
+                            <td class="small text-muted">{{ c.CreatedByName or c.CreatedByUsername or '—' }}</td>
+                            <td class="small text-muted">{{ (c.CreatedAt|string)[:16] if c.CreatedAt else '-' }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
