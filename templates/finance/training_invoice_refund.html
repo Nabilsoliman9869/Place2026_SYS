@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% block page_title %}مرتجع فواتير التدريب{% endblock %}
+{% block content %}
+<style>
+    .ref-card { background: #fff; border: 1px solid #dee2e6; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .ref-card .hd { padding: 12px 16px; border-bottom: 1px solid #eee; font-weight: 700; }
+    .ref-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .ref-table th, .ref-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: middle; }
+    .ref-table th { background: #f8f9fa; }
+</style>
+
+<div class="mb-3">
+    <h4 class="mb-1"><i class="fas fa-undo-alt text-warning"></i> مرتجع فواتير التدريب</h4>
+    <p class="text-muted small mb-0">
+        فواتير «{{ training_fee_tag }}» و«{{ exam_fee_tag }}» — اختر فاتورة ثم سجّل سند صرف بنفس آلية
+        <a href="{{ url_for('finance_cashflow_ui') }}" data-turbo="false">التدفق النقدي الزكي</a>.
+    </p>
+</div>
+
+<div class="ref-card mb-3">
+    <div class="hd">بحث</div>
+    <div class="p-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-6">
+                <label class="form-label small text-muted">اسم العميل أو رقم الفاتورة</label>
+                <input type="text" name="q" class="form-control" value="{{ q or '' }}" placeholder="بحث…">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary">تصفية</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ref-card">
+    <div class="hd">فواتير التدريب</div>
+    <div class="table-responsive p-0">
+        <table class="ref-table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>التاريخ</th>
+                    <th>العميل</th>
+                    <th>إجمالي الفاتورة</th>
+                    <th>تم استرداده</th>
+                    <th>متاح للمرتجع</th>
+                    <th>البند</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in invoices %}
+                {% set total = inv.TotalAmount %}
+                {% set refd = inv.RefundedAmount %}
+                {% set avail = inv.RefundableAmount %}
+                <tr>
+                    <td>{{ inv.InvoiceID }}</td>
+                    <td><small>{{ inv.InvoiceDate.strftime('%Y-%m-%d') if inv.InvoiceDate else '—' }}</small></td>
+                    <td>{{ inv.FullName or '—' }}</td>
+                    <td>{{ total }}</td>
+                    <td class="text-secondary">{{ refd }}</td>
+                    <td class="fw-bold {{ 'text-success' if avail and avail > 0.009 else 'text-muted' }}">{{ avail }}</td>
+                    <td><small class="text-break">{{ (inv.FirstLineDesc or '')[:100] }}{% if (inv.FirstLineDesc or '')|length > 100 %}…{% endif %}</small></td>
+                    <td>
+                        {% if avail and avail > 0.009 %}
+                        <button type="button" class="btn btn-sm btn-warning"
+                            data-bs-toggle="modal" data-bs-target="#refundModal"
+                            data-invoice-id="{{ inv.InvoiceID }}"
+                            data-customer="{{ (inv.FullName or '')|e }}"
+                            data-max="{{ avail }}">
+                            سند مرتجع
+                        </button>
+                        {% else %}
+                        <span class="text-muted small">مكتمل</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">لا توجد فواتير مطابقة.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="ref-card">
+    <div class="hd">آخر المرتجعات المسجّلة</div>
+    <div class="table-responsive p-0">
+        <table class="ref-table mb-0">
+            <thead>
+                <tr>
+                    <th>التاريخ</th>
+                    <th>فاتورة</th>
+                    <th>العميل</th>
+                    <th>مبلغ المرتجع</th>
+                    <th>رقم السند</th>
+                    <th>ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in recent_refunds %}
+                <tr>
+                    <td><small>{{ r.RefundDate.strftime('%Y-%m-%d %H:%M') if r.RefundDate else '—' }}</small></td>
+                    <td>{{ r.InvoiceID }}</td>
+                    <td>{{ r.FullName or '—' }}</td>
+                    <td class="fw-bold">{{ r.Amount }}</td>
+                    <td>{{ r.BondNumber or '—' }}</td>
+                    <td><small>{{ r.Notes or '' }}</small></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-3">لا يوجد بعد.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: نفس حقول سند الصرف (التدفق النقدي) -->
+<div class="modal fade" id="refundModal" tabindex="-1" aria-labelledby="refundModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="refundModalLabel">سند صرف — مرتجع تدريب</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rfInvoiceId" value="">
+                <p class="small text-muted mb-3">فاتورة <strong id="rfInvoiceLabel"></strong> — العميل: <strong id="rfCustomer"></strong></p>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label">التاريخ</label>
+                        <input type="date" id="rfDate" class="form-control" required>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">الحساب الرئيسي (صندوق/بنك)</label>
+                        <select id="rfMainAccount" class="form-select" required>
+                            <option value="">— اختر —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-8">
+                        <label class="form-label">حساب التفصيل (المستفيد / مصدر الصرف)</label>
+                        <select id="rfLineAccount" class="form-select" required>
+                            <option value="">— اختر —</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">مبلغ المرتجع (حد أقصى: <span id="rfMaxHint"></span>)</label>
+                        <input type="number" id="rfAmount" class="form-control" step="0.01" min="0.01" required>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label">المرجع / الشيك</label>
+                        <input type="text" id="rfRef" class="form-control" placeholder="اختياري">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">المستفيد (عميل)</label>
+                        <input type="text" id="rfAgent" class="form-control" placeholder="اختياري">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">البيان / الملاحظات</label>
+                        <input type="text" id="rfNotes" class="form-control" placeholder="سبب الاسترداد">
+                    </div>
+                </div>
+                <div id="rfErr" class="alert alert-danger d-none py-2 small"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-warning" id="rfSubmit"><i class="fas fa-save"></i> حفظ سند الصرف والمرتجع</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const API_ACCOUNTS = '{{ url_for("api_cashflow_accounts_sub") }}';
+    const API_REFUND = '{{ url_for("api_training_invoice_refund") }}';
+    const rfModal = document.getElementById('refundModal');
+    if (!rfModal) return;
+
+    function loadAccounts() {
+        fetch(API_ACCOUNTS, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                var acc = d.accounts || [];
+                var opts = '<option value="">— اختر —</option>' + acc.map(function (a) {
+                    var v = (a.CardCode || '') + '-' + (a.AccountName || '');
+                    var lab = a.DisplayName || v;
+                    return '<option value="' + v.replace(/"/g, '&quot;') + '">' + lab.replace(/</g, '&lt;') + '</option>';
+                }).join('');
+                document.getElementById('rfMainAccount').innerHTML = opts;
+                document.getElementById('rfLineAccount').innerHTML = opts;
+            })
+            .catch(function () {});
+    }
+
+    rfModal.addEventListener('show.bs.modal', function (ev) {
+        var btn = ev.relatedTarget;
+        if (!btn || !btn.getAttribute) return;
+        var iid = btn.getAttribute('data-invoice-id');
+        var cust = btn.getAttribute('data-customer') || '';
+        var mx = parseFloat(btn.getAttribute('data-max') || '0') || 0;
+        document.getElementById('rfInvoiceId').value = iid;
+        document.getElementById('rfInvoiceLabel').textContent = '#' + iid;
+        document.getElementById('rfCustomer').textContent = cust;
+        document.getElementById('rfMaxHint').textContent = mx.toFixed(2);
+        document.getElementById('rfAmount').value = mx > 0 ? mx.toFixed(2) : '';
+        document.getElementById('rfAmount').max = mx;
+        document.getElementById('rfNotes').value = 'مرتجع تدريب — فاتورة ' + iid;
+        document.getElementById('rfAgent').value = cust;
+        document.getElementById('rfErr').classList.add('d-none');
+        var inp = document.getElementById('rfDate');
+        if (inp && !inp.value) { inp.valueAsDate = new Date(); }
+    });
+
+    document.getElementById('rfSubmit').addEventListener('click', function () {
+        var err = document.getElementById('rfErr');
+        err.classList.add('d-none');
+        var invoiceId = parseInt(document.getElementById('rfInvoiceId').value, 10);
+        var mainAccount = document.getElementById('rfMainAccount').value;
+        var lineAccount = document.getElementById('rfLineAccount').value;
+        var amount = parseFloat(document.getElementById('rfAmount').value) || 0;
+        var mx = parseFloat(document.getElementById('rfAmount').max) || 0;
+        if (!mainAccount || !lineAccount || amount <= 0) {
+            err.textContent = 'أكمل الحقول المطلوبة';
+            err.classList.remove('d-none');
+            return;
+        }
+        if (amount > mx + 0.0001) {
+            err.textContent = 'المبلغ يتجاوز المتاح (' + mx.toFixed(2) + ')';
+            err.classList.remove('d-none');
+            return;
+        }
+        var payload = {
+            invoice_id: invoiceId,
+            type: 'DISB',
+            date: document.getElementById('rfDate').value,
+            mainAccount: mainAccount,
+            lineAccount: lineAccount,
+            amount: amount,
+            ref: document.getElementById('rfRef').value,
+            agent: document.getElementById('rfAgent').value,
+            notes: document.getElementById('rfNotes').value,
+            items: [{ account: lineAccount, db: amount, cr: 0, desc: document.getElementById('rfNotes').value }]
+        };
+        document.getElementById('rfSubmit').disabled = true;
+        fetch(API_REFUND, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+                document.getElementById('rfSubmit').disabled = false;
+                if (x.j && x.j.success) {
+                    var msg = x.j.message || 'تم الحفظ';
+                    if (x.j.BondNumber) { msg += ' — رقم السند: ' + x.j.BondNumber; }
+                    alert(msg);
+                    window.location.reload();
+                } else {
+                    err.textContent = (x.j && x.j.message) ? x.j.message : 'فشل الحفظ';
+                    err.classList.remove('d-none');
+                }
+            })
+            .catch(function () {
+                document.getElementById('rfSubmit').disabled = false;
+                err.textContent = 'خطأ في الاتصال';
+                err.classList.remove('d-none');
+            });
+    });
+
+    loadAccounts();
+})();
+</script>
+{% endblock %}

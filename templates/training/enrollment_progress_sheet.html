@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'training/_progress_sheet_rfi_row.html' import progress_sheet_rfi_row %}
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb" class="mb-3">
@@ -47,38 +48,17 @@
                     </thead>
                     <tbody id="tbody-{{ aspect }}">
                         {% if rows|length == 0 %}
-                        <tr class="data-row">
-                            <td><input type="text" class="form-control form-control-sm" name="{{ aspect }}_rfi" placeholder="e.g. Word choice"></td>
-                            <td>
-                                <select class="form-select form-select-sm" name="{{ aspect }}_severity">
-                                    <option value="">—</option>
-                                    <option value="Red">Red</option>
-                                    <option value="Yellow">Yellow</option>
-                                    <option value="Green">Green</option>
-                                </select>
-                            </td>
-                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_action" rows="1"></textarea></td>
-                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_comment" rows="1"></textarea></td>
-                        </tr>
+                        {{ progress_sheet_rfi_row(aspect, '', '', '', '', rfi_options) }}
                         {% else %}
                         {% for line in rows %}
-                        <tr class="data-row">
-                            <td><input type="text" class="form-control form-control-sm" name="{{ aspect }}_rfi" value="{{ line.RFI or '' }}"></td>
-                            <td>
-                                <select class="form-select form-select-sm" name="{{ aspect }}_severity">
-                                    <option value="">—</option>
-                                    <option value="Red" {{ 'selected' if line.Severity == 'Red' }}>Red</option>
-                                    <option value="Yellow" {{ 'selected' if line.Severity == 'Yellow' }}>Yellow</option>
-                                    <option value="Green" {{ 'selected' if line.Severity == 'Green' }}>Green</option>
-                                </select>
-                            </td>
-                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_action" rows="1">{{ line.ActionPlan or '' }}</textarea></td>
-                            <td><textarea class="form-control form-control-sm" name="{{ aspect }}_comment" rows="1">{{ line.ProgressComment or '' }}</textarea></td>
-                        </tr>
+                        {{ progress_sheet_rfi_row(aspect, line.RFI, line.Severity, line.ActionPlan, line.ProgressComment, rfi_options) }}
                         {% endfor %}
                         {% endif %}
                     </tbody>
                 </table>
+                <template id="rfi-row-blank-{{ aspect }}">
+                    {{ progress_sheet_rfi_row(aspect, '', '', '', '', rfi_options) }}
+                </template>
             </div>
         </div>
         {% endfor %}
@@ -96,13 +76,9 @@ document.querySelectorAll('.add-row-btn').forEach(function(btn) {
         var aspect = btn.getAttribute('data-aspect');
         var tb = document.getElementById('tbody-' + aspect);
         if (!tb) return;
-        var rows = tb.querySelectorAll('tr.data-row');
-        var src = rows[rows.length - 1];
-        if (!src) return;
-        var nu = src.cloneNode(true);
-        nu.querySelectorAll('input, textarea').forEach(function(el) { el.value = ''; });
-        nu.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
-        tb.appendChild(nu);
+        var tpl = document.getElementById('rfi-row-blank-' + aspect);
+        if (!tpl || !tpl.content) return;
+        tb.appendChild(tpl.content.cloneNode(true));
     });
 });
 </script>

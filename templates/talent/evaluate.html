@@ -26,9 +26,7 @@
                     <div class="text-start small">
                         <p class="mb-2"><strong>Soft Skills <span class="text-muted">المهارات الشخصية</span>:</strong><br><span class="text-break">{{ c.SoftSkills or '—' }}</span></p>
                         <p class="mb-2"><strong>English / CEFR <span class="text-muted">مستوى الإنجليزية</span>:</strong><br>{{ c.EnglishLevel or c.CurrentCEFR or '—' }}</p>
-                        {% if c.ResidenceArea %}
-                        <p class="mb-2"><strong>Location / City <span class="text-muted">المنطقة</span>:</strong><br>{{ c.ResidenceArea }}</p>
-                        {% endif %}
+                        <p class="mb-2"><strong>Location / City <span class="text-muted">المنطقة</span>:</strong><br>{{ c.ResidenceArea or '—' }}</p>
                         <p class="mb-2"><strong>Registration <span class="text-muted">تاريخ التسجيل</span>:</strong><br>
                             {% if c.CreatedAt %}{{ c.CreatedAt.strftime('%d-%m-%Y') if c.CreatedAt.strftime is defined else (c.CreatedAt|string)[:10] }}{% else %}—{% endif %}
                         </p>
@@ -144,10 +142,24 @@
                             <span class="badge bg-secondary ms-1">مسار التوظيف</span>
                             {% endif %}
                             <small class="text-muted d-block mb-1">المستويات المعروضة تختلف بين التوظيف (تفصيلي) والتدريب (مبسّط).</small>
-                            <select name="cefr_level" class="form-select" required>
+                            {% if eval_type == 'Training' and not from_exam_feedback %}
+                            <small class="text-info d-block mb-1">مسار حجز التدريب: عند اختيار <strong>No Show</strong> أو <strong>Redo</strong> أو <strong>Resc</strong> يمكن الحفظ دون مستوى CEFR؛ يُضاف بيان تلقائي في الملاحظات.</small>
+                            {% endif %}
+                            <select name="cefr_level" id="cefrLevelSelect" class="form-select">
                                 <option value="">Select Level...</option>
                                 {% for lvl in cefr_options %}
                                 <option value="{{ lvl }}">{{ lvl }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% set rfi_opts = rfi_options if rfi_options is defined else [] %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">RFI (rf1) <span class="text-muted small fw-normal">— تركيز لغوي / خطأ شائع (اختياري)</span></label>
+                            <select name="rf1" id="rf1Select" class="form-select form-select-sm">
+                                <option value="">—</option>
+                                {% for opt in rfi_opts %}
+                                <option value="{{ opt }}">{{ opt }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -195,12 +207,20 @@
                             {% if eval_type == 'Training' or from_exam_feedback %}
                             <div class="d-flex flex-wrap gap-2" role="group">
                                 {% if from_exam_feedback %}
-                                  {# امتحانات الدفعات: لا "No Show/Resc/Unreachable" لأنها للحاضرين فقط #}
+                                  {# امتحانات الدفعات: لا رفض لمتدرب نشط في الدفعة #}
+                                  {% if exam_hide_reject is defined and exam_hide_reject %}
+                                  {% set ta_opts = [
+                                      ('Accepted', 'Accepted', 'success', 'مقبول'),
+                                      ('Pending', 'Pending', 'secondary', 'قيد الانتظار'),
+                                  ] %}
+                                  <p class="small text-warning w-100 mb-0">متدرب مسجّل في الدفعة: خيار «مرفوض» غير متاح من تقييم الامتحان.</p>
+                                  {% else %}
                                   {% set ta_opts = [
                                       ('Accepted', 'Accepted', 'success', 'مقبول'),
                                       ('Rejected', 'Rejected', 'danger', 'مرفوض'),
                                       ('Pending', 'Pending', 'secondary', 'قيد الانتظار'),
                                   ] %}
+                                  {% endif %}
                                 {% else %}
                                   {# اختبار تحديد مستوى للّيد: يحتاج حالات المتابعة مع المبيعات #}
                                   {% set ta_opts = [

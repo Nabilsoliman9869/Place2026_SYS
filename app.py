@@ -131,6 +131,8 @@ TA_TRAINING_DECISION_VALUES = (
 )
 # قرار قديم في الواجهة — يُعامل كـ Accepted لمسار «مهتم تدريب» في الإغلاق
 TA_TRAINING_LEGACY_TRAINING_DECISION = 'Training'
+# تقييم موعد تدريب: لا يُشترط اختيار CEFR — يُضاف بيان تلقائي في الملاحظات
+TA_EVAL_SKIP_CEFR_DECISIONS = frozenset({'No Show', 'Redo', 'Resc'})
 
 TRAINING_CLOSING_STATUS_VALUES = (
     'Confirmed Training', 'Pending Month', 'Not Interested', 'Rejected', 'Unreachable',
@@ -991,6 +993,38 @@ def _ensure_corporate_invoices_tables():
                 ReferenceNumber NVARCHAR(100),
                 ReceivedBy INT
             )
+            """
+        )
+    except Exception:
+        pass
+
+
+def _ensure_training_invoice_refunds_table():
+    """سجل مرتجعات فواتير التدريب (InvoiceHeaders) المرتبطة بسند صرف TBL010."""
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TrainingInvoiceRefunds' AND xtype='U')
+            CREATE TABLE TrainingInvoiceRefunds (
+                RefundID INT IDENTITY(1,1) PRIMARY KEY,
+                InvoiceID INT NOT NULL,
+                Amount DECIMAL(18,2) NOT NULL,
+                VoucherCardGuide NVARCHAR(64) NULL,
+                BondNumber INT NULL,
+                RefundDate DATETIME NOT NULL DEFAULT GETDATE(),
+                Notes NVARCHAR(500) NULL,
+                CreatedBy INT NULL
+            )
+            """
+        )
+    except Exception:
+        pass
+    try:
+        query_db(
+            """
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_TrainingInvoiceRefunds_InvoiceID'
+                AND object_id = OBJECT_ID(N'TrainingInvoiceRefunds'))
+            CREATE INDEX IX_TrainingInvoiceRefunds_InvoiceID ON TrainingInvoiceRefunds(InvoiceID)
             """
         )
     except Exception:
@@ -3705,6 +3739,46 @@ def _exam_kind_to_eval_type(exam_kind):
     return EVAL_TRAINING_PERIODIC
 
 
+def _ta_eval_skip_cefr_training(decision_raw, eval_type, from_exam_feedback):
+    """مسار حجز التدريب فقط: No Show / Redo / Resc دون إلزام بمستوى CEFR."""
+    if from_exam_feedback:
+        return False
+    if (eval_type or '') != 'Training':
+        return False
+    return (decision_raw or '').strip() in TA_EVAL_SKIP_CEFR_DECISIONS
+
+
+def _ta_eval_autostatus_note_ar(decision_raw):
+    d = (decision_raw or '').strip()
+    if d == 'No Show':
+        return '[بيان النظام] لم يحضر المرشح للموعد (No Show).'
+    if d == 'Redo':
+        return '[بيان النظام] طلب إعادة الاختبار (Redo).'
+    if d == 'Resc':
+        return '[بيان النظام] إعادة جدولة الموعد (Resc).'
+    return ''
+
+
+def _talent_eval_build_comments(f, decision_raw, eval_type, from_exam_feedback):
+    """يدمج تعليقات اللغة + RFI + ملاحظات المستخدم + بيان تلقائي لحالات التدريب السريعة."""
+    parts = []
+    if _ta_eval_skip_cefr_training(decision_raw, eval_type, from_exam_feedback):
+        n = _ta_eval_autostatus_note_ar(decision_raw)
+        if n:
+            parts.append(n)
+    lang = (f.get('lang_comments') or '').strip()
+    if lang:
+        parts.append(lang)
+    rfi = (f.get('rf1') or '').strip()
+    if rfi:
+        parts.append('[RFI] ' + rfi)
+    base = (f.get('comments') or '').strip()
+    merged = '\n\n'.join(parts)
+    if base:
+        merged = (merged + '\n\n' + base).strip() if merged else base
+    return merged[:4000]
+
+
 def _cefr_options_for_talent_evaluate(slot, eval_type):
     """قائمة مستويات CEFR للقائمة المنسدلة حسب مسار التوظيف أو التدريب.
     يعيد (القائمة, 'training'|'recruitment') لعرض تلميح في القالب."""
@@ -3823,46 +3897,81 @@ def talent_evaluate(slot_id):
         eval_type = 'Training'
     cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot, eval_type)
     eval_sidebar = _talent_evaluate_sidebar_context(slot['CandidateID'])
+    _rfi_opts = PROGRESS_SHEET_RFI_OPTIONS
 
     if request.method == 'POST':
         f = request.form
-        cefr = (f.get('cefr_level') or '').strip()
         decision_raw = (f.get('decision') or '').strip()
         decision = _normalize_ta_training_decision(decision_raw) if eval_type == 'Training' else decision_raw
         if eval_type == 'Training' and decision_raw == TA_TRAINING_LEGACY_TRAINING_DECISION:
             decision = 'Accepted'
-        if not cefr or not decision:
-            flash('CEFR Level and Decision are required', 'warning')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
-        
+        skip_cefr = _ta_eval_skip_cefr_training(decision_raw, eval_type, False)
+        cefr = (f.get('cefr_level') or '').strip()
+        if not decision:
+            flash('يجب اختيار قرار (Status / Recommendation).', 'warning')
+            return render_template(
+                'talent/evaluate.html',
+                slot=slot,
+                eval_type=eval_type,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                exam_kind=None,
+                exam_label_ar=None,
+                eval_subtype=None,
+                from_exam_feedback=False,
+                eval_sidebar=eval_sidebar,
+                rfi_options=_rfi_opts,
+            )
+        if not skip_cefr and not cefr:
+            flash('مستوى CEFR مطلوب لهذا القرار — أو اختر No Show / Redo / Resc لحفظ سريع دون مستوى.', 'warning')
+            return render_template(
+                'talent/evaluate.html',
+                slot=slot,
+                eval_type=eval_type,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                exam_kind=None,
+                exam_label_ar=None,
+                eval_subtype=None,
+                from_exam_feedback=False,
+                eval_sidebar=eval_sidebar,
+                rfi_options=_rfi_opts,
+            )
+
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
         score_p = _safe_int(f.get('score_p'))
         score_s = _safe_int(f.get('score_g'))  # Form uses score_g (Grammar) -> DB Score_Structure
         score_v = _safe_int(f.get('score_v'))
-        comments = (f.get('comments') or '')[:4000]
+        comments = _talent_eval_build_comments(f, decision_raw, eval_type, False)
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
         insert_eval_type = EVAL_TRAINING_PLACEMENT if eval_type == 'Training' else eval_type
 
         # Guard against SQL Server truncation errors (8152) across differing DB schemas
-        cefr = (cefr or '')[:10]
+        cefr_db = (cefr[:10] if cefr else None)
         decision_to_save = (decision if eval_type == 'Training' else decision_raw)[:50]
         recommended_level = (recommended_level[:50] if recommended_level else None)
         insert_eval_type = (insert_eval_type or '')[:50]
         recording_link = (recording_link[:500] if recording_link else None)
-        
+
         try:
             query_db('''
                 INSERT INTO Evaluations (CandidateID, SlotID, Score_Comprehension, Score_Fluency, Score_Pronunciation,
                                          Score_Structure, Score_Vocabulary, CEFR_Level, Decision, RecommendedLevel, Comments, EvaluatorID, EvaluationType, RecordingLink, EvaluationDate)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, GETDATE())
             ''', (slot['CandidateID'], slot_id, score_c, score_f, score_p, score_s, score_v,
-                  cefr, decision_to_save, recommended_level, comments, session['user_id'], insert_eval_type, recording_link))
+                  cefr_db, decision_to_save, recommended_level, comments, session['user_id'], insert_eval_type, recording_link))
             fin_dec = decision if eval_type == 'Training' else decision_raw
             slot_status = 'No Show' if (eval_type == 'Training' and fin_dec == 'No Show') else 'Completed'
             query_db("UPDATE TASchedules SET Status=? WHERE SlotID=?", (slot_status, slot_id))
-            query_db("UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?", (cefr, 'Evaluated', slot['CandidateID']))
+            if cefr_db:
+                query_db(
+                    "UPDATE Candidates SET CurrentCEFR=?, Status=? WHERE CandidateID=?",
+                    (cefr_db, 'Evaluated', slot['CandidateID']),
+                )
+            else:
+                query_db("UPDATE Candidates SET Status=? WHERE CandidateID=?", ('Evaluated', slot['CandidateID']))
             if eval_type == 'Training':
                 _training_apply_post_ta_decision(
                     slot['CandidateID'],
@@ -3876,9 +3985,33 @@ def talent_evaluate(slot_id):
             return _talent_dashboard_redirect_after_slot_action(slot_row=slot, date_str=dstr)
         except Exception as e:
             flash(f'خطأ عند حفظ التقييم: {str(e)}', 'danger')
-            return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
-    
-    return render_template('talent/evaluate.html', slot=slot, eval_type=eval_type, cefr_options=cefr_options, cefr_track=cefr_track, exam_kind=None, exam_label_ar=None, eval_subtype=None, from_exam_feedback=False, eval_sidebar=eval_sidebar)
+            return render_template(
+                'talent/evaluate.html',
+                slot=slot,
+                eval_type=eval_type,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                exam_kind=None,
+                exam_label_ar=None,
+                eval_subtype=None,
+                from_exam_feedback=False,
+                eval_sidebar=eval_sidebar,
+                rfi_options=_rfi_opts,
+            )
+
+    return render_template(
+        'talent/evaluate.html',
+        slot=slot,
+        eval_type=eval_type,
+        cefr_options=cefr_options,
+        cefr_track=cefr_track,
+        exam_kind=None,
+        exam_label_ar=None,
+        eval_subtype=None,
+        from_exam_feedback=False,
+        eval_sidebar=eval_sidebar,
+        rfi_options=_rfi_opts,
+    )
 
 @app.route('/sales/book_slot', methods=['POST'])
 @login_required
@@ -4214,6 +4347,8 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
     }
     exam_label_ar = _exam_labels.get(ek, 'تقييم')
     eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
+    exam_hide_reject = bool(enroll)
+    _rfi_opts = PROGRESS_SHEET_RFI_OPTIONS
     if request.method == 'POST':
         f = request.form
         session_date = (f.get('session_date') or session_date).strip() or datetime.today().strftime('%Y-%m-%d')
@@ -4226,24 +4361,75 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
         exam_label_ar = _exam_labels.get(ek, 'تقييم')
         cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot_dict, eval_subtype)
         eval_sidebar = _talent_evaluate_sidebar_context(candidate_id, current_batch=batch)
+        exam_hide_reject = bool(enroll)
         cefr = (f.get('cefr_level') or '').strip()
         decision_raw = (f.get('decision') or '').strip()
         decision = _normalize_ta_training_decision(decision_raw)
         if decision_raw == TA_TRAINING_LEGACY_TRAINING_DECISION:
             decision = 'Accepted'
-        if not cefr or not decision:
-            flash('CEFR Level و Decision مطلوبان.', 'warning')
+        if exam_hide_reject and decision_raw == 'Rejected':
+            flash('لا يُسمح بالرفض لمتدرب مسجّل نشط في الدفعة — استخدم مسارات المتابعة مع المبيعات.', 'warning')
             return render_template(
-                'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
-                from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
-                eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+                'talent/evaluate.html',
+                slot=slot_dict,
+                eval_type=eval_display,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                from_exam_feedback=True,
+                batch_id=batch_id,
+                candidate_id=candidate_id,
+                exam_kind=ek,
+                exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype,
+                eval_sidebar=eval_sidebar,
+                exam_session_date=session_date,
+                exam_hide_reject=exam_hide_reject,
+                rfi_options=_rfi_opts,
+            )
+        if not decision:
+            flash('يجب اختيار قرار.', 'warning')
+            return render_template(
+                'talent/evaluate.html',
+                slot=slot_dict,
+                eval_type=eval_display,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                from_exam_feedback=True,
+                batch_id=batch_id,
+                candidate_id=candidate_id,
+                exam_kind=ek,
+                exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype,
+                eval_sidebar=eval_sidebar,
+                exam_session_date=session_date,
+                exam_hide_reject=exam_hide_reject,
+                rfi_options=_rfi_opts,
+            )
+        if not cefr:
+            flash('مستوى CEFR مطلوب لتقييم الامتحان.', 'warning')
+            return render_template(
+                'talent/evaluate.html',
+                slot=slot_dict,
+                eval_type=eval_display,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                from_exam_feedback=True,
+                batch_id=batch_id,
+                candidate_id=candidate_id,
+                exam_kind=ek,
+                exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype,
+                eval_sidebar=eval_sidebar,
+                exam_session_date=session_date,
+                exam_hide_reject=exam_hide_reject,
+                rfi_options=_rfi_opts,
             )
         score_c = _safe_int(f.get('score_c'))
         score_f = _safe_int(f.get('score_f'))
         score_p = _safe_int(f.get('score_p'))
         score_s = _safe_int(f.get('score_g'))
         score_v = _safe_int(f.get('score_v'))
-        comments = (f.get('comments') or '')[:4000]
+        comments = _talent_eval_build_comments(f, decision_raw, eval_display, True)
         recommended_level = (f.get('recommended_level') or '').strip() or None
         recording_link = (f.get('recording_link') or '').strip() or None
         slot_type = f"Exam Feedback ({ek})"
@@ -4258,13 +4444,16 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
             db = get_db()
             cur = db.cursor()
             syn_status = 'No Show' if decision == 'No Show' else 'Completed'
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO TASchedules (SlotDate, SlotTime, Status, EvaluatorID, CandidateID, Type, InterviewType, AssessmentContext)
+                OUTPUT INSERTED.SlotID
                 VALUES (CAST(? AS DATE), CONVERT(VARCHAR(5), GETDATE(), 108), ?, ?, ?, ?, N'Training', N'Training')
-            """, (session_date, syn_status, session['user_id'], candidate_id, slot_type))
-            cur.execute("SELECT SCOPE_IDENTITY()")
+                """,
+                (session_date, syn_status, session['user_id'], candidate_id, slot_type),
+            )
             row = cur.fetchone()
-            slot_id = int(row[0]) if row and row[0] else None
+            slot_id = int(row[0]) if row and row[0] is not None else None
             db.commit()
             cur.close()
             if slot_id:
@@ -4279,19 +4468,43 @@ def talent_exam_feedback_evaluate(batch_id, candidate_id, exam_kind='periodic'):
                 )
                 flash('تم حفظ ' + exam_label_ar + ' بنجاح.', 'success')
             else:
-                flash('خطأ في الحصول على SlotID.', 'danger')
+                flash('خطأ في الحصول على SlotID بعد الإدراج.', 'danger')
             return redirect(url_for('talent_exam_feedback', batch_id=batch_id, session_date=session_date))
         except Exception as e:
             flash(f'خطأ: {str(e)[:80]}', 'danger')
             return render_template(
-                'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
-                from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
-                eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+                'talent/evaluate.html',
+                slot=slot_dict,
+                eval_type=eval_display,
+                cefr_options=cefr_options,
+                cefr_track=cefr_track,
+                from_exam_feedback=True,
+                batch_id=batch_id,
+                candidate_id=candidate_id,
+                exam_kind=ek,
+                exam_label_ar=exam_label_ar,
+                eval_subtype=eval_subtype,
+                eval_sidebar=eval_sidebar,
+                exam_session_date=session_date,
+                exam_hide_reject=exam_hide_reject,
+                rfi_options=_rfi_opts,
             )
     return render_template(
-        'talent/evaluate.html', slot=slot_dict, eval_type=eval_display, cefr_options=cefr_options, cefr_track=cefr_track,
-        from_exam_feedback=True, batch_id=batch_id, candidate_id=candidate_id, exam_kind=ek, exam_label_ar=exam_label_ar,
-        eval_subtype=eval_subtype, eval_sidebar=eval_sidebar, exam_session_date=session_date,
+        'talent/evaluate.html',
+        slot=slot_dict,
+        eval_type=eval_display,
+        cefr_options=cefr_options,
+        cefr_track=cefr_track,
+        from_exam_feedback=True,
+        batch_id=batch_id,
+        candidate_id=candidate_id,
+        exam_kind=ek,
+        exam_label_ar=exam_label_ar,
+        eval_subtype=eval_subtype,
+        eval_sidebar=eval_sidebar,
+        exam_session_date=session_date,
+        exam_hide_reject=exam_hide_reject,
+        rfi_options=_rfi_opts,
     )
 
 @app.route('/talent/training_completed_tests')
@@ -5720,6 +5933,182 @@ def api_cashflow_config():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "message": str(e)}), 400
+
+
+@app.route('/finance/training-invoice-refund')
+@login_required
+@role_required(['Manager', 'Finance'])
+def finance_training_invoice_refund():
+    """قائمة فواتير التدريب (دورات / امتحان) وتسجيل مرتجع كسند صرف (نفس آلية التدفق النقدي)."""
+    _ensure_training_invoice_refunds_table()
+    q = (request.args.get('q') or '').strip()
+    like_t = '%' + TRAINING_FEE_DESCRIPTION + '%'
+    like_e = '%' + EXAM_FEE_DESCRIPTION + '%'
+    params = [like_t, like_e]
+    wh_extra = ''
+    if q:
+        wh_extra = ' AND (C.FullName LIKE ? OR CAST(I.InvoiceID AS NVARCHAR(20)) LIKE ?)'
+        params.extend([f'%{q}%', f'%{q}%'])
+    sql = f"""
+        SELECT I.InvoiceID, I.InvoiceDate, I.TotalAmount, I.Status, C.FullName,
+            (SELECT TOP 1 II.Description FROM InvoiceItems II WHERE II.InvoiceID = I.InvoiceID ORDER BY II.ItemID) AS FirstLineDesc,
+            ISNULL((SELECT SUM(R.Amount) FROM TrainingInvoiceRefunds R WHERE R.InvoiceID = I.InvoiceID), 0) AS RefundedAmount,
+            (ISNULL(I.TotalAmount, 0) - ISNULL((SELECT SUM(R.Amount) FROM TrainingInvoiceRefunds R2 WHERE R2.InvoiceID = I.InvoiceID), 0)) AS RefundableAmount
+        FROM InvoiceHeaders I
+        LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+        WHERE EXISTS (
+            SELECT 1 FROM InvoiceItems II
+            WHERE II.InvoiceID = I.InvoiceID
+            AND (II.Description LIKE ? OR II.Description LIKE ?)
+        )
+        {wh_extra}
+        ORDER BY I.InvoiceDate DESC
+    """
+    try:
+        invoices = query_db(sql, tuple(params)) or []
+    except Exception:
+        invoices = []
+    try:
+        recent_refunds = query_db(
+            """
+            SELECT TOP 40 R.RefundID, R.InvoiceID, R.Amount, R.BondNumber, R.RefundDate, R.Notes,
+                R.VoucherCardGuide, C.FullName
+            FROM TrainingInvoiceRefunds R
+            LEFT JOIN InvoiceHeaders I ON I.InvoiceID = R.InvoiceID
+            LEFT JOIN Candidates C ON I.CandidateID = C.CandidateID
+            ORDER BY R.RefundDate DESC
+            """
+        ) or []
+    except Exception:
+        recent_refunds = []
+    return render_template(
+        'finance/training_invoice_refund.html',
+        invoices=invoices,
+        recent_refunds=recent_refunds,
+        q=q,
+        training_fee_tag=TRAINING_FEE_DESCRIPTION,
+        exam_fee_tag=EXAM_FEE_DESCRIPTION,
+    )
+
+
+@app.route('/api/training-invoice-refund', methods=['POST'])
+@login_required
+@role_required(['Manager', 'Finance'])
+def api_training_invoice_refund():
+    """تسجيل مرتجع: سند صرف (DISB) عبر voucher_manager + ربط بفاتورة InvoiceHeaders."""
+    from services.voucher_manager import save_voucher_transaction
+
+    _ensure_training_invoice_refunds_table()
+    data = request.get_json(silent=True) or {}
+    try:
+        invoice_id = int(data.get('invoice_id') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'رقم فاتورة غير صالح'}), 400
+    if invoice_id <= 0:
+        return jsonify({'success': False, 'message': 'اختر فاتورة'}), 400
+
+    inv = query_db('SELECT * FROM InvoiceHeaders WHERE InvoiceID = ?', (invoice_id,), one=True)
+    items = query_db('SELECT ItemID, Description FROM InvoiceItems WHERE InvoiceID = ?', (invoice_id,)) or []
+    if not inv or not items:
+        return jsonify({'success': False, 'message': 'الفاتورة غير موجودة'}), 404
+
+    def _desc(it):
+        return (it.get('Description') if isinstance(it, dict) else '') or ''
+
+    ok_training = any(TRAINING_FEE_DESCRIPTION in _desc(it) for it in items)
+    ok_exam = any(EXAM_FEE_DESCRIPTION in _desc(it) for it in items)
+    if not ok_training and not ok_exam:
+        return jsonify({'success': False, 'message': 'الفاتورة ليست من نوع تدريب (دورات أو رسوم امتحان)'}), 400
+
+    ref_row = query_db(
+        'SELECT SUM(Amount) AS S FROM TrainingInvoiceRefunds WHERE InvoiceID = ?',
+        (invoice_id,),
+        one=True,
+    )
+    refunded = float(ref_row['S'] or 0) if ref_row else 0.0
+    total = float(inv.get('TotalAmount') or 0)
+    refundable = round(max(0.0, total - refunded), 2)
+
+    try:
+        amount = float(data.get('amount') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'مبلغ غير صالح'}), 400
+    if amount <= 0:
+        return jsonify({'success': False, 'message': 'أدخل مبلغاً أكبر من صفر'}), 400
+    if amount > refundable + 0.009:
+        return jsonify(
+            {'success': False, 'message': f'المبلغ يتجاوز المتاح للاسترداد ({refundable:.2f} ج.م)'}
+        ), 400
+
+    v_type = (data.get('type') or 'DISB').upper()
+    if v_type != 'DISB':
+        return jsonify({'success': False, 'message': 'يُسجّل المرتجع كسند صرف فقط'}), 400
+
+    main_acct = (data.get('mainAccount') or '').strip()
+    line_acct = (data.get('lineAccount') or '').strip()
+    if not line_acct:
+        items_pl = data.get('items') or []
+        if items_pl and isinstance(items_pl[0], dict):
+            line_acct = (items_pl[0].get('account') or items_pl[0].get('acct') or '').strip()
+    if not main_acct or not line_acct:
+        return jsonify({'success': False, 'message': 'الحساب الرئيسي وحساب التفصيل مطلوبان'}), 400
+
+    notes = (data.get('notes') or '').strip()[:255] or f'مرتجع تدريب — فاتورة {invoice_id}'
+    ref = (data.get('ref') or '').strip()[:255]
+    bond_note = f'{notes} | InvoiceID={invoice_id}'
+
+    payload = {
+        'type': 'DISB',
+        'date': (data.get('date') or '')[:32],
+        'ref': ref or f'INV-{invoice_id}',
+        'notes': bond_note,
+        'agent': (data.get('agent') or '').strip(),
+        'mainAccount': main_acct,
+        'currency': (data.get('currency') or '').strip(),
+        'items': [{'account': line_acct, 'db': amount, 'cr': 0, 'desc': bond_note}],
+    }
+
+    result = save_voucher_transaction(payload)
+    if not result.get('success'):
+        return jsonify(result), 400
+
+    try:
+        query_db(
+            """
+            INSERT INTO TrainingInvoiceRefunds (InvoiceID, Amount, VoucherCardGuide, BondNumber, Notes, CreatedBy)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                invoice_id,
+                amount,
+                str(result.get('CardGuide') or '')[:64] or None,
+                result.get('BondNumber'),
+                notes[:500],
+                session.get('user_id'),
+            ),
+        )
+    except Exception as ex:
+        return jsonify(
+            {
+                'success': True,
+                'message': (result.get('message') or 'تم حفظ السند')
+                + ' — تحذير: لم يُحفظ ربط المرتجع في الجدول: '
+                + str(ex)[:180],
+                'BondNumber': result.get('BondNumber'),
+                'CardGuide': result.get('CardGuide'),
+                'warning': True,
+            }
+        )
+
+    return jsonify(
+        {
+            'success': True,
+            'message': result.get('message') or 'تم تسجيل المرتجع وسند الصرف',
+            'BondNumber': result.get('BondNumber'),
+            'CardGuide': result.get('CardGuide'),
+        }
+    )
+
 
 # APIs التقارير
 REPORTS_META = [
@@ -7836,6 +8225,51 @@ PROGRESS_SHEET_ASPECTS = (
     'Vocabulary',
 )
 
+# قائمة RFI المعتمدة لشيت التقدم (قيمة الحقل = النص كما هو؛ تُحفظ في EnrollmentWeekProgressLines.RFI)
+PROGRESS_SHEET_RFI_OPTIONS = (
+    'Added pronouns',
+    'Dropping verb to be',
+    'Adding verb to be',
+    'Complex sentence structure',
+    'Be vs Do vs Have',
+    'Tense from',
+    'Tense usage',
+    'Tense shift',
+    'Conjugation',
+    'Dropping Conjunctions',
+    'Singular vs Plural',
+    'SVA',
+    'pronouns',
+    'Comparative/Superlatives',
+    'Quantifiers',
+    'Word order',
+    'Parts of speech',
+    'Dropping articles',
+    'Adding articles',
+    'Misusing articles',
+    'Dropping prepositions',
+    'Adding prepositions',
+    'Misusing prepositions',
+    'Literal translation',
+    'Word choice',
+    'Parts of speech',
+    'Phrasal verbs',
+    'Dropping sentence parts (SVO)',
+    'If conditional',
+    'Question Formation',
+    'Collocations & Expresssions',
+    'Determiners',
+    'Singular vs Plural',
+    'Be vs Do vs Have',
+    'participle adjectives (ed vs ing adjective)',
+    'Misusing Conjunctions',
+    'Dropping relative pronouns',
+    'Misusing relative pronouns',
+    'Active vs Passive',
+    'Gerund vs infinitive',
+    'Negative form',
+)
+
 
 def _ensure_enrollment_week_progress_lines_table():
     try:
@@ -8027,6 +8461,7 @@ def enrollment_progress_sheet(enrollment_id):
         week=week,
         lines_by_aspect=lines_by_aspect,
         aspects=PROGRESS_SHEET_ASPECTS,
+        rfi_options=PROGRESS_SHEET_RFI_OPTIONS,
     )
 
 
@@ -8069,7 +8504,14 @@ def enrollment_progress_sheet_print(enrollment_id):
         asp = (row.get('LanguageAspect') or '').strip()
         if asp in lines_by_aspect:
             lines_by_aspect[asp].append(row)
-    return render_template('training/enrollment_progress_sheet_print.html', student=stu, week=week, aspects=PROGRESS_SHEET_ASPECTS, lines_by_aspect=lines_by_aspect)
+    return render_template(
+        'training/enrollment_progress_sheet_print.html',
+        student=stu,
+        week=week,
+        aspects=PROGRESS_SHEET_ASPECTS,
+        lines_by_aspect=lines_by_aspect,
+        rfi_options=PROGRESS_SHEET_RFI_OPTIONS,
+    )
 
 
 @app.route('/training/enrollment/<int:enrollment_id>/ssr-initial-fb/print')
