@@ -13,7 +13,9 @@
             <tbody>
                 {% for r in rows %}
                 <tr>
-                    <td>{{ r.FullName }}</td>
+                    <td>
+                        <a href="{{ url_for('candidate_profile', candidate_id=r.CandidateID) }}" class="fw-semibold text-decoration-none" title="ملف المتدرب">{{ r.FullName }}</a>
+                    </td>
                     <td>{{ r.Phone }}</td>
                     <td>{{ r.Email or '—' }}</td>
                     <td>
@@ -24,9 +26,11 @@
                             <div class="col-md-3"><input type="text" name="closer_name" class="form-control form-control-sm" placeholder="Closer (override)"></div>
                             <div class="col-md-6"><input type="text" name="language_feedback" class="form-control form-control-sm" placeholder="Language Feedback"></div>
                             <div class="col-md-4">
-                                <select name="closing_status" class="form-select form-select-sm">
+                                <select name="closing_status" class="form-select form-select-sm" aria-label="Closing status">
                                     <option value="">Closing Status…</option>
-                                    {% for s in closing_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                                    {% for s in (closing_statuses if closing_statuses is defined else (training_closing_status_values if training_closing_status_values is defined else [])) %}
+                                    <option value="{{ s }}">{{ s }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div class="col-md-3"><input type="date" name="status_date" class="form-control form-control-sm"></div>

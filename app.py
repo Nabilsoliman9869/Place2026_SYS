@@ -3759,6 +3759,39 @@ def _ta_eval_autostatus_note_ar(decision_raw):
     return ''
 
 
+def _slot_row_is_training_placement(slot_row):
+    """يُحدّد إن كان موعد TA لمسار التدريب (وليس توظيفاً) — يعتمد AssessmentContext ثم المرشح."""
+    if not slot_row:
+        return False
+    ac = (slot_row.get('AssessmentContext') or '').strip().lower()
+    if ac == 'training':
+        return True
+    if ac == 'recruitment':
+        return False
+    pi = (slot_row.get('PrimaryIntent') or '').strip()
+    if pi == 'Training':
+        return True
+    st = (slot_row.get('Status') or '').strip()
+    if st == 'Training_Lead':
+        return True
+    return False
+
+
+def _talent_eval_resolve_eval_type_for_slot(slot):
+    """نوع واجهة التقييم: يجب أن يتبع سياق الموعد وليس دور المستخدم وحده (وإلا يبقى General ولا تُطبّق قواعد التدريب)."""
+    role = (session.get('role') or '').strip()
+    tr = _slot_row_is_training_placement(slot)
+    if role == 'Talent_Recruitment' and not tr:
+        return 'Recruitment'
+    if role in ('Talent_Training', 'TA-Training'):
+        return 'Training'
+    if tr:
+        return 'Training'
+    if role == 'Talent_Recruitment':
+        return 'Recruitment'
+    return 'General'
+
+
 def _talent_eval_build_comments(f, decision_raw, eval_type, from_exam_feedback):
     """يدمج تعليقات اللغة + RFI + ملاحظات المستخدم + بيان تلقائي لحالات التدريب السريعة."""
     parts = []
@@ -3889,12 +3922,8 @@ def talent_evaluate(slot_id):
     if not slot:
         flash('Slot not found', 'danger')
         return redirect(url_for('talent_dashboard'))
-    
-    eval_type = 'General'
-    if session.get('role') == 'Talent_Recruitment':
-        eval_type = 'Recruitment'
-    elif session.get('role') in ('Talent_Training', 'TA-Training'):
-        eval_type = 'Training'
+
+    eval_type = _talent_eval_resolve_eval_type_for_slot(slot)
     cefr_options, cefr_track = _cefr_options_for_talent_evaluate(slot, eval_type)
     eval_sidebar = _talent_evaluate_sidebar_context(slot['CandidateID'])
     _rfi_opts = PROGRESS_SHEET_RFI_OPTIONS
@@ -8269,6 +8298,15 @@ PROGRESS_SHEET_RFI_OPTIONS = (
     'Gerund vs infinitive',
     'Negative form',
 )
+
+
+@app.context_processor
+def _inject_progress_sheet_rfi_options():
+    """قائمة RFI الـ41 + حالات إغلاق التدريب متاحة في القوالب حتى لا تعتمد صفحة واحدة على تمرير خاص من المسار."""
+    return {
+        'progress_sheet_rfi_options': PROGRESS_SHEET_RFI_OPTIONS,
+        'training_closing_status_values': TRAINING_CLOSING_STATUS_VALUES,
+    }
 
 
 def _ensure_enrollment_week_progress_lines_table():

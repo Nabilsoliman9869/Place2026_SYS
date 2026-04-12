@@ -1,5 +1,33 @@
 {% extends 'base.html' %}
-{% from 'training/_progress_sheet_rfi_row.html' import progress_sheet_rfi_row %}
+{# Effective RFI list: route kwarg OR context_processor (avoids half-deployed views missing rfi_options). #}
+{% set _rfi_opts = (rfi_options if rfi_options is defined and rfi_options else (progress_sheet_rfi_options if progress_sheet_rfi_options is defined else [])) %}
+{% macro progress_sheet_rfi_row(aspect, rfi_value, severity_value, action_value, comment_value, rfi_opts) -%}
+{% set cur = (rfi_value or '')|trim %}
+{% set opts = (rfi_opts if (rfi_opts is defined and rfi_opts is iterable and rfi_opts is not string and (rfi_opts|length > 0)) else (progress_sheet_rfi_options if progress_sheet_rfi_options is defined else [])) %}
+<tr class="data-row"><!-- progress-sheet RFI must stay <select>; rev 2026-04-12 -->
+    <td>
+        <select class="form-select form-select-sm" name="{{ aspect }}_rfi" autocomplete="off" data-field="progress-sheet-rfi">
+            <option value="">—</option>
+            {% if cur and cur not in opts %}
+            <option value="{{ cur }}" selected>{{ cur }} (saved)</option>
+            {% endif %}
+            {% for opt in opts %}
+            <option value="{{ opt }}" {{ 'selected' if cur == opt }}>{{ opt }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <select class="form-select form-select-sm" name="{{ aspect }}_severity">
+            <option value="">—</option>
+            <option value="Red" {{ 'selected' if severity_value == 'Red' }}>Red</option>
+            <option value="Yellow" {{ 'selected' if severity_value == 'Yellow' }}>Yellow</option>
+            <option value="Green" {{ 'selected' if severity_value == 'Green' }}>Green</option>
+        </select>
+    </td>
+    <td><textarea class="form-control form-control-sm" name="{{ aspect }}_action" rows="1">{{ action_value or '' }}</textarea></td>
+    <td><textarea class="form-control form-control-sm" name="{{ aspect }}_comment" rows="1">{{ comment_value or '' }}</textarea></td>
+</tr>
+{%- endmacro %}
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb" class="mb-3">
@@ -48,16 +76,16 @@
                     </thead>
                     <tbody id="tbody-{{ aspect }}">
                         {% if rows|length == 0 %}
-                        {{ progress_sheet_rfi_row(aspect, '', '', '', '', rfi_options) }}
+                        {{ progress_sheet_rfi_row(aspect, '', '', '', '', _rfi_opts) }}
                         {% else %}
                         {% for line in rows %}
-                        {{ progress_sheet_rfi_row(aspect, line.RFI, line.Severity, line.ActionPlan, line.ProgressComment, rfi_options) }}
+                        {{ progress_sheet_rfi_row(aspect, line.RFI, line.Severity, line.ActionPlan, line.ProgressComment, _rfi_opts) }}
                         {% endfor %}
                         {% endif %}
                     </tbody>
                 </table>
                 <template id="rfi-row-blank-{{ aspect }}">
-                    {{ progress_sheet_rfi_row(aspect, '', '', '', '', rfi_options) }}
+                    {{ progress_sheet_rfi_row(aspect, '', '', '', '', _rfi_opts) }}
                 </template>
             </div>
         </div>
