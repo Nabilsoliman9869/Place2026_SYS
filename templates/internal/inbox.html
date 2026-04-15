@@ -11,6 +11,9 @@
     </div>
 </div>
 
+{% set show_compose = (request.args.get('compose') == '1') %}
+
+{% if show_compose %}
 <div class="card shadow-sm mb-4" id="composeMessageCard">
     <div class="card-header bg-light"><strong>Compose Message</strong></div>
     <div class="card-body">
@@ -90,9 +93,17 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 <div class="card shadow-sm">
-    <div class="card-header bg-white"><strong>Incoming Messages</strong></div>
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong>Incoming Messages (Inbox)</strong>
+        {% if not show_compose %}
+        <a href="{{ url_for('internal_messages_inbox', compose='1') }}" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-paper-plane"></i> Compose
+        </a>
+        {% endif %}
+    </div>
     <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead class="table-light">
@@ -164,28 +175,34 @@ function updateRecipientPreview() {
     document.getElementById('ccPickerBtn').textContent = ccChecked.length ? `CC (${ccChecked.length}) selected` : 'Select copy recipients (CC)';
 }
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('moduleTypeSelect').addEventListener('change', refreshRefOptions);
-    document.querySelectorAll('.to-user-checkbox, .cc-user-checkbox').forEach(el => {
-        el.addEventListener('change', updateRecipientPreview);
-    });
-    refreshRefOptions();
-    updateRecipientPreview();
-    if (prefill.compose) {
-        if (prefill.moduleType) {
-            document.getElementById('moduleTypeSelect').value = prefill.moduleType;
-            refreshRefOptions();
+    const moduleTypeEl = document.getElementById('moduleTypeSelect');
+    if (moduleTypeEl) {
+        moduleTypeEl.addEventListener('change', refreshRefOptions);
+        document.querySelectorAll('.to-user-checkbox, .cc-user-checkbox').forEach(el => {
+            el.addEventListener('change', updateRecipientPreview);
+        });
+        refreshRefOptions();
+        updateRecipientPreview();
+        if (prefill.compose) {
+            if (prefill.moduleType) {
+                moduleTypeEl.value = prefill.moduleType;
+                refreshRefOptions();
+            }
+            if (prefill.moduleRefId) {
+                const moduleRefEl = document.getElementById('moduleRefSelect');
+                if (moduleRefEl) moduleRefEl.value = prefill.moduleRefId;
+            }
+            if (prefill.subject) {
+                const subjectEl = document.getElementById('subjectInput');
+                if (subjectEl) subjectEl.value = prefill.subject;
+            }
+            if (prefill.body) {
+                const bodyEl = document.getElementById('bodyInput');
+                if (bodyEl) bodyEl.value = prefill.body;
+            }
+            const card = document.getElementById('composeMessageCard');
+            if (card && card.scrollIntoView) card.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
-        if (prefill.moduleRefId) {
-            document.getElementById('moduleRefSelect').value = prefill.moduleRefId;
-        }
-        if (prefill.subject) {
-            document.getElementById('subjectInput').value = prefill.subject;
-        }
-        if (prefill.body) {
-            document.getElementById('bodyInput').value = prefill.body;
-        }
-        const card = document.getElementById('composeMessageCard');
-        if (card && card.scrollIntoView) card.scrollIntoView({behavior: 'smooth', block: 'start'});
     }
     try {
         const currentUnread = {{ unread_count|int }};
