@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="fas fa-inbox text-primary"></i> Internal Inbox</h2>
+    <span class="badge bg-danger">Unread: {{ unread_count }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light"><strong>Compose Message</strong></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('internal_messages_compose') }}" class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">To</label>
+                <select name="to_user_ids" class="form-select" multiple required>
+                    {% for u in users %}
+                    <option value="{{ u.UserID }}">{{ u.FullName or u.Username }} ({{ u.Role }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">CC</label>
+                <select name="cc_user_ids" class="form-select" multiple>
+                    {% for u in users %}
+                    <option value="{{ u.UserID }}">{{ u.FullName or u.Username }} ({{ u.Role }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">About</label>
+                <select name="module_type" class="form-select" id="moduleTypeSelect">
+                    {% for t in module_types %}
+                    <option value="{{ t }}">{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Reference</label>
+                <select name="module_ref_id" class="form-select" id="moduleRefSelect">
+                    <option value="">-- Optional --</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Priority</label>
+                <select name="priority" class="form-select">
+                    {% for p in priority_values %}
+                    <option value="{{ p }}" {% if p == 'normal' %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-12">
+                <label class="form-label">Subject</label>
+                <input type="text" name="subject" class="form-control" required>
+            </div>
+            <div class="col-md-12">
+                <label class="form-label">Message</label>
+                <textarea name="body" class="form-control" rows="4"></textarea>
+            </div>
+            <div class="col-md-12 text-end">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white"><strong>Incoming Messages</strong></div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Subject</th>
+                    <th>From</th>
+                    <th>About</th>
+                    <th>Priority</th>
+                    <th>Date</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in messages %}
+                <tr class="{{ 'table-warning' if not m.IsRead else '' }}">
+                    <td>{{ m.Subject }}</td>
+                    <td>{{ m.SenderName or ('User #' ~ m.SenderUserID) }}</td>
+                    <td>{{ m.ModuleType }} {% if m.ModuleRefID %}#{{ m.ModuleRefID }}{% endif %}</td>
+                    <td><span class="badge bg-{{ 'danger' if m.Priority in ['urgent','high'] else 'secondary' }}">{{ m.Priority }}</span></td>
+                    <td>{{ m.CreatedAt }}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('internal_messages_thread', message_id=m.MessageID) }}">Open</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No messages yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const refs = {
+    Batch: [{% for b in batches %}{id: '{{ b.BatchID }}', label: '{{ (b.BatchName or "")|replace("'", "\\'") }}'},{% endfor %}],
+    Trainer: [{% for t in trainers %}{id: '{{ t.TrainerID }}', label: '{{ (t.FullName or "")|replace("'", "\\'") }}'},{% endfor %}],
+    Trainee: [{% for tr in trainees %}{id: '{{ tr.CandidateID }}', label: '{{ (tr.FullName or "")|replace("'", "\\'") }}'},{% endfor %}],
+    Attendance: [{id: '', label: 'General attendance issue'}],
+    Finance: [{id: '', label: 'General finance issue'}],
+    General: []
+};
+function refreshRefOptions() {
+    const type = document.getElementById('moduleTypeSelect').value;
+    const sel = document.getElementById('moduleRefSelect');
+    sel.innerHTML = '<option value="">-- Optional --</option>';
+    (refs[type] || []).forEach(i => {
+        const op = document.createElement('option');
+        op.value = i.id;
+        op.textContent = i.label;
+        sel.appendChild(op);
+    });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('moduleTypeSelect').addEventListener('change', refreshRefOptions);
+    refreshRefOptions();
+    try {
+        const currentUnread = {{ unread_count|int }};
+        const lastUnread = parseInt(localStorage.getItem('internal_last_unread') || '0', 10);
+        if (currentUnread > lastUnread) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.frequency.value = 880;
+            g.gain.setValueAtTime(0.15, ctx.currentTime);
+            o.start();
+            o.stop(ctx.currentTime + 0.15);
+        }
+        localStorage.setItem('internal_last_unread', String(currentUnread));
+    } catch (e) {}
+});
+</script>
+{% endblock %}

@@ -91,6 +91,23 @@ def _tpl_dmy(d):
 ASSIGNMENT_STATUS_VALUES = ('Done', 'not submitted', 'cancelled', 'postponed')
 ASSIGNMENT_STATUS_SET = frozenset(ASSIGNMENT_STATUS_VALUES)
 
+ATTENDANCE_STATUS_VALUES = (
+    'OFF', 'Absent', 'Dismissed', 'Resigned', 'Transferred', 'Present', 'Late', 'Excused'
+)
+ATTENDANCE_ACTIVE_TIME_STATUSES = frozenset({'Present', 'Late', 'Excused'})
+
+EXAM_TRACK_STATUS_VALUES = ('ON_TIME', 'LATE', 'MISSED')
+EXAM_TYPE_PERIODIC_1 = '1'
+EXAM_TYPE_PERIODIC_2 = '2'
+EXAM_TYPE_PERIODIC_3 = '3'
+EXAM_TYPE_FINAL = '99'
+EXAM_TYPE_MAKEUP = '100'
+
+INTERNAL_MESSAGE_MODULE_TYPES = (
+    'General', 'Batch', 'Trainer', 'Trainee', 'Attendance', 'Finance'
+)
+INTERNAL_MESSAGE_PRIORITY_VALUES = ('low', 'normal', 'high', 'urgent')
+
 
 def _normalize_assignment_status(raw):
     s = (raw or '').strip()
@@ -114,6 +131,19 @@ def _coerce_assignment_status_row(row):
 
 def _assignment_done_bit_from_status(status_str):
     return 1 if status_str == 'Done' else 0
+
+
+def _attendance_status_uses_time(status_str):
+    return (status_str or '').strip() in ATTENDANCE_ACTIVE_TIME_STATUSES
+
+
+def _to_yyyy_mm_dd(raw):
+    if raw is None:
+        return None
+    if hasattr(raw, 'strftime'):
+        return raw.strftime('%Y-%m-%d')
+    s = str(raw).strip()
+    return s[:10] if s else None
 
 
 # --- مسار التدريب الكامل: Lead / Train to Hire / قوائم المبيعات والمختبر ---
@@ -1057,6 +1087,11 @@ def _before_request_perf_and_user():
                 g.user = None
     try:
         _ensure_training_workflow_schema()
+    except Exception:
+        pass
+    try:
+        _ensure_course_batches_exam_columns()
+        _ensure_internal_messages_schema()
     except Exception:
         pass
 
@@ -8158,6 +8193,7 @@ def add_batch():
 def update_batch_schedule(batch_id):
     """تحديث كل بيانات الدفعة: الاسم، الدورة، المدرب، القاعة، التواريخ، الأوقات، الأيام."""
     _ensure_course_batches_capacity_column()
+    _ensure_course_batches_exam_columns()
     f = request.form
     b = query_db("SELECT BatchID FROM CourseBatches WHERE BatchID=?", (batch_id,), one=True)
     if not b:
@@ -8174,6 +8210,11 @@ def update_batch_schedule(batch_id):
     start_time = (f.get('start_time') or '').strip() or None
     end_time = (f.get('end_time') or '').strip() or None
     week_days = (f.get('week_days') or '').strip() or None
+    periodic_exam_1_date = f.get('periodic_exam_1_date') or None
+    periodic_exam_2_date = f.get('periodic_exam_2_date') or None
+    periodic_exam_3_date = f.get('periodic_exam_3_date') or None
+    final_exam_date = f.get('final_exam_date') or None
+    makeup_exam_date = f.get('makeup_exam_date') or None
     max_cap_raw = (f.get('max_capacity') or '').strip()
     max_cap = None
     if max_cap_raw:
@@ -8192,9 +8233,13 @@ def update_batch_schedule(batch_id):
     try:
         query_db("""
             UPDATE CourseBatches SET BatchName=?, CourseID=?, TrainerID=?, RoomID=?,
-                   StartDate=?, EndDate=?, StartTime=?, EndTime=?, WeekDays=?, MaxCapacity=?
+                   StartDate=?, EndDate=?, StartTime=?, EndTime=?, WeekDays=?, MaxCapacity=?,
+                   PeriodicExam1Date=?, PeriodicExam2Date=?, PeriodicExam3Date=?, FinalExamDate=?, MakeupExamDate=?
             WHERE BatchID=?
-        """, (batch_name, course_id, trainer_id, room_id, start_date, end_date, start_time, end_time, week_days, max_cap, batch_id))
+        """, (
+            batch_name, course_id, trainer_id, room_id, start_date, end_date, start_time, end_time, week_days, max_cap,
+            periodic_exam_1_date, periodic_exam_2_date, periodic_exam_3_date, final_exam_date, makeup_exam_date, batch_id
+        ))
         flash('تم تحديث بيانات الدفعة بنجاح.', 'success')
     except Exception as e:
         try:
@@ -8303,9 +8348,27 @@ PROGRESS_SHEET_RFI_OPTIONS = (
 @app.context_processor
 def _inject_progress_sheet_rfi_options():
     """قائمة RFI الـ41 + حالات إغلاق التدريب متاحة في القوالب حتى لا تعتمد صفحة واحدة على تمرير خاص من المسار."""
+    unread_internal_messages_count = 0
+    uid = session.get('user_id')
+    if uid:
+        try:
+            row = query_db(
+                """
+                SELECT COUNT(*) AS C
+                FROM InternalMessageRecipients R
+                JOIN InternalMessages M ON M.MessageID = R.MessageID
+                WHERE R.RecipientUserID=? AND R.IsArchived=0 AND ISNULL(R.IsRead, 0)=0
+                """,
+                (uid,),
+                one=True,
+            )
+            unread_internal_messages_count = int((row or {}).get('C') or 0)
+        except Exception:
+            unread_internal_messages_count = 0
     return {
         'progress_sheet_rfi_options': PROGRESS_SHEET_RFI_OPTIONS,
         'training_closing_status_values': TRAINING_CLOSING_STATUS_VALUES,
+        'unread_internal_messages_count': unread_internal_messages_count,
     }
 
 
@@ -8712,6 +8775,7 @@ def enrollment_ssr_initial_fb(enrollment_id):
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
 def wave_details(wave_id):
+    _ensure_course_batches_exam_columns()
     wave = query_db("""
         SELECT B.*, C.CourseName,
                T.FullName AS TrainerName, R.RoomName
@@ -8738,6 +8802,58 @@ def wave_details(wave_id):
         WHERE E.BatchID = ?
     """, (wave_id,))
 
+    students = students or []
+    exam_status_by_enrollment = {}
+    if students:
+        try:
+            ids_csv = ",".join(str(int(s['EnrollmentID'])) for s in students if s.get('EnrollmentID'))
+            if ids_csv:
+                exam_rows = query_db(
+                    f"""
+                    SELECT EnrollmentID, WeekNumber, ExamDate
+                    FROM WeeklyExams
+                    WHERE EnrollmentID IN ({ids_csv}) AND WeekNumber IN (1,2,3,99)
+                    """
+                ) or []
+                for er in exam_rows:
+                    eid = er.get('EnrollmentID')
+                    wk = str(er.get('WeekNumber'))
+                    if not eid or not wk:
+                        continue
+                    exam_status_by_enrollment[(eid, wk)] = er
+        except Exception:
+            exam_status_by_enrollment = {}
+
+    schedule_map = {
+        EXAM_TYPE_PERIODIC_1: _to_yyyy_mm_dd(wave.get('PeriodicExam1Date')),
+        EXAM_TYPE_PERIODIC_2: _to_yyyy_mm_dd(wave.get('PeriodicExam2Date')),
+        EXAM_TYPE_PERIODIC_3: _to_yyyy_mm_dd(wave.get('PeriodicExam3Date')),
+        EXAM_TYPE_FINAL: _to_yyyy_mm_dd(wave.get('FinalExamDate')),
+    }
+    status_badge_map = {'ON_TIME': 'success', 'LATE': 'warning', 'MISSED': 'danger'}
+    for s in students:
+        eid = s.get('EnrollmentID')
+        for wk, key in [
+            (EXAM_TYPE_PERIODIC_1, 'ExamPeriodic1'),
+            (EXAM_TYPE_PERIODIC_2, 'ExamPeriodic2'),
+            (EXAM_TYPE_PERIODIC_3, 'ExamPeriodic3'),
+            (EXAM_TYPE_FINAL, 'ExamFinal'),
+        ]:
+            scheduled = schedule_map.get(wk)
+            attempt = exam_status_by_enrollment.get((eid, wk))
+            actual_date = _to_yyyy_mm_dd((attempt or {}).get('ExamDate'))
+            if attempt:
+                if scheduled and actual_date and actual_date > scheduled:
+                    status = 'LATE'
+                else:
+                    status = 'ON_TIME'
+            else:
+                status = 'MISSED'
+            s[f'{key}ScheduledDate'] = scheduled
+            s[f'{key}ActualDate'] = actual_date
+            s[f'{key}Status'] = status
+            s[f'{key}Badge'] = status_badge_map.get(status, 'secondary')
+
     try:
         reports = query_db("""
             SELECT WP.*, C.FullName
@@ -8753,7 +8869,7 @@ def wave_details(wave_id):
     courses = query_db("SELECT * FROM Courses ORDER BY CourseName")
     trainers = query_db("SELECT * FROM Trainers ORDER BY FullName")
     rooms = query_db("SELECT * FROM Classrooms ORDER BY RoomName")
-    return render_template('training/wave_details.html', wave=wave, students=students or [], reports=reports or [], exam_dates=exam_dates, courses=courses or [], trainers=trainers or [], rooms=rooms or [])
+    return render_template('training/wave_details.html', wave=wave, students=students, reports=reports or [], exam_dates=exam_dates, courses=courses or [], trainers=trainers or [], rooms=rooms or [])
 
 @app.route('/training/add_report', methods=['POST'])
 @login_required
@@ -9147,6 +9263,60 @@ def _ensure_attendance_columns():
     except Exception:
         pass
 
+
+def _ensure_course_batches_exam_columns():
+    for stmt in [
+        "ALTER TABLE CourseBatches ADD PeriodicExam1Date DATE NULL",
+        "ALTER TABLE CourseBatches ADD PeriodicExam2Date DATE NULL",
+        "ALTER TABLE CourseBatches ADD PeriodicExam3Date DATE NULL",
+        "ALTER TABLE CourseBatches ADD FinalExamDate DATE NULL",
+        "ALTER TABLE CourseBatches ADD MakeupExamDate DATE NULL",
+    ]:
+        try:
+            query_db(stmt)
+        except Exception:
+            pass
+
+
+def _ensure_internal_messages_schema():
+    statements = [
+        """
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='InternalMessages' AND xtype='U')
+        CREATE TABLE InternalMessages (
+            MessageID INT IDENTITY(1,1) PRIMARY KEY,
+            Subject NVARCHAR(300) NOT NULL,
+            Body NVARCHAR(MAX) NULL,
+            SenderUserID INT NOT NULL,
+            ModuleType NVARCHAR(50) NOT NULL DEFAULT 'General',
+            ModuleRefID INT NULL,
+            Priority NVARCHAR(20) NOT NULL DEFAULT 'normal',
+            ParentMessageID INT NULL,
+            CreatedAt DATETIME DEFAULT GETDATE()
+        )
+        """,
+        """
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='InternalMessageRecipients' AND xtype='U')
+        CREATE TABLE InternalMessageRecipients (
+            RecipientID INT IDENTITY(1,1) PRIMARY KEY,
+            MessageID INT NOT NULL,
+            RecipientUserID INT NOT NULL,
+            RecipientKind NVARCHAR(10) NOT NULL DEFAULT 'TO',
+            IsRead BIT NOT NULL DEFAULT 0,
+            ReadAt DATETIME NULL,
+            IsArchived BIT NOT NULL DEFAULT 0,
+            CreatedAt DATETIME DEFAULT GETDATE()
+        )
+        """,
+        "CREATE INDEX IX_InternalMessages_CreatedAt ON InternalMessages(CreatedAt)",
+        "CREATE INDEX IX_InternalMessageRecipients_User_Read ON InternalMessageRecipients(RecipientUserID, IsRead)",
+        "CREATE INDEX IX_InternalMessageRecipients_Message ON InternalMessageRecipients(MessageID)",
+    ]
+    for stmt in statements:
+        try:
+            query_db(stmt)
+        except Exception:
+            pass
+
 @app.route('/training/attendance', methods=['GET'])
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingCoordinator', 'TrainingSalesCoordinator', 'TrainingLead'])
@@ -9218,6 +9388,7 @@ def training_attendance():
         students=students or [],
         selected_date=selected_date,
         session_guests=session_guests or [],
+        attendance_status_values=ATTENDANCE_STATUS_VALUES,
     )
 
 
@@ -9251,7 +9422,7 @@ def save_attendance_grid():
 
             total_hours = 0
             late_minutes = None
-            if check_in and check_out and status not in ('Absent', 'Excused'):
+            if check_in and check_out and _attendance_status_uses_time(status):
                 try:
                     fmt = '%H:%M'
                     t1 = datetime.strptime(check_in[:5], fmt)
@@ -9263,7 +9434,7 @@ def save_attendance_grid():
                 except Exception:
                     pass
             # حساب التأخير (دقائق): عند وجود وقت دخول ووقت بداية الدفعة
-            if check_in and expected_start_str and status not in ('Absent', 'Excused'):
+            if check_in and expected_start_str and _attendance_status_uses_time(status):
                 try:
                     fmt = '%H:%M'
                     t_exp = datetime.strptime(expected_start_str, fmt)
@@ -9278,7 +9449,7 @@ def save_attendance_grid():
                             late_minutes = 0
                 except Exception:
                     late_minutes = None
-            elif status == 'Absent':
+            elif not _attendance_status_uses_time(status):
                 late_minutes = None
 
             existing = query_db('SELECT AttendanceID FROM Attendance WHERE EnrollmentID=? AND Date=?', (enrollment_id, date), one=True)
@@ -9376,7 +9547,7 @@ def print_invoice(enrollment_id):
 def training_exams():
     batches = query_db("SELECT * FROM CourseBatches WHERE Status='Active'")
     selected_batch_id = request.args.get('batch_id')
-    exam_type = request.args.get('exam_type', '1') # 1,2,3,4,99
+    exam_type = request.args.get('exam_type', EXAM_TYPE_PERIODIC_1)  # 1,2,3,99,100
     selected_batch = None
     students = []
     
@@ -9404,7 +9575,7 @@ def training_exams():
                     # Calculate Balance
                     balance = get_student_balance(s['CandidateID'], selected_batch_id)
                     s['Balance'] = balance
-                    s['IsBlocked'] = (balance > 0) and (exam_type == '99') # Block only Final Exam if debt exists
+                    s['IsBlocked'] = (balance > 0) and (exam_type == EXAM_TYPE_FINAL) # Block only Final Exam if debt exists
             
             students = raw_students
 
@@ -9423,7 +9594,7 @@ def save_exams():
             
             if score_val:
                 # Security Check: Block Saving if Final Exam & Debt exists
-                if exam_type == '99':
+                if exam_type == EXAM_TYPE_FINAL:
                     # We need CandidateID to check balance. 
                     # This is inefficient in loop but safe.
                     enr = query_db('SELECT CandidateID FROM Enrollments WHERE EnrollmentID=?', (enrollment_id,), one=True)
@@ -9439,12 +9610,207 @@ def save_exams():
                              (enrollment_id, exam_type, score_val))
                 
                 # Update Final Grade
-                if exam_type == '99':
+                if exam_type == EXAM_TYPE_FINAL:
                     status = 'Passed' if float(score_val) >= 60 else 'Failed'
                     query_db('UPDATE Enrollments SET Status=?, FinalGrade=? WHERE EnrollmentID=?', (status, score_val, enrollment_id))
     
     flash('تم حفظ الدرجات بنجاح (تم استثناء الطلاب المتعثرين مالياً في النهائي)', 'success')
     return redirect(url_for('training_exams', batch_id=batch_id, exam_type=exam_type))
+
+
+@app.route('/messages/inbox', methods=['GET'])
+@login_required
+def internal_messages_inbox():
+    _ensure_internal_messages_schema()
+    uid = session.get('user_id')
+    users = query_db("SELECT UserID, FullName, Username, Role FROM Users_1 ORDER BY FullName, Username") or []
+    batches = query_db("SELECT BatchID, BatchName FROM CourseBatches ORDER BY BatchName") or []
+    trainers = query_db("SELECT TrainerID, FullName FROM Trainers ORDER BY FullName") or []
+    trainees = query_db("SELECT TOP 300 CandidateID, FullName FROM Candidates ORDER BY FullName") or []
+    messages = query_db(
+        """
+        SELECT M.MessageID, M.Subject, M.Body, M.ModuleType, M.ModuleRefID, M.Priority, M.CreatedAt,
+               M.SenderUserID, U.FullName AS SenderName,
+               R.IsRead, R.ReadAt, R.RecipientKind
+        FROM InternalMessageRecipients R
+        JOIN InternalMessages M ON M.MessageID = R.MessageID
+        LEFT JOIN Users_1 U ON U.UserID = M.SenderUserID
+        WHERE R.RecipientUserID = ? AND R.IsArchived = 0
+        ORDER BY M.CreatedAt DESC
+        """,
+        (uid,),
+    ) or []
+    unread_count = 0
+    for m in messages:
+        if int(m.get('IsRead') or 0) == 0:
+            unread_count += 1
+    return render_template(
+        'internal/inbox.html',
+        messages=messages,
+        users=users,
+        batches=batches,
+        trainers=trainers,
+        trainees=trainees,
+        module_types=INTERNAL_MESSAGE_MODULE_TYPES,
+        priority_values=INTERNAL_MESSAGE_PRIORITY_VALUES,
+        unread_count=unread_count,
+    )
+
+
+@app.route('/messages/compose', methods=['POST'])
+@login_required
+def internal_messages_compose():
+    _ensure_internal_messages_schema()
+    sender_id = session.get('user_id')
+    subject = (request.form.get('subject') or '').strip()
+    body = (request.form.get('body') or '').strip()
+    module_type = (request.form.get('module_type') or 'General').strip()
+    module_ref_raw = (request.form.get('module_ref_id') or '').strip()
+    priority = (request.form.get('priority') or 'normal').strip().lower()
+    to_ids = request.form.getlist('to_user_ids')
+    cc_ids = request.form.getlist('cc_user_ids')
+
+    if not subject:
+        flash('Subject is required.', 'warning')
+        return redirect(url_for('internal_messages_inbox'))
+    if module_type not in INTERNAL_MESSAGE_MODULE_TYPES:
+        module_type = 'General'
+    if priority not in INTERNAL_MESSAGE_PRIORITY_VALUES:
+        priority = 'normal'
+    module_ref_id = None
+    if module_ref_raw:
+        try:
+            module_ref_id = int(module_ref_raw)
+        except Exception:
+            module_ref_id = None
+    recipients = []
+    for item in to_ids:
+        try:
+            recipients.append((int(item), 'TO'))
+        except Exception:
+            pass
+    for item in cc_ids:
+        try:
+            recipients.append((int(item), 'CC'))
+        except Exception:
+            pass
+    recipients = [(uid, kind) for (uid, kind) in recipients if uid and uid != sender_id]
+    if not recipients:
+        flash('Please select at least one recipient.', 'warning')
+        return redirect(url_for('internal_messages_inbox'))
+    query_db(
+        """
+        INSERT INTO InternalMessages (Subject, Body, SenderUserID, ModuleType, ModuleRefID, Priority, ParentMessageID)
+        VALUES (?, ?, ?, ?, ?, ?, NULL)
+        """,
+        (subject, body or None, sender_id, module_type, module_ref_id, priority),
+    )
+    row = query_db("SELECT TOP 1 MessageID FROM InternalMessages WHERE SenderUserID=? ORDER BY MessageID DESC", (sender_id,), one=True)
+    message_id = (row or {}).get('MessageID')
+    if message_id:
+        seen = set()
+        for rid, kind in recipients:
+            if rid in seen:
+                continue
+            seen.add(rid)
+            query_db(
+                "INSERT INTO InternalMessageRecipients (MessageID, RecipientUserID, RecipientKind, IsRead) VALUES (?, ?, ?, 0)",
+                (message_id, rid, kind),
+            )
+    flash('Message sent successfully.', 'success')
+    return redirect(url_for('internal_messages_inbox'))
+
+
+@app.route('/messages/<int:message_id>', methods=['GET'])
+@login_required
+def internal_messages_thread(message_id):
+    _ensure_internal_messages_schema()
+    uid = session.get('user_id')
+    root = query_db(
+        """
+        SELECT M.MessageID, M.Subject, M.Body, M.ModuleType, M.ModuleRefID, M.Priority, M.CreatedAt, M.SenderUserID, M.ParentMessageID,
+               U.FullName AS SenderName
+        FROM InternalMessages M
+        LEFT JOIN Users_1 U ON U.UserID = M.SenderUserID
+        WHERE M.MessageID=?
+        """,
+        (message_id,),
+        one=True,
+    )
+    if not root:
+        flash('Message not found.', 'warning')
+        return redirect(url_for('internal_messages_inbox'))
+    has_access = query_db(
+        "SELECT TOP 1 RecipientID FROM InternalMessageRecipients WHERE MessageID=? AND RecipientUserID=?",
+        (message_id, uid),
+        one=True,
+    ) or (uid == root.get('SenderUserID'))
+    if not has_access:
+        flash('Access denied for this message.', 'danger')
+        return redirect(url_for('internal_messages_inbox'))
+    query_db(
+        "UPDATE InternalMessageRecipients SET IsRead=1, ReadAt=GETDATE() WHERE MessageID=? AND RecipientUserID=?",
+        (message_id, uid),
+    )
+    replies = query_db(
+        """
+        SELECT M.MessageID, M.Subject, M.Body, M.ModuleType, M.ModuleRefID, M.Priority, M.CreatedAt, M.SenderUserID, M.ParentMessageID,
+               U.FullName AS SenderName
+        FROM InternalMessages M
+        LEFT JOIN Users_1 U ON U.UserID = M.SenderUserID
+        WHERE M.ParentMessageID=?
+        ORDER BY M.CreatedAt ASC, M.MessageID ASC
+        """,
+        (message_id,),
+    ) or []
+    recipients = query_db(
+        """
+        SELECT R.RecipientKind, R.IsRead, R.ReadAt, U.FullName, U.Username
+        FROM InternalMessageRecipients R
+        JOIN Users_1 U ON U.UserID = R.RecipientUserID
+        WHERE R.MessageID=?
+        ORDER BY CASE WHEN R.RecipientKind='TO' THEN 0 ELSE 1 END, U.FullName
+        """,
+        (message_id,),
+    ) or []
+    return render_template('internal/thread.html', root=root, replies=replies, recipients=recipients)
+
+
+@app.route('/messages/<int:message_id>/reply', methods=['POST'])
+@login_required
+def internal_messages_reply(message_id):
+    _ensure_internal_messages_schema()
+    sender_id = session.get('user_id')
+    body = (request.form.get('body') or '').strip()
+    if not body:
+        flash('Reply text is required.', 'warning')
+        return redirect(url_for('internal_messages_thread', message_id=message_id))
+    root = query_db("SELECT * FROM InternalMessages WHERE MessageID=?", (message_id,), one=True)
+    if not root:
+        flash('Message not found.', 'warning')
+        return redirect(url_for('internal_messages_inbox'))
+    query_db(
+        """
+        INSERT INTO InternalMessages (Subject, Body, SenderUserID, ModuleType, ModuleRefID, Priority, ParentMessageID)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (f"RE: {root.get('Subject') or ''}".strip(), body, sender_id, root.get('ModuleType') or 'General', root.get('ModuleRefID'), root.get('Priority') or 'normal', message_id),
+    )
+    recipient_rows = query_db("SELECT RecipientUserID, RecipientKind FROM InternalMessageRecipients WHERE MessageID=?", (message_id,)) or []
+    recipients = {(int(r['RecipientUserID']), (r.get('RecipientKind') or 'TO')) for r in recipient_rows if r.get('RecipientUserID')}
+    if root.get('SenderUserID') and int(root['SenderUserID']) != sender_id:
+        recipients.add((int(root['SenderUserID']), 'TO'))
+    recipients = {(rid, kind) for (rid, kind) in recipients if rid != sender_id}
+    reply_row = query_db("SELECT TOP 1 MessageID FROM InternalMessages WHERE SenderUserID=? ORDER BY MessageID DESC", (sender_id,), one=True)
+    reply_id = (reply_row or {}).get('MessageID')
+    if reply_id:
+        for rid, kind in recipients:
+            query_db(
+                "INSERT INTO InternalMessageRecipients (MessageID, RecipientUserID, RecipientKind, IsRead) VALUES (?, ?, ?, 0)",
+                (reply_id, rid, kind),
+            )
+    flash('Reply sent.', 'success')
+    return redirect(url_for('internal_messages_thread', message_id=message_id))
 
 @app.route('/training/graduate_review')
 @login_required

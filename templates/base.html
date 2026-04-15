@@ -691,6 +691,16 @@
                     <i class="fas fa-folder-open"></i>
                     <span class="link-text"><span class="en-bold">Trainee File</span> <span class="ar-normal">ملف متدرب — بحث عام</span></span>
                 </a>
+                <a href="{{ url_for('internal_messages_inbox') }}" class="nav-link {{ 'active' if request.endpoint in ['internal_messages_inbox', 'internal_messages_thread'] else '' }}" title="Internal inbox">
+                    <i class="fas fa-inbox"></i>
+                    <span class="link-text">
+                        <span class="en-bold">Inbox</span>
+                        <span class="ar-normal">المراسلات الداخلية</span>
+                        {% if unread_internal_messages_count and unread_internal_messages_count > 0 %}
+                        <span class="badge bg-danger ms-1">{{ unread_internal_messages_count }}</span>
+                        {% endif %}
+                    </span>
+                </a>
                 <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false" title="Logout / خروج">
                     <i class="fas fa-sign-out-alt"></i>
                     <span class="link-text"><span class="en-bold">Logout</span> <span class="ar-normal">خروج</span></span>
@@ -710,6 +720,12 @@
             <h5 class="m-0 text-muted">{% block page_title %}<span class="en-bold">{{ request.endpoint.replace('_', ' ').title() }}</span>{% endblock %}</h5>
 
             <div class="ms-auto d-flex align-items-center">
+                <a href="{{ url_for('internal_messages_inbox') }}" class="btn btn-sm btn-outline-primary me-2" title="Inbox">
+                    <i class="fas fa-inbox"></i>
+                    {% if unread_internal_messages_count and unread_internal_messages_count > 0 %}
+                    <span class="badge bg-danger">{{ unread_internal_messages_count }}</span>
+                    {% endif %}
+                </a>
                 <!-- User Profile or Quick Actions can go here -->
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">

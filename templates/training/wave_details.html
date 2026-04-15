@@ -39,6 +39,10 @@
                             <th>Phone</th>
                             <th>Current Level</th>
                             <th>Status</th>
+                            <th>P1</th>
+                            <th>P2</th>
+                            <th>P3</th>
+                            <th>Final</th>
                             <th class="text-end">Progress</th>
                         </tr>
                     </thead>
@@ -51,6 +55,10 @@
                             <td>{{ s.Phone }}</td>
                             <td><span class="badge bg-info">{{ s.CurrentCEFR or 'N/A' }}</span></td>
                             <td><span class="badge bg-success">Active</span></td>
+                            <td><span class="badge bg-{{ s.ExamPeriodic1Badge }}">{{ s.ExamPeriodic1Status }}</span></td>
+                            <td><span class="badge bg-{{ s.ExamPeriodic2Badge }}">{{ s.ExamPeriodic2Status }}</span></td>
+                            <td><span class="badge bg-{{ s.ExamPeriodic3Badge }}">{{ s.ExamPeriodic3Status }}</span></td>
+                            <td><span class="badge bg-{{ s.ExamFinalBadge }}">{{ s.ExamFinalStatus }}</span></td>
                             <td class="text-end">
                                 <a href="{{ url_for('enrollment_progress_sheet', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-success py-0" title="شيت تقدم أسبوعي (مثل Excel)">Sheet</a>
                             </td>
@@ -113,6 +121,12 @@
                 <p><strong>أيام الأسبوع:</strong> {{ wave.WeekDays or '-' }}</p>
                 <p><strong>Trainer:</strong> {{ wave.TrainerName or 'Not Assigned' }}</p>
                 <p><strong>Room:</strong> {{ wave.RoomName or 'Not Assigned' }}</p>
+                <hr>
+                <p><strong>Periodic 1 Date:</strong> {{ wave.PeriodicExam1Date|dmy if wave.PeriodicExam1Date else '-' }}</p>
+                <p><strong>Periodic 2 Date:</strong> {{ wave.PeriodicExam2Date|dmy if wave.PeriodicExam2Date else '-' }}</p>
+                <p><strong>Periodic 3 Date:</strong> {{ wave.PeriodicExam3Date|dmy if wave.PeriodicExam3Date else '-' }}</p>
+                <p><strong>Final Exam Date:</strong> {{ wave.FinalExamDate|dmy if wave.FinalExamDate else '-' }}</p>
+                <p><strong>Make-up Exam Date:</strong> {{ wave.MakeupExamDate|dmy if wave.MakeupExamDate else '-' }}</p>
             </div>
         </div>
         <!-- أيام الامتحانات الدورية -->
@@ -226,6 +240,33 @@
                     <div class="mb-2">
                         <label class="form-label">أيام الأسبوع</label>
                         <input type="text" name="week_days" class="form-control" value="{{ wave.WeekDays or '' }}" placeholder="سبت,أحد,إثنين">
+                    </div>
+                    <hr>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Periodic Exam 1 Date</label>
+                            <input type="date" name="periodic_exam_1_date" class="form-control" value="{{ (wave.PeriodicExam1Date|string)[:10] if wave.PeriodicExam1Date else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Periodic Exam 2 Date</label>
+                            <input type="date" name="periodic_exam_2_date" class="form-control" value="{{ (wave.PeriodicExam2Date|string)[:10] if wave.PeriodicExam2Date else '' }}">
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Periodic Exam 3 Date</label>
+                            <input type="date" name="periodic_exam_3_date" class="form-control" value="{{ (wave.PeriodicExam3Date|string)[:10] if wave.PeriodicExam3Date else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Final Exam Date</label>
+                            <input type="date" name="final_exam_date" class="form-control" value="{{ (wave.FinalExamDate|string)[:10] if wave.FinalExamDate else '' }}">
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Make-up Exam Date</label>
+                            <input type="date" name="makeup_exam_date" class="form-control" value="{{ (wave.MakeupExamDate|string)[:10] if wave.MakeupExamDate else '' }}">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

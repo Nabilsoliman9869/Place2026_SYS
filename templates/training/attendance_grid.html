@@ -121,10 +121,9 @@
                             <td class="fw-bold">{{ s.FullName }}</td>
                             <td>
                                 <select name="status_{{ s.EnrollmentID }}" class="form-select form-select-sm status-select" onchange="toggleTimeInputs(this); recalcRow(this.closest('tr')); updateAbsenceBadge(this.closest('tr'));">
-                                    <option value="Present" {% if s.Status == 'Present' %}selected{% endif %}>حاضر</option>
-                                    <option value="Absent" {% if s.Status == 'Absent' %}selected{% endif %}>غائب</option>
-                                    <option value="Late" {% if s.Status == 'Late' %}selected{% endif %}>متأخر</option>
-                                    <option value="Excused" {% if s.Status == 'Excused' %}selected{% endif %}>معذور</option>
+                                    {% for st in attendance_status_values %}
+                                    <option value="{{ st }}" {% if s.Status == st %}selected{% endif %}>{{ st }}</option>
+                                    {% endfor %}
                                 </select>
                             </td>
                             <td>
@@ -180,11 +179,11 @@
 function toggleTimeInputs(select) {
     const row = select.closest('tr');
     const inputs = row.querySelectorAll('input[type="time"]');
-    const isAbsent = select.value === 'Absent';
+    const withTime = ['Present', 'Late', 'Excused'].includes(select.value);
     
     inputs.forEach(input => {
-        input.disabled = isAbsent;
-        if(isAbsent) input.value = '';
+        input.disabled = !withTime;
+        if(!withTime) input.value = '';
     });
 }
 
@@ -214,7 +213,7 @@ function recalcRow(row) {
     const lateBadge = row.querySelector('.late-minutes-badge');
     const batchStart = (row.getAttribute('data-batch-start') || '').trim();
     
-    if (statusSelect && statusSelect.value === 'Absent') {
+    if (statusSelect && !['Present', 'Late', 'Excused'].includes(statusSelect.value)) {
         if (badgeEl) badgeEl.textContent = '- س';
         if (lateBadge) { lateBadge.textContent = '-'; lateBadge.className = 'badge late-minutes-badge bg-secondary'; }
         return;

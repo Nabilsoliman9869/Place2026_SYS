@@ -23,11 +23,11 @@
             <div class="col-md-4">
                 <label class="form-label">نوع الامتحان</label>
                 <select name="exam_type" class="form-select" onchange="this.form.submit()">
-                    <option value="1" {% if exam_type == '1' %}selected{% endif %}>الأسبوع الأول</option>
-                    <option value="2" {% if exam_type == '2' %}selected{% endif %}>الأسبوع الثاني</option>
-                    <option value="3" {% if exam_type == '3' %}selected{% endif %}>الأسبوع الثالث</option>
-                    <option value="4" {% if exam_type == '4' %}selected{% endif %}>الأسبوع الرابع</option>
-                    <option value="99" {% if exam_type == '99' %}selected{% endif %} class="fw-bold">الامتحان النهائي (Final)</option>
+                    <option value="1" {% if exam_type == '1' %}selected{% endif %}>Periodic Exam 1</option>
+                    <option value="2" {% if exam_type == '2' %}selected{% endif %}>Periodic Exam 2</option>
+                    <option value="3" {% if exam_type == '3' %}selected{% endif %}>Periodic Exam 3</option>
+                    <option value="99" {% if exam_type == '99' %}selected{% endif %} class="fw-bold">Final Exam</option>
+                    <option value="100" {% if exam_type == '100' %}selected{% endif %}>Make-up Exam</option>
                 </select>
             </div>
             <div class="col-md-4">
