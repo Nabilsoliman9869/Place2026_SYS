@@ -1076,10 +1076,14 @@ def _ensure_training_invoice_refunds_table():
 
 # --- PERFORMANCE: طابع زمني واحد + مستخدم من الجلسة (تخزين مؤقت) ---
 _USER_CACHE_TTL = int(os.environ.get('SESSION_USER_CACHE_TTL', '120'))
+_course_batches_exam_columns_ready = False
+_internal_messages_schema_ready = False
 
 @app.before_request
 def _before_request_perf_and_user():
     g._perf_start = time.time()
+    if request.endpoint == 'static':
+        return
     user_id = session.get('user_id')
     if user_id is None:
         g.user = None
@@ -1103,8 +1107,10 @@ def _before_request_perf_and_user():
     except Exception:
         pass
     try:
-        _ensure_course_batches_exam_columns()
-        _ensure_internal_messages_schema()
+        if not _course_batches_exam_columns_ready:
+            _ensure_course_batches_exam_columns()
+        if not _internal_messages_schema_ready:
+            _ensure_internal_messages_schema()
     except Exception:
         pass
 
@@ -9460,6 +9466,9 @@ def _ensure_attendance_columns():
 
 
 def _ensure_course_batches_exam_columns():
+    global _course_batches_exam_columns_ready
+    if _course_batches_exam_columns_ready:
+        return
     for stmt in [
         "ALTER TABLE CourseBatches ADD PeriodicExam1Date DATE NULL",
         "ALTER TABLE CourseBatches ADD PeriodicExam2Date DATE NULL",
@@ -9471,9 +9480,13 @@ def _ensure_course_batches_exam_columns():
             query_db(stmt)
         except Exception:
             pass
+    _course_batches_exam_columns_ready = True
 
 
 def _ensure_internal_messages_schema():
+    global _internal_messages_schema_ready
+    if _internal_messages_schema_ready:
+        return
     statements = [
         """
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='InternalMessages' AND xtype='U')
@@ -9511,6 +9524,7 @@ def _ensure_internal_messages_schema():
             query_db(stmt)
         except Exception:
             pass
+    _internal_messages_schema_ready = True
 
 @app.route('/training/attendance', methods=['GET'])
 @login_required
