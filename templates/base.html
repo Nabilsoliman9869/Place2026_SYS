@@ -696,9 +696,7 @@
                     <span class="link-text">
                         <span class="en-bold">Inbox</span>
                         <span class="ar-normal">المراسلات الداخلية</span>
-                        {% if unread_internal_messages_count and unread_internal_messages_count > 0 %}
-                        <span class="badge bg-danger ms-1">{{ unread_internal_messages_count }}</span>
-                        {% endif %}
+                        <span class="badge bg-danger ms-1" id="sidebarUnreadBadge" style="{{ '' if (unread_internal_messages_count and unread_internal_messages_count > 0) else 'display:none;' }}">{{ unread_internal_messages_count or 0 }}</span>
                     </span>
                 </a>
                 <a href="{{ url_for('logout') }}" class="nav-link text-danger" data-turbo="false" title="Logout / خروج">
@@ -725,9 +723,7 @@
                 </a>
                 <a href="{{ url_for('internal_messages_inbox') }}" class="btn btn-sm btn-outline-primary me-2" title="Inbox">
                     <i class="fas fa-inbox"></i>
-                    {% if unread_internal_messages_count and unread_internal_messages_count > 0 %}
-                    <span class="badge bg-danger">{{ unread_internal_messages_count }}</span>
-                    {% endif %}
+                    <span class="badge bg-danger" id="topUnreadBadge" style="{{ '' if (unread_internal_messages_count and unread_internal_messages_count > 0) else 'display:none;' }}">{{ unread_internal_messages_count or 0 }}</span>
                 </a>
                 <!-- User Profile or Quick Actions can go here -->
                 <div class="dropdown">
@@ -946,6 +942,48 @@
             }
             if (dismissBtn) dismissBtn.addEventListener('click', hide);
             if (closeBtn) closeBtn.addEventListener('click', hide);
+        })();
+
+        // --- Internal messages unread polling (near real-time) ---
+        (function () {
+            const key = 'internal_last_unread_global';
+            let last = parseInt(localStorage.getItem(key) || '{{ unread_internal_messages_count or 0 }}', 10) || 0;
+            function ensureBadge(id, value, extraClass) {
+                const holder = document.getElementById(id);
+                if (!holder) return;
+                if (value > 0) {
+                    holder.textContent = String(value);
+                    holder.style.display = '';
+                } else {
+                    holder.textContent = '0';
+                    holder.style.display = 'none';
+                }
+            }
+            function beep() {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.connect(g); g.connect(ctx.destination);
+                    o.frequency.value = 880; g.gain.value = 0.12;
+                    o.start(); o.stop(ctx.currentTime + 0.12);
+                } catch (e) {}
+            }
+            async function poll() {
+                try {
+                    const res = await fetch('{{ url_for("internal_messages_unread_count") }}', { credentials: 'same-origin' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const unread = parseInt((data || {}).unread || 0, 10) || 0;
+                    ensureBadge('topUnreadBadge', unread);
+                    ensureBadge('sidebarUnreadBadge', unread);
+                    if (unread > last) beep();
+                    last = unread;
+                    localStorage.setItem(key, String(unread));
+                } catch (e) {}
+            }
+            poll();
+            setInterval(poll, 12000);
         })();
     </script>
 </body>

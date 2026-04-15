@@ -10039,6 +10039,24 @@ def internal_messages_reply(message_id):
     flash('Reply sent.', 'success')
     return redirect(url_for('internal_messages_thread', message_id=message_id))
 
+
+@app.route('/messages/unread_count', methods=['GET'])
+@login_required
+def internal_messages_unread_count():
+    _ensure_internal_messages_schema()
+    uid = session.get('user_id')
+    row = query_db(
+        """
+        SELECT COUNT(*) AS C
+        FROM InternalMessageRecipients R
+        JOIN InternalMessages M ON M.MessageID = R.MessageID
+        WHERE R.RecipientUserID=? AND R.IsArchived=0 AND ISNULL(R.IsRead, 0)=0
+        """,
+        (uid,),
+        one=True,
+    )
+    return jsonify({'unread': int((row or {}).get('C') or 0)})
+
 @app.route('/training/graduate_review')
 @login_required
 def graduate_review():

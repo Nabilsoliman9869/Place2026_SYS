@@ -25,7 +25,7 @@
                         {% for u in users %}
                         <label class="dropdown-item d-flex align-items-center gap-2">
                             <input class="form-check-input to-user-checkbox" type="checkbox" name="to_user_ids" value="{{ u.UserID }}">
-                            <span>{{ u.FullName or u.Username }} ({{ u.Role }})</span>
+                            <span>{{ u.FullName or '-' }} [{{ u.Username }}] ({{ u.Role }})</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -41,7 +41,7 @@
                         {% for u in users %}
                         <label class="dropdown-item d-flex align-items-center gap-2">
                             <input class="form-check-input cc-user-checkbox" type="checkbox" name="cc_user_ids" value="{{ u.UserID }}">
-                            <span>{{ u.FullName or u.Username }} ({{ u.Role }})</span>
+                            <span>{{ u.FullName or '-' }} [{{ u.Username }}] ({{ u.Role }})</span>
                         </label>
                         {% endfor %}
                     </div>
