@@ -49,6 +49,9 @@
             <label class="form-label mb-0">Week</label>
             <input type="number" name="week" class="form-control form-control-sm" style="width:5rem" min="1" max="52" value="{{ week }}">
             <button type="submit" class="btn btn-sm btn-outline-primary">Go</button>
+            <a href="{{ url_for('enrollment_progress_sheet_word', enrollment_id=student.EnrollmentID, week=week) }}" class="btn btn-sm btn-outline-dark">
+                <i class="fas fa-file-word"></i> Download Word
+            </a>
         </form>
     </div>
 

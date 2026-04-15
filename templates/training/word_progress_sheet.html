@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; }
+        h1, h2, h3 { margin: 0 0 8px; }
+        .meta { margin-bottom: 12px; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+        th, td { border: 1px solid #333; padding: 6px; vertical-align: top; }
+        th { background: #efefef; }
+    </style>
+</head>
+<body>
+    <h2>Progress Report Sheet</h2>
+    <div class="meta">
+        <div><strong>Trainee:</strong> {{ student.FullName }}</div>
+        <div><strong>Batch:</strong> {{ student.BatchName }} | <strong>Course:</strong> {{ student.CourseName }}</div>
+        <div><strong>Week:</strong> {{ week }} | <strong>Generated:</strong> {{ generated_at }}</div>
+    </div>
+
+    {% for aspect in aspects %}
+    <h3>{{ aspect }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>RFI</th>
+                <th>Severity</th>
+                <th>Action Plan</th>
+                <th>Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in lines_by_aspect[aspect] %}
+            <tr>
+                <td>{{ row.RFI or '' }}</td>
+                <td>{{ row.Severity or '' }}</td>
+                <td>{{ row.ActionPlan or '' }}</td>
+                <td>{{ row.ProgressComment or '' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4">No data for this aspect.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endfor %}
+</body>
+</html>

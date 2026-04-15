@@ -1,7 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="container-fluid mt-3">
-    <h2 class="h4 en-bold">Future batches</h2>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h4 en-bold mb-0">Future batches</h2>
+        <a href="{{ url_for('training_reports_future_batches_word') }}" class="btn btn-sm btn-outline-dark">
+            <i class="fas fa-file-word"></i> Download Word
+        </a>
+    </div>
     <p class="text-muted small">From today ({{ today }}) onward.</p>
     <div class="table-responsive">
         <table class="table table-sm table-bordered">

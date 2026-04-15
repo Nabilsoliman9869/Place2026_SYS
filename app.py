@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort, jsonify, Response
 from jinja2 import TemplateNotFound
 from markupsafe import Markup
 import functools
@@ -144,6 +144,19 @@ def _to_yyyy_mm_dd(raw):
         return raw.strftime('%Y-%m-%d')
     s = str(raw).strip()
     return s[:10] if s else None
+
+
+def _as_word_download(html_text, filename):
+    safe_name = (filename or 'report').strip().replace('"', '').replace("'", '')
+    if not safe_name.lower().endswith('.doc'):
+        safe_name += '.doc'
+    return Response(
+        html_text,
+        mimetype='application/msword; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="{safe_name}"'
+        },
+    )
 
 
 # --- مسار التدريب الكامل: Lead / Train to Hire / قوائم المبيعات والمختبر ---
@@ -7505,6 +7518,57 @@ def training_reports_current_courses():
     return render_template('training/reports_current_courses.html', rows=rows or [], df=df, dt=dt)
 
 
+@app.route('/training/reports/current-courses/word')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_reports_current_courses_word():
+    _ensure_course_batches_capacity_column()
+    df = (request.args.get('from') or '').strip()
+    dt = (request.args.get('to') or '').strip()
+    has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
+    agg_exam_dates_sql = """
+        STUFF((
+            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
+            FROM BatchExamDates BE
+            WHERE BE.BatchID = B.BatchID
+            ORDER BY BE.ExamDate
+            FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 3, N'')
+    """
+    sql = f"""
+        SELECT B.BatchID,
+               B.BatchName AS wave, C.CourseName AS course_level, R.RoomName AS room,
+               B.StartDate, B.EndDate, T.FullName AS trainer_name, B.WeekDays AS days,
+               B.StartTime, B.EndTime, B.Status,
+               {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
+               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+               ({agg_exam_dates_sql}) AS periodic_exam_dates
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        WHERE B.Status = N'Active'
+    """
+    params = []
+    if df:
+        sql += " AND B.StartDate >= CAST(? AS DATE)"
+        params.append(df)
+    if dt:
+        sql += " AND B.EndDate <= CAST(? AS DATE)"
+        params.append(dt)
+    sql += " ORDER BY B.StartDate, B.BatchName"
+    rows = query_db(sql, tuple(params)) if params else (query_db(sql) or [])
+    html = render_template(
+        'training/word_current_courses.html',
+        rows=rows or [],
+        df=df,
+        dt=dt,
+        generated_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
+    )
+    return _as_word_download(html, f'current_courses_{datetime.now().strftime("%Y%m%d_%H%M")}.doc')
+
+
 @app.route('/training/reports/future-batches')
 @login_required
 @role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
@@ -7554,6 +7618,45 @@ def training_reports_future_batches():
             """
         ) or []
     return render_template('training/reports_future_batches.html', rows=rows, today=today)
+
+
+@app.route('/training/reports/future-batches/word')
+@login_required
+@role_required(['Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def training_reports_future_batches_word():
+    _ensure_course_batches_capacity_column()
+    has_cap = _db_has_column('CourseBatches', 'MaxCapacity')
+    agg_exam_dates_sql = """
+        STUFF((
+            SELECT N' | ' + CONVERT(NVARCHAR(10), BE.ExamDate, 23) +
+                   COALESCE(N' (' + BE.ExamLabel + N')', N'')
+            FROM BatchExamDates BE
+            WHERE BE.BatchID = B.BatchID
+            ORDER BY BE.ExamDate
+            FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 3, N'')
+    """
+    sql = f"""
+        SELECT B.BatchID, B.BatchName, C.CourseName, B.StartDate, B.EndDate, T.FullName AS TrainerName,
+               R.RoomName, B.WeekDays, B.StartTime, B.EndTime, B.Status,
+               {( 'B.MaxCapacity' if has_cap else 'NULL AS MaxCapacity' )},
+               (SELECT COUNT(*) FROM Enrollments E WHERE E.BatchID=B.BatchID AND E.Status='Active') AS enrolled_count,
+               ({agg_exam_dates_sql}) AS periodic_exam_dates
+        FROM CourseBatches B
+        JOIN Courses C ON B.CourseID = C.CourseID
+        LEFT JOIN Trainers T ON B.TrainerID = T.TrainerID
+        LEFT JOIN Classrooms R ON B.RoomID = R.RoomID
+        WHERE B.StartDate >= CAST(GETDATE() AS DATE)
+        ORDER BY B.StartDate, B.BatchName
+    """
+    rows = query_db(sql) or []
+    html = render_template(
+        'training/word_future_batches.html',
+        rows=rows or [],
+        today=datetime.today().strftime('%Y-%m-%d'),
+        generated_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
+    )
+    return _as_word_download(html, f'future_batches_{datetime.now().strftime("%Y%m%d_%H%M")}.doc')
 
 
 EXAM_FEE_DESCRIPTION = 'رسوم امتحان تحديد المستوى'
@@ -8615,6 +8718,56 @@ def enrollment_progress_sheet_print(enrollment_id):
     )
 
 
+@app.route('/training/enrollment/<int:enrollment_id>/progress-sheet/word')
+@login_required
+@role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator', 'TrainingSalesCoordinator'])
+def enrollment_progress_sheet_word(enrollment_id):
+    _ensure_enrollment_week_progress_lines_table()
+    stu = query_db(
+        """
+        SELECT E.EnrollmentID, E.BatchID, C.FullName, C.CandidateID, B.BatchName, Cr.CourseName
+        FROM Enrollments E
+        JOIN Candidates C ON E.CandidateID = C.CandidateID
+        JOIN CourseBatches B ON E.BatchID = B.BatchID
+        JOIN Courses Cr ON B.CourseID = Cr.CourseID
+        WHERE E.EnrollmentID = ?
+        """,
+        (enrollment_id,),
+        one=True,
+    )
+    if not stu:
+        return 'Enrollment not found', 404
+    try:
+        week = int(request.args.get('week') or 1)
+    except (TypeError, ValueError):
+        week = 1
+    week = max(1, min(week, 52))
+    raw_lines = query_db(
+        """
+        SELECT LanguageAspect, LineOrder, RFI, Severity, ActionPlan, ProgressComment
+        FROM EnrollmentWeekProgressLines
+        WHERE EnrollmentID=? AND WeekNumber=?
+        ORDER BY LanguageAspect, LineOrder
+        """,
+        (enrollment_id, week),
+    ) or []
+    lines_by_aspect = {a: [] for a in PROGRESS_SHEET_ASPECTS}
+    for row in raw_lines:
+        asp = (row.get('LanguageAspect') or '').strip()
+        if asp in lines_by_aspect:
+            lines_by_aspect[asp].append(row)
+    html = render_template(
+        'training/word_progress_sheet.html',
+        student=stu,
+        week=week,
+        aspects=PROGRESS_SHEET_ASPECTS,
+        lines_by_aspect=lines_by_aspect,
+        generated_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
+    )
+    safe = f"progress_{enrollment_id}_week_{week}_{datetime.now().strftime('%Y%m%d_%H%M')}.doc"
+    return _as_word_download(html, safe)
+
+
 @app.route('/training/enrollment/<int:enrollment_id>/ssr-initial-fb/print')
 @login_required
 @role_required(['Trainer', 'Manager', 'TrainingManager', 'TrainingHead', 'TrainingLead', 'TrainingCoordinator'])
@@ -8854,6 +9007,37 @@ def wave_details(wave_id):
             s[f'{key}Status'] = status
             s[f'{key}Badge'] = status_badge_map.get(status, 'secondary')
 
+    exam_filter = (request.args.get('exam_filter') or 'all').strip().lower()
+    status_filter = (request.args.get('status_filter') or 'all').strip().upper()
+    exam_key_map = {
+        'p1': 'ExamPeriodic1Status',
+        'p2': 'ExamPeriodic2Status',
+        'p3': 'ExamPeriodic3Status',
+        'final': 'ExamFinalStatus',
+    }
+    if exam_filter != 'all' or status_filter != 'ALL':
+        filtered = []
+        for s in students:
+            values = []
+            if exam_filter == 'all':
+                values = [
+                    s.get('ExamPeriodic1Status'),
+                    s.get('ExamPeriodic2Status'),
+                    s.get('ExamPeriodic3Status'),
+                    s.get('ExamFinalStatus'),
+                ]
+            else:
+                k = exam_key_map.get(exam_filter)
+                if k:
+                    values = [s.get(k)]
+            if status_filter == 'ALL':
+                if values:
+                    filtered.append(s)
+            else:
+                if any(v == status_filter for v in values):
+                    filtered.append(s)
+        students = filtered
+
     try:
         reports = query_db("""
             SELECT WP.*, C.FullName
@@ -8869,7 +9053,18 @@ def wave_details(wave_id):
     courses = query_db("SELECT * FROM Courses ORDER BY CourseName")
     trainers = query_db("SELECT * FROM Trainers ORDER BY FullName")
     rooms = query_db("SELECT * FROM Classrooms ORDER BY RoomName")
-    return render_template('training/wave_details.html', wave=wave, students=students, reports=reports or [], exam_dates=exam_dates, courses=courses or [], trainers=trainers or [], rooms=rooms or [])
+    return render_template(
+        'training/wave_details.html',
+        wave=wave,
+        students=students,
+        reports=reports or [],
+        exam_dates=exam_dates,
+        courses=courses or [],
+        trainers=trainers or [],
+        rooms=rooms or [],
+        exam_filter=exam_filter,
+        status_filter=status_filter,
+    )
 
 @app.route('/training/add_report', methods=['POST'])
 @login_required
@@ -9644,6 +9839,38 @@ def internal_messages_inbox():
     for m in messages:
         if int(m.get('IsRead') or 0) == 0:
             unread_count += 1
+    try:
+        msg_ids = [str(int(m['MessageID'])) for m in messages if m.get('MessageID')]
+        if msg_ids:
+            rec_rows = query_db(
+                f"""
+                SELECT R.MessageID, R.RecipientKind, U.FullName, U.Username
+                FROM InternalMessageRecipients R
+                JOIN Users_1 U ON U.UserID = R.RecipientUserID
+                WHERE R.MessageID IN ({",".join(msg_ids)})
+                ORDER BY R.MessageID ASC, CASE WHEN R.RecipientKind='TO' THEN 0 ELSE 1 END, U.FullName
+                """
+            ) or []
+            rec_map = {}
+            for rr in rec_rows:
+                mid = rr.get('MessageID')
+                if not mid:
+                    continue
+                rec_map.setdefault(mid, {'TO': [], 'CC': []})
+                kind = (rr.get('RecipientKind') or 'TO').upper()
+                name = (rr.get('FullName') or rr.get('Username') or '').strip()
+                if kind not in ('TO', 'CC'):
+                    kind = 'TO'
+                if name:
+                    rec_map[mid][kind].append(name)
+            for m in messages:
+                box = rec_map.get(m.get('MessageID'), {'TO': [], 'CC': []})
+                m['ToPreview'] = ", ".join(box.get('TO', [])[:3])
+                m['CcPreview'] = ", ".join(box.get('CC', [])[:2])
+    except Exception:
+        for m in messages:
+            m['ToPreview'] = ''
+            m['CcPreview'] = ''
     return render_template(
         'internal/inbox.html',
         messages=messages,

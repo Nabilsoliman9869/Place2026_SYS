@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+        h2 { margin: 0 0 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #333; padding: 4px; }
+        th { background: #efefef; }
+    </style>
+</head>
+<body>
+    <h2>Future Batches Report</h2>
+    <p><strong>From:</strong> {{ today }} | <strong>Generated:</strong> {{ generated_at }}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Wave</th>
+                <th>Course</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Trainer</th>
+                <th>Room</th>
+                <th>Days</th>
+                <th>Time</th>
+                <th>Periodic Exams</th>
+                <th>Max</th>
+                <th>Enrolled</th>
+                <th>Available</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            {% set maxc = r.MaxCapacity if r.MaxCapacity is not none else 0 %}
+            {% set en = r.enrolled_count if r.enrolled_count is not none else 0 %}
+            {% set avail = (maxc - en) if maxc and en is not none else None %}
+            <tr>
+                <td>{{ r.BatchName }}</td>
+                <td>{{ r.CourseName }}</td>
+                <td>{{ r.StartDate }}</td>
+                <td>{{ r.EndDate }}</td>
+                <td>{{ r.TrainerName or '—' }}</td>
+                <td>{{ r.RoomName or 'N/A' }}</td>
+                <td>{{ r.WeekDays or '—' }}</td>
+                <td>{{ r.StartTime or '—' }} — {{ r.EndTime or '—' }}</td>
+                <td>{{ r.periodic_exam_dates or '—' }}</td>
+                <td>{{ r.MaxCapacity if r.MaxCapacity is not none else '—' }}</td>
+                <td>{{ en }}</td>
+                <td>{{ avail if avail is not none else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12">No data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

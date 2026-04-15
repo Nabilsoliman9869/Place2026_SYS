@@ -720,6 +720,9 @@
             <h5 class="m-0 text-muted">{% block page_title %}<span class="en-bold">{{ request.endpoint.replace('_', ' ').title() }}</span>{% endblock %}</h5>
 
             <div class="ms-auto d-flex align-items-center">
+                <a href="{{ url_for('internal_messages_inbox') }}#composeMessageCard" class="btn btn-sm btn-outline-success me-2" title="Send internal message">
+                    <i class="fas fa-paper-plane"></i>
+                </a>
                 <a href="{{ url_for('internal_messages_inbox') }}" class="btn btn-sm btn-outline-primary me-2" title="Inbox">
                     <i class="fas fa-inbox"></i>
                     {% if unread_internal_messages_count and unread_internal_messages_count > 0 %}

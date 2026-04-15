@@ -23,6 +23,22 @@
             <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0">Enrolled Students (الطلاب المسجلين)</h5>
                 <div class="d-flex flex-wrap gap-2">
+                    <form method="GET" action="{{ url_for('wave_details', wave_id=wave.BatchID) }}" class="d-flex gap-2 align-items-center">
+                        <select name="exam_filter" class="form-select form-select-sm">
+                            <option value="all" {% if exam_filter == 'all' %}selected{% endif %}>All Exams</option>
+                            <option value="p1" {% if exam_filter == 'p1' %}selected{% endif %}>P1</option>
+                            <option value="p2" {% if exam_filter == 'p2' %}selected{% endif %}>P2</option>
+                            <option value="p3" {% if exam_filter == 'p3' %}selected{% endif %}>P3</option>
+                            <option value="final" {% if exam_filter == 'final' %}selected{% endif %}>Final</option>
+                        </select>
+                        <select name="status_filter" class="form-select form-select-sm">
+                            <option value="ALL" {% if status_filter == 'ALL' %}selected{% endif %}>All Status</option>
+                            <option value="MISSED" {% if status_filter == 'MISSED' %}selected{% endif %}>MISSED</option>
+                            <option value="LATE" {% if status_filter == 'LATE' %}selected{% endif %}>LATE</option>
+                            <option value="ON_TIME" {% if status_filter == 'ON_TIME' %}selected{% endif %}>ON_TIME</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-dark" type="submit"><i class="fas fa-filter"></i></button>
+                    </form>
                     <a href="{{ url_for('wave_progress_sheets', wave_id=wave.BatchID) }}" class="btn btn-sm btn-success">
                         <i class="fas fa-table"></i> Progress sheets (أسبوعي)
                     </a>
@@ -43,6 +59,7 @@
                             <th>P2</th>
                             <th>P3</th>
                             <th>Final</th>
+                            <th>Action</th>
                             <th class="text-end">Progress</th>
                         </tr>
                     </thead>
@@ -59,9 +76,26 @@
                             <td><span class="badge bg-{{ s.ExamPeriodic2Badge }}">{{ s.ExamPeriodic2Status }}</span></td>
                             <td><span class="badge bg-{{ s.ExamPeriodic3Badge }}">{{ s.ExamPeriodic3Status }}</span></td>
                             <td><span class="badge bg-{{ s.ExamFinalBadge }}">{{ s.ExamFinalStatus }}</span></td>
+                            <td>
+                                {% if s.ExamPeriodic1Status == 'MISSED' or s.ExamPeriodic2Status == 'MISSED' or s.ExamPeriodic3Status == 'MISSED' or s.ExamFinalStatus == 'MISSED' %}
+                                <a
+                                    href="{{ url_for('internal_messages_inbox', compose='1', module_type='Trainee', module_ref_id=s.CandidateID, subject='Action Required: Missed Exam - ' ~ s.FullName, body='Please follow up with trainee ' ~ s.FullName ~ ' in wave ' ~ wave.BatchName ~ '. The trainee has MISSED at least one required exam. Kindly take action and update this thread.') }}"
+                                    class="btn btn-sm btn-outline-danger"
+                                    title="Create action for MISSED exam"
+                                >
+                                    <i class="fas fa-bolt"></i> Create Action
+                                </a>
+                                {% else %}
+                                <span class="text-muted small">—</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end">
                                 <a href="{{ url_for('enrollment_progress_sheet', enrollment_id=s.EnrollmentID) }}" class="btn btn-sm btn-outline-success py-0" title="شيت تقدم أسبوعي (مثل Excel)">Sheet</a>
                             </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-3">No students match the selected exam/status filter.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

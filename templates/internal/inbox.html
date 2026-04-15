@@ -3,28 +3,56 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2><i class="fas fa-inbox text-primary"></i> Internal Inbox</h2>
-    <span class="badge bg-danger">Unread: {{ unread_count }}</span>
+    <div class="d-flex align-items-center gap-2">
+        <a href="#composeMessageCard" class="btn btn-sm btn-primary" title="Compose">
+            <i class="fas fa-paper-plane"></i>
+        </a>
+        <span class="badge bg-danger">Unread: {{ unread_count }}</span>
+    </div>
 </div>
 
-<div class="card shadow-sm mb-4">
+<div class="card shadow-sm mb-4" id="composeMessageCard">
     <div class="card-header bg-light"><strong>Compose Message</strong></div>
     <div class="card-body">
         <form method="POST" action="{{ url_for('internal_messages_compose') }}" class="row g-3">
             <div class="col-md-6">
                 <label class="form-label">To</label>
-                <select name="to_user_ids" class="form-select" multiple required>
-                    {% for u in users %}
-                    <option value="{{ u.UserID }}">{{ u.FullName or u.Username }} ({{ u.Role }})</option>
-                    {% endfor %}
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="toPickerBtn">
+                        Select recipients (To)
+                    </button>
+                    <div class="dropdown-menu p-2 w-100" style="max-height: 260px; overflow-y: auto;">
+                        {% for u in users %}
+                        <label class="dropdown-item d-flex align-items-center gap-2">
+                            <input class="form-check-input to-user-checkbox" type="checkbox" name="to_user_ids" value="{{ u.UserID }}">
+                            <span>{{ u.FullName or u.Username }} ({{ u.Role }})</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div class="col-md-6">
                 <label class="form-label">CC</label>
-                <select name="cc_user_ids" class="form-select" multiple>
-                    {% for u in users %}
-                    <option value="{{ u.UserID }}">{{ u.FullName or u.Username }} ({{ u.Role }})</option>
-                    {% endfor %}
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="ccPickerBtn">
+                        Select copy recipients (CC)
+                    </button>
+                    <div class="dropdown-menu p-2 w-100" style="max-height: 260px; overflow-y: auto;">
+                        {% for u in users %}
+                        <label class="dropdown-item d-flex align-items-center gap-2">
+                            <input class="form-check-input cc-user-checkbox" type="checkbox" name="cc_user_ids" value="{{ u.UserID }}">
+                            <span>{{ u.FullName or u.Username }} ({{ u.Role }})</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="small text-muted mb-1">Preview recipients before send:</div>
+                <div class="border rounded p-2 bg-light small">
+                    <div><strong>To:</strong> <span id="toPreviewText">None</span></div>
+                    <div><strong>CC:</strong> <span id="ccPreviewText">None</span></div>
+                </div>
             </div>
             <div class="col-md-4">
                 <label class="form-label">About</label>
@@ -50,11 +78,11 @@
             </div>
             <div class="col-md-12">
                 <label class="form-label">Subject</label>
-                <input type="text" name="subject" class="form-control" required>
+                <input type="text" name="subject" class="form-control" id="subjectInput" required>
             </div>
             <div class="col-md-12">
                 <label class="form-label">Message</label>
-                <textarea name="body" class="form-control" rows="4"></textarea>
+                <textarea name="body" class="form-control" rows="4" id="bodyInput"></textarea>
             </div>
             <div class="col-md-12 text-end">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send</button>
@@ -71,6 +99,7 @@
                 <tr>
                     <th>Subject</th>
                     <th>From</th>
+                    <th>Recipients</th>
                     <th>About</th>
                     <th>Priority</th>
                     <th>Date</th>
@@ -82,13 +111,17 @@
                 <tr class="{{ 'table-warning' if not m.IsRead else '' }}">
                     <td>{{ m.Subject }}</td>
                     <td>{{ m.SenderName or ('User #' ~ m.SenderUserID) }}</td>
+                    <td class="small">
+                        <div><strong>TO:</strong> {{ m.ToPreview or '-' }}</div>
+                        <div><strong>CC:</strong> {{ m.CcPreview or '-' }}</div>
+                    </td>
                     <td>{{ m.ModuleType }} {% if m.ModuleRefID %}#{{ m.ModuleRefID }}{% endif %}</td>
                     <td><span class="badge bg-{{ 'danger' if m.Priority in ['urgent','high'] else 'secondary' }}">{{ m.Priority }}</span></td>
                     <td>{{ m.CreatedAt }}</td>
                     <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('internal_messages_thread', message_id=m.MessageID) }}">Open</a></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-center text-muted py-4">No messages yet.</td></tr>
+                <tr><td colspan="7" class="text-center text-muted py-4">No messages yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -104,6 +137,13 @@ const refs = {
     Finance: [{id: '', label: 'General finance issue'}],
     General: []
 };
+const prefill = {
+    compose: '{{ request.args.get("compose", "") }}',
+    moduleType: '{{ request.args.get("module_type", "") }}',
+    moduleRefId: '{{ request.args.get("module_ref_id", "") }}',
+    subject: `{{ (request.args.get("subject", "") or "")|replace("`", "\\`") }}`,
+    body: `{{ (request.args.get("body", "") or "")|replace("`", "\\`") }}`
+};
 function refreshRefOptions() {
     const type = document.getElementById('moduleTypeSelect').value;
     const sel = document.getElementById('moduleRefSelect');
@@ -115,9 +155,38 @@ function refreshRefOptions() {
         sel.appendChild(op);
     });
 }
+function updateRecipientPreview() {
+    const toChecked = Array.from(document.querySelectorAll('.to-user-checkbox:checked')).map(el => el.parentElement.textContent.trim());
+    const ccChecked = Array.from(document.querySelectorAll('.cc-user-checkbox:checked')).map(el => el.parentElement.textContent.trim());
+    document.getElementById('toPreviewText').textContent = toChecked.length ? toChecked.join(', ') : 'None';
+    document.getElementById('ccPreviewText').textContent = ccChecked.length ? ccChecked.join(', ') : 'None';
+    document.getElementById('toPickerBtn').textContent = toChecked.length ? `To (${toChecked.length}) selected` : 'Select recipients (To)';
+    document.getElementById('ccPickerBtn').textContent = ccChecked.length ? `CC (${ccChecked.length}) selected` : 'Select copy recipients (CC)';
+}
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('moduleTypeSelect').addEventListener('change', refreshRefOptions);
+    document.querySelectorAll('.to-user-checkbox, .cc-user-checkbox').forEach(el => {
+        el.addEventListener('change', updateRecipientPreview);
+    });
     refreshRefOptions();
+    updateRecipientPreview();
+    if (prefill.compose) {
+        if (prefill.moduleType) {
+            document.getElementById('moduleTypeSelect').value = prefill.moduleType;
+            refreshRefOptions();
+        }
+        if (prefill.moduleRefId) {
+            document.getElementById('moduleRefSelect').value = prefill.moduleRefId;
+        }
+        if (prefill.subject) {
+            document.getElementById('subjectInput').value = prefill.subject;
+        }
+        if (prefill.body) {
+            document.getElementById('bodyInput').value = prefill.body;
+        }
+        const card = document.getElementById('composeMessageCard');
+        if (card && card.scrollIntoView) card.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
     try {
         const currentUnread = {{ unread_count|int }};
         const lastUnread = parseInt(localStorage.getItem('internal_last_unread') || '0', 10);
