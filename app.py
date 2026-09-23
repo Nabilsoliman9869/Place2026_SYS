@@ -835,18 +835,51 @@ def save_config_file(form_data):
         return True
     except: return False
 
-def get_db_connection_string():
-    config = load_config()
+def _odbc_sql_server_driver():
+    """Pick an installed SQL Server ODBC driver (17 preferred, 18 on Linux images)."""
+    env_driver = (os.environ.get('ODBC_DRIVER') or '').strip()
+    if env_driver:
+        return env_driver
+    names = []
+    try:
+        import pyodbc
+        names = list(pyodbc.drivers() or [])
+    except Exception:
+        names = []
+    for preferred in ('ODBC Driver 17 for SQL Server', 'ODBC Driver 18 for SQL Server'):
+        if preferred in names:
+            return preferred
+    for name in names:
+        if 'SQL Server' in name:
+            return name
+    return 'ODBC Driver 17 for SQL Server'
+
+
+def _odbc_extra_opts(driver_name):
+    extra = 'TrustServerCertificate=yes;'
+    if '18' in (driver_name or ''):
+        extra = 'Encrypt=no;TrustServerCertificate=yes;'
+    return extra
+
+
+def get_db_connection_string(config=None):
+    config = config or load_config()
     server = config.get("server", ".")
     port = config.get("port", "1433")
     database = config.get("database", "Place2026DB")
-    
+    driver = _odbc_sql_server_driver()
+    extra = _odbc_extra_opts(driver)
     if config.get("use_trusted"):
-        return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};Trusted_Connection=yes;Connect Timeout=60;'
-    else:
-        username = config.get("username", "")
-        password = config.get("password", "")
-        return f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Connect Timeout=15;'
+        return (
+            f'DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};'
+            f'Trusted_Connection=yes;Connect Timeout=60;{extra}'
+        )
+    username = config.get("username", "")
+    password = config.get("password", "")
+    return (
+        f'DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};'
+        f'UID={username};PWD={password};Connect Timeout=15;{extra}'
+    )
 
 def get_db():
     if 'db' not in g:
@@ -1706,11 +1739,7 @@ def test_connection():
         "use_trusted": True if request.form.get('use_trusted') else False
     }
     
-    conn_str = ""
-    if temp_config.get("use_trusted"):
-        conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};Trusted_Connection=yes;'
-    else:
-        conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={temp_config["server"]},{temp_config["port"]};DATABASE={temp_config["database"]};UID={temp_config["username"]};PWD={temp_config["password"]}'
+    conn_str = get_db_connection_string(temp_config)
         
     try:
         import pyodbc
@@ -9469,23 +9498,30 @@ def _ensure_course_batches_exam_columns():
     global _course_batches_exam_columns_ready
     if _course_batches_exam_columns_ready:
         return
-    for stmt in [
-        "ALTER TABLE CourseBatches ADD PeriodicExam1Date DATE NULL",
-        "ALTER TABLE CourseBatches ADD PeriodicExam2Date DATE NULL",
-        "ALTER TABLE CourseBatches ADD PeriodicExam3Date DATE NULL",
-        "ALTER TABLE CourseBatches ADD FinalExamDate DATE NULL",
-        "ALTER TABLE CourseBatches ADD MakeupExamDate DATE NULL",
-    ]:
+    if get_db() is None:
+        return
+    needed = [
+        'PeriodicExam1Date',
+        'PeriodicExam2Date',
+        'PeriodicExam3Date',
+        'FinalExamDate',
+        'MakeupExamDate',
+    ]
+    for col in needed:
+        if _db_has_column('CourseBatches', col):
+            continue
         try:
-            query_db(stmt)
+            query_db(f"ALTER TABLE CourseBatches ADD {col} DATE NULL")
         except Exception:
             pass
-    _course_batches_exam_columns_ready = True
+    _course_batches_exam_columns_ready = all(_db_has_column('CourseBatches', col) for col in needed)
 
 
 def _ensure_internal_messages_schema():
     global _internal_messages_schema_ready
     if _internal_messages_schema_ready:
+        return
+    if get_db() is None:
         return
     statements = [
         """
@@ -9524,7 +9560,18 @@ def _ensure_internal_messages_schema():
             query_db(stmt)
         except Exception:
             pass
-    _internal_messages_schema_ready = True
+    try:
+        messages_tbl = query_db(
+            "SELECT 1 AS ok FROM sysobjects WHERE name='InternalMessages' AND xtype='U'",
+            one=True,
+        )
+        recipients_tbl = query_db(
+            "SELECT 1 AS ok FROM sysobjects WHERE name='InternalMessageRecipients' AND xtype='U'",
+            one=True,
+        )
+        _internal_messages_schema_ready = bool(messages_tbl) and bool(recipients_tbl)
+    except Exception:
+        _internal_messages_schema_ready = False
 
 @app.route('/training/attendance', methods=['GET'])
 @login_required

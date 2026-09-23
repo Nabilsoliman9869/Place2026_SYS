@@ -6,11 +6,17 @@ __pycache__
 env
 venv
 .env
+.git
+.vs
 *.exe
 *.rar
 *.zip
+*.xlsx
+*.pptx
 dist
 build
 .trae
 logs
 *.log
+docs
+agent-tools

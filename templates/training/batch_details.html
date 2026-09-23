@@ -8,6 +8,14 @@
             {{ batch.CourseName }} | المدرب: {{ batch.TrainerName }} | القاعة: {{ batch.RoomName }}
             <br>
             <small>{{ batch.ScheduleDescription }} ({{ batch.StartDate }} - {{ batch.EndDate }})</small>
+            <br>
+            <small>
+                Periodic 1: {{ batch.PeriodicExam1Date|dmy if batch.PeriodicExam1Date else '-' }} |
+                Periodic 2: {{ batch.PeriodicExam2Date|dmy if batch.PeriodicExam2Date else '-' }} |
+                Periodic 3: {{ batch.PeriodicExam3Date|dmy if batch.PeriodicExam3Date else '-' }} |
+                Final: {{ batch.FinalExamDate|dmy if batch.FinalExamDate else '-' }} |
+                Make-up: {{ batch.MakeupExamDate|dmy if batch.MakeupExamDate else '-' }}
+            </small>
         </p>
     </div>
     <div>
